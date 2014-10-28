@@ -34,7 +34,15 @@ For the LUE modeling part of stage 2, a variety of additional variables are need
 The next-generation formulation is __LUE = φo *m*__ where φo is the intrinsic quantum efficiency and *m* is the water and light use compensation coefficient.  In order to calculate part of *m*, additional variables are needed, including: 
 
 * Michaelis-Menten coefficient for Rubisco-limited photosynthesis (K), Pa
-* photorespiratory compensation point (Γ*), Pa
+* photorespiratory compensation point (Γ\*), Pa
 * vapor pressure deficit (VPD), Pa
-* ambient CO2 concentration (ca), Pa
+* ambient CO2 concentration (*ca*), Pa
+
+The temperature dependencies of K and Γ\* are well known (Bernacchi et al., 2001). VPD may be calculated based on mean air temperature (to calculate saturated vapor pressure) and ambient vapor pressure (Abtew & Melesse, 2013). A global estimate of *ca*  may be based on the [globally averaged marine surface annual mean data](http://www.esrl.noaa.gov/gmd/ccgg/trends/global.html#global_data). 
+
+## References
+-------------------
+* Abtew, W. and A. Melesse (2013) "Vapor Pressure Calculation Methods," Evaporation and Evapotranspiration: Measurements and Estimations, Springer, New York.
+* Bernacchi, C. J., E. L. Singsaas, C. Pimentel, A. R. Portis, Jr. and P. Long (2001) Improved temperature response functions for models of Rubisco-limited photosynthesis, *Plant, Cell and Environment*, vol. 24, pp. 253-259.
+
 

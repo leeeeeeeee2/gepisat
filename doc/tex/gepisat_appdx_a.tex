@@ -1,0 +1,233 @@
+% gepisat_appdx_a.tex
+%
+% written by Tyler W. Davis
+% Imperial College London
+%
+% 2014-10-29 -- created
+% 2014-10-29 -- last updated
+%
+% ------------
+% description:
+% ------------
+% This TEX file contains Appendix A: Python code snippets for the GePiSaT model documentation.
+%
+% ----------
+% changelog:
+% ----------
+% 01. modularized chapter [14.10.29]
+% 02. newline for each sentence [14.10.29]
+% --> simpler for Git version control
+%
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% APPENDIX A -- PYTHON CODE SNIPPETS
+%% //////////////////////////////////////////////////////////////////////// %%
+\section{Python Code Snippets:}
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% APPENDIX A.1 -- PIERCE_DEV.PY
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{peirce\textunderscore dev.py}
+\label{app:peircepy}
+\texttt{ \\
+\noindent 01~~import numpy\\
+\noindent 02~~import scipy.special\\
+\noindent 03~~\\
+\noindent 04~~def peirce\textunderscore crit(N, n, m):\\
+\noindent 05 \indent N = float(N)\\
+\noindent 06 \indent n = float(n)\\
+\noindent 07 \indent m = float(m)\\
+\noindent 08 \indent if N > 1:\\
+\noindent 09 \indent \indent Q = (n**(n/N)*(N-n)**((N-n)/N))/N\\
+\noindent 10 \indent \indent Rnew = 1.0\\
+\noindent 11 \indent \indent Rold = 0.0\\
+\noindent 12 \indent \indent while ( abs(Rnew-Rold) > (N*2.0e-16) ):\\
+\noindent 13 \indent \indent \indent ldiv = Rnew**n\\
+\noindent 14 \indent \indent \indent if ldiv == 0:\\
+\noindent 15 \indent \indent \indent \indent ldiv = 1.0e6\\
+\noindent 16 \indent \indent \indent Lamda = ((Q**N)/(ldiv))**(1.0/(N-n))\\
+\noindent 17 \indent \indent \indent x2 = 1.0 + (N-m-n)/n * (1.0-Lamda**2.0)\\
+\noindent 18 \indent \indent \indent if x2 < 0:\\
+\noindent 19 \indent \indent \indent \indent x2 = 0\\
+\noindent 20 \indent \indent \indent \indent Rnew = Rold\\
+\noindent 21 \indent \indent \indent else:\\
+\noindent 22 \indent \indent \indent \indent Rold = Rnew\\
+\noindent 23 \indent \indent \indent \indent Rnew = numpy.exp((x2-1)/2.0) \\ 
+\noindent 24 \indent \indent \indent \indent \indent * scipy.special.erfc( \\  \noindent 25 \indent \indent \indent \indent \indent \indent numpy.sqrt(x2)/numpy.sqrt(2.0)\\
+\noindent 26 \indent \indent \indent \indent \indent )\\
+\noindent 27 \indent else:\\
+\noindent 28 \indent \indent x2 = 0.0\\
+\noindent 29 \indent return x2\\
+}
+
+\noindent Lines 1--2 import the necessary module libraries for performing the calculations.  
+Lines 4--29 represent the function block for calculating Peirce's threshold error (i.e., $x^{2}$).  
+Lines 5--7 cast the float data type to the input data.  
+This is done to allow short hand (i.e., integer) values to be sent to the function.  
+It is necessary for these values to be float-type to avoid integer division (i.e., whole number division). 
+Line 8 is a check to make certain there is enough data for processing.  
+Line 9 is the calculation of $Q$ (step 1).  
+Line 10 is the initial guess for the value of $R$ (step 2).  
+Line 11 initializes the old guess for the value of $R$ and is necessary to prompt the while loop (i.e., lines 12--26).  
+Line 12 is the declaration of the while-loop criteria (i.e., convergence criteria for $R$). 
+Line 13 calculates the denominator for a part of the $\lambda$ calculation.  
+Line 14 checks the denominator to see if it is zero.  
+If the denominator is zero, it is replaced with a 0.000001 to alleviate divide by zero issues (Line 15). 
+Line 16 is the calculation of $\lambda$ (step 3).  
+Line 17 is the calculation of $x^{2}$ (step 4).  
+Line 18 checks to see if the value of $x^{2}$ has gone negative.  
+If it has, its value is set to zero and $R$ is updated.  
+Line 22 updates the previous guess for the value of $R$ before it is updated if $x^{2}$ is positive.  
+Lines 23--26 calculate the new value of $R$ (step 5). 
+Lines 27 and 28 set the value of $x^{2}$ to zero if there is not enough data for processing.  
+When the convergence criteria is met for the while loop (i.e., line 12) the value for $x^{2}$ is returned.
+
+\newpage
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% APPENDIX A.2 -- OUTLIER.PY
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{outlier.py}
+\label{app:outlierpy}
+\texttt{ \\
+\noindent 01~~import numpy\\
+\noindent 02~~from scipy.optimize import curve\textunderscore fit\\
+\noindent 03~~\\
+\noindent 04~~(nee, ppfd) = monthly\textunderscore pairs()\\
+\noindent 05~~if (len(ppfd) > 3 and len(nee) > 3):\\
+\noindent 06 \indent (opt, cov) = curve\textunderscore fit(\\
+\noindent 07 \indent \indent model\textunderscore h, ppfd, nee, estimates
+\noindent 08 \indent \indent )\\
+\noindent 09 \indent nee\textunderscore fit = model\textunderscore h(ppfd,
+                     opt)\\
+\noindent 10 \indent se = (nee - nee\textunderscore fit)**2.0\\
+\noindent 11 \indent sse = sum(se)\\
+\noindent 12 \indent mse = float(sse)/(len(nee) - 3.0)\\
+\noindent 13 \indent x2 = peirce\textunderscore crit(len(nee), 1, 3)\\
+\noindent 14 \indent d2 = mse*x2\\
+\noindent 15 \indent n\textunderscore index = numpy.where(se > d2)[0]\\
+\noindent 16 \indent n\textunderscore found = 
+                     len(outliers\textunderscore index)\\
+\noindent 17 \indent if n\textunderscore found == 0:\\
+\noindent 18 \indent \indent x2 = peirce\textunderscore crit(len(nee), 2, 3)\\
+\noindent 19 \indent \indent d2 = mse*x2\\
+\noindent 20 \indent \indent n\textunderscore index = numpy.where(se > d2)[0]\\
+\noindent 21 \indent \indent n\textunderscore found = 
+                             len(outliers\textunderscore index)\\
+\noindent 22 \indent n = 1\\
+\noindent 23 \indent while (n <= n\textunderscore found):\\
+\noindent 24 \indent \indent n += 1\\
+\noindent 25 \indent \indent x2 = peirce\textunderscore crit(len(nee), n, 3)\\
+\noindent 26 \indent \indent d2 = mse*x2\\
+\noindent 27 \indent \indent n\textunderscore index = numpy.where(se > d2)[0]\\
+\noindent 28 \indent \indent n\textunderscore found = 
+                             len(outliers\textunderscore index)\\
+\noindent 29 \indent ppfd\textunderscore ro = numpy.delete(ppfd, 
+                     n\textunderscore index)\\
+\noindent 30 \indent nee\textunderscore ro = numpy.delete(nee, 
+                     n\textunderscore index)\\
+}
+
+\noindent Lines 1--2 load the necessary Python modules.  
+Line 4 represents a function call to retrieve one month's NEE and PPFD pairs from a particular flux tower. 
+Line 5 checks to make certain that enough data is available to perform the regression. 
+Lines 6--8 calls the SciPy curve\textunderscore fit function which returns the optimization parameters for fitting the NEE and PPFD observations to model\textunderscore h (i.e., \ref{eq:hypmod}) given a set of initial parameter estimates.  
+Line 9 takes the optimization parameters found by the curve\textunderscore fit function to get the model predictions of NEE (i.e., $u$ in equation \ref{eq:residerr}).  
+Lines 10--12 calculate the squared-error (SE), the sum of the squared-error (SSE), and the mean squared-error (MSE).  
+Line 13 calculates Peirce's deviation ($x^{2}$) while Line 14 calculates the threshold squared error ($\Delta^{2}$).  
+Lines 15--16 identify and count the instances of where model squared-error exceeds the threshold deviation.  
+Lines 17--21 performs a secondary check for outliers in the case where no are initially found.  
+Lines 22--28 perform an iterative search for additional outliers by incrementing Peirce's $n$ parameter until the number of outliers identified is less than the number of outliers assumed (i.e., Line 23).  
+Lines 29--30 remove the outliers from the original datasets. 
+
+\newpage
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% APPENDIX A.3 -- NETCDF.PY
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{netcdf.py}
+\label{app:netcdfpy}
+\texttt{ \\
+\noindent 01~~import numpy\\
+\noindent 02~~from scipy.io import netcdf\\
+\noindent 03~~\\
+\noindent 04~~doc = path + filename\\
+\noindent 05~~(thisyear, thismonth) = get\textunderscore month(doc)\\
+\noindent 06~~f = netcdf.NetCDFFile(doc, "r")\\
+\noindent 07~~voi = `SWdown'\\
+\noindent 08~~sh\textunderscore day, sh\textunderscore lat, 
+              sh\textunderscore lon = f.variables[voi].shape\\
+\noindent 09~~for y in xrange(sh\textunderscore lat):\\
+\noindent 10 \indent pxl\textunderscore lat = f.variables[`lat'].data[y]\\
+\noindent 11 \indent for x in xrange(sh\textunderscore lon):\\
+\noindent 12 \indent \indent stationid = 720*y + x\\
+\noindent 13 \indent \indent for t in xrange(sh\textunderscore day):\\
+\noindent 14 \indent \indent \indent thisday = t+1\\
+\noindent 15 \indent \indent \indent timestamp = datetime.date(\\
+\noindent 16 \indent \indent \indent \indent thisyear, thismonth, thisday\\
+\noindent 17 \indent \indent \indent \indent )\\
+\noindent 18 \indent \indent \indent pxl\textunderscore val = 
+                                     f.variables[voi].data[t,y,x]\\
+\noindent 19 \indent \indent \indent if pxl\textunderscore val < 1.0e6 and 
+                                     pxl\textunderscore lat > -60:\\
+\noindent 20 \indent \indent \indent \indent data = process\textunderscore 
+                                             watch(voi, pxl\textunderscore val, 
+                                             timestamp)\\
+\noindent 21~~f.close()\\
+}
+
+\noindent Lines 1--2 load the necessary Python modules.  
+Line 4 defines the netCDF file in terms of its path and file name.  
+Line 5 represents an assignment of the current file's associated year and month.  
+In most cases, the year and month can be read directly from the file name; however, there are other alternatives to this.  
+Line 6 opens the netCDFfile for reading.  
+Line 7 defines the variable of interest, in this case it is shortwave downwelling solar radiation ($SW_{down}$).  
+Line 8 saves the shape of $SW_{down}$ in terms of the number of days and the number of pixels along the latitude and longitude.  
+Line 9 begins iterating through the latitude pixels while Line 10 saves the current latitude value (in decimal degrees).  
+Line 11 begins the iteration through the longitude.  
+Line 12 calculates the $stationid$ parameter (as defined in section \ref{sec:dbmtdes}). 
+Line 13 starts the iteration through the days while Line 14  saves the current month's day.  
+Lines 15--17 create a \texttt{datetime.date} object based on the three fields which make up the current day.  
+Line 18 reads the $SW_{down}$ value for the given day, latitude, and longitude.  
+Line 19 filters erroneous values (i.e., $SW_{down} \geq 10^{6}$) and observations from Antarctica (i.e., $lat \leq -60^{\circ}$).  
+Line 20 represents the data processing of the valid $SW_{down}$ observations.  
+Line 21 closes the netCDF file.
+
+\newpage
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% APPENDIX A.4 -- HDF.PY
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{hdf.py}
+\label{app:hdfpy}
+\texttt{ \\
+\noindent 01~~import numpy\\
+\noindent 02~~from pyhdf import SD\\
+\noindent 03~~\\
+\noindent 04~~doc = path + filename\\
+\noindent 05~~ts = get\textunderscore modis\textunderscore ts(doc)\\
+\noindent 06~~f = SD.SD(doc)\\
+\noindent 07~~voi = ''CMG 0.05 Deg Monthly EVI''\\
+\noindent 08~~f\textunderscore select = f.select(voi)\\
+\noindent 09~~f\textunderscore data = f\textunderscore select.get()\\
+\noindent 10~~f.end()\\
+\noindent 11~~(sh\textunderscore lat, sh\textunderscore lon) = data.shape\\
+\noindent 12~~for y in xrange(sh\textunderscore lat):\\
+\noindent 13 \indent for x in xrange(sh\textunderscore lon):\\
+\noindent 14 \indent \indent zval = data[y][x]\\
+\noindent 15 \indent \indent evi = zval / 10000.0\\
+}
+
+Lines 1--2 load the necessary Python modules.  
+Note that \texttt{pyhdf} is not a simple installation for native Python environments.  
+It is recommended to use a third-party Python developing and programming environment (see Section \ref{sec:mespy}). 
+Line 4 defines the HDF file in terms of its path and filename.  
+Line 5 represents the assignment of a timestamp (i.e., a \texttt{datetime} object) based on the HDF filename.  
+Line 6 opens the HDF file for reading.  
+Line 7 defines the variable of interest, in this case it is ``CMG 0.5 Deg Monthly EVI'' corresponding to MODIS 0.5$^{\circ}$ degree resolution EVI monthly product.  
+Line 8 selects the variable of interest from the HDF file.  
+Line 9 retrieves the associated data (as a numpy array).  
+Line 10 closes the HDF file.  
+Line 11 saves the array shape of the data (in terms of the number of pixels along latitude and longitude). 
+Lines 12--13 iterate through each pixel (in terms of x and y coordinates).  
+Line 14 reads the pixel value associated with the x-y coordinate (EVI $\times$ 10,000).  
+Line 15 converts the pixel value to EVI (ranges from -0.2--1.0).

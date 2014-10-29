@@ -1,0 +1,92 @@
+% gepisat-3_enviro.tex
+%
+% written by Tyler W. Davis
+% Imperial College London
+%
+% 2014-10-29 -- created
+% 2014-10-29 -- last updated
+%
+% ------------
+% description:
+% ------------
+% This TEX file contains Part 3 programming environment for the GePiSaT model documentation.
+%
+% ----------
+% changelog:
+% ----------
+% 01. modularized chapter [14.10.29]
+% 02. newline for each sentence [14.10.29]
+% --> simpler for Git version control
+%
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 3.1 -- PROGRAMMING ENVIRONMENT
+%% //////////////////////////////////////////////////////////////////////// %%
+\section{Environment Setup}
+\label{sec:mes}
+The core of the modeling is performed using open-source programming languages (e.g., Python and R). 
+In order to facilitate the model, specific configurations were made to the working environments which these programs operate under.  
+These configurations often accompany having specific library files installed within the working environment that the model is executed under.  
+This section overviews the necessary working environment configurations to operate the model code described in this reference.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 3.1.1 -- PROGRAMMING ENVIRONMENT: PYTHON
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Python environment}
+\label{sec:mespy}
+The most efficient method of quickly gaining access to all the necessary Python libraries and modules (except psycopg2) is to download an interactive development environment (IDE).  
+Two notable Python IDEs are the Enthought Python Distribution\footnotemark \footnotetext{https://www.enthought.com/products/canopy/} (now called ``Canopy'') and Google spyder$^{2}$\footnotemark \footnotetext{http://code.google.com/p/spyderlib/} (previously called ``Pydee'').  
+Both Canopy and spyder provide a comprehensive Python developing and programming environment for scientific analysis and visualization.  
+There is a free version of Canopy as well as a free one-year academic license for registered users with a school or university e-mail address. 
+Spyder is open-source software available for Windows, Mac OSX, and Linux operating systems.  
+Table \ref{tab:pylib} presents a list of Python libraries that are used in this model and the model files in which they are used.
+
+Due to lack of compatibility with Canopy IDE and the psycopg2 module and the complexity of installing the HDF4 libraries (for reading the MODIS EVI data) on a native installation of Python, a combination of Python environments are used in this model.  
+To process the data, table\textunderscore maker.py is run from Canopy.  
+To create the database tables, populate them with the data and to run the model, the native Python environment (with numpy, scipy, and psycopg2 libraries installed) is used.
+
+%% ------------------------------------------------------------------------ %%
+%% tab:pylib | List of Python libraries
+%% ------------------------------------------------------------------------ %%
+\begin{table}[h]
+    \caption{List of Python libraries used in this model.}
+    \label{tab:pylib}
+    \begin{tabular}{l p{6cm} c c c}
+        \hline
+        \textbf{Library} & \textbf{Description} & \textbf{[1]} & \textbf{[2]} & \textbf{[3]}\\
+        \hline
+        datetime & Timestamp handling & x & ~ & x \\
+        
+        glob & File searching & ~ & x & x \\
+        
+        numpy & Numerical arrays and operators & x & ~ & x\\
+        
+        os.path & Directory and file handling & x & x & x\\
+        
+        psycopg2 & PostgreSQL database management & x & x & ~\\
+        
+        pyhdf & HDF file access (SD) & ~ & ~ & x\\
+        
+        re & Regular expression support & ~ & ~ & x\\
+        
+        scipy.io & netCDF file access & ~ & ~ & x \\
+        
+        scipy.optimize & Non-linear least squares (curve fit) & x & ~ & 
+        ~ \\
+        
+        scipy.special & Error function (erf) & x & ~ & ~ \\
+        
+		scipy.stats & Student's t-test & x & ~ & ~ \\
+
+        sys & Model run termination & x & x &  ~ \\
+        \hline
+        \multicolumn{5}{l}{\footnotesize Included in [1] model.py, [2] db\_setup.py, or [3] table\_maker.py}
+    \end{tabular}
+\end{table}
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 3.1.2 -- PROGRAMMING ENVIRONMENT: R
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{R environment}
+\label{sec:mesre}
+Similar to the Python, the R programming language benefits from having an open source IDE for programming and development.  
+One such IDE is RStudio\footnotemark. \footnotetext{http://www.rstudio.com/ide/}

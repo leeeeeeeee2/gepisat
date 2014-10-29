@@ -1,0 +1,305 @@
+% gepisat-1_code.tex
+%
+% written by Tyler W. Davis
+% Imperial College London
+%
+% 2014-10-29 -- created
+% 2014-10-29 -- last updated
+%
+% ------------
+% description:
+% ------------
+% This TEX file contains Part 1 model code description for the GePiSaT model documentation.
+%
+% ----------
+% changelog:
+% ----------
+% 01. modularized chapter [14.10.29]
+% 02. newline for each sentence [14.10.29]
+% --> simpler for Git version control
+%
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.3 -- THE MODEL CODE
+%%///////////////////////////////////////////////////////////////////////// %%
+\section{The Modeling System}
+\label{sec:model}
+This model has been written to take advantage of three key software packages: Python (version 2.7), PostgreSQL (version 9.1), and R (version 2.14).  
+The version numbers presented alongside these three software packages are meant as a reference as to when this model was created.  
+Limitations may be encountered with model performance or functionality using older/newer versions of these three software packages.
+
+The core of the model is written in and operated under the Python programming language. 
+This includes all the model computations, data input and output.  
+PostgreSQL provides a versatile database environment for storing all the model data (e.g., meta data, observations, etc.).  
+An overview and installation instructions for the database is presented in Sections \ref{sec:dbintro}--\ref{sec:dbstruc}.  
+R is implemented to perform analytics and data plots of model results.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.3.1
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsection{Running the Python code}
+\label{sec:modelpy}
+There are three files which make up the Python portion of this model: \texttt{table\textunderscore maker.py}, \texttt{db\textunderscore setup.py}, and \texttt{model.py}. 
+Each file runs independently of the others.  
+The following will present an overview of each file including its functions and how it is operated.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.3.1.1 -- table_maker.py
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsubsection{table\textunderscore maker.py}
+\label{sec:modeltmpy}
+The Python portion of this model begins with \texttt{table\textunderscore maker.py}.  
+The purpose of this file is to convert the format of any source data to that which conforms to the database design used in this modeling system.  
+The database design (as described in Section \ref{sec:dbstruc}) consists of three tables: \texttt{met\textunderscore data}, \texttt{var\textunderscore list}, and \texttt{data\textunderscore set}.  
+
+This script is responsible for producing outputs conforming with the database structure of the last two tables (i.e., \texttt{var\textunderscore list} and \texttt{data\textunderscore set}).  
+This is accomplished via Python classes and functions.
+
+For creating the necessary variable table data (i.e., \texttt{var\textunderscore list}), the Python class, VAR was created.  
+This class holds the main variables required as output to the \texttt{var\textunderscore list} table, namely: \textit{msvidx}, \textit{stationid}, \textit{varid}, \textit{varname}, \textit{varunit}, \textit{vartype}, and \textit{varcore}.  
+
+In the current implementation of the model, only core variables are considered; therefore, all variables have the binary ``1'' associated with the \textit{varcore} field.  
+All core variables are given in a Python dictionary, coreVars, where each \textit{varname} is presented with its associated \textit{varid}.  
+The \textit{varid} field is simply a numeric that is incremented for each additional variable added to the model.  
+Similarly, a Python dictionary, variableUnits, associates each \textit{varname} with its appropriate measurement units, i.e., the \textit{varunit} field.  
+
+Due to the difference in how stations are named depending on whether they are flux towers or gridded pixels, the \textit{vartype} must be known for the variable in question (e.g., ``flux'' for flux towers and ``grid'' for gridded pixels).  
+Depending on the \textit{vartype}, the \textit{stationid} (and therefore the \textit{msxvidx}) can be determined.  If the \textit{vartype} is ``flux,'' then the \textit{stationid} is simply read from the filename (as is the convention with flux tower data to have each file saved with the \textit{stationid}).  
+If the \textit{vartype} is ``grid,'' then the \textit{stationid} is sent to the VAR class as a tuple in the place of the file name.
+
+The rest of this script is dedicated to parsing information for each data type (e.g., HDF4, netCDF, CSV) and data source (e.g., flux towers, MODIS, WATCH, CRU, etc.).  
+For some of the more complicated data sources, a Python class is also created to handle the computations necessary.  
+This is true for the flux data (FLUXDATA class) to assist in processing the QC flags associated the NEE and GPP variables.  
+The WATCH forcing data class (WATCHDATA) is used to assist with the timestamps.  
+For MODIS EVI the MODISDATA class is used to perform the upscaling to 0.5$^{\circ}$ resolution.  
+The CRUDATA class performs the calculations necessary to derive the vapor pressure deficit (VPD) from the max and min air temperature and actual vapor pressure.  
+The GLASDATA class is similar to the MODISDATA class where it upscales canopy height data to 0.5$^{\circ}$ resolution.  
+
+To make processing easier, Python functions are also created to perform an array of tasks.  
+Simple file creation and headerline writing has been implemented in the writeout() function.  
+Process functions are created for each data source to handle the various file types. 
+The table below lists the process function names, the data source, and the file type.
+
+%% ------------------------------------------------------------------------ %%
+%% tab:procfunc | Var_list table process functions
+%% ------------------------------------------------------------------------ %%
+\begin{table}[h]
+    \caption{Process functions for various data sources and file types used in the var\textunderscore list table.}
+    \label{tab:procfunc}
+    \centering
+    \begin{tabular}{l l l}
+        \hline
+        \bf{Function Name} & \bf{Data Source} & \bf{File Type} \\
+        \hline
+        process\textunderscore flux() & Flux towers & CSV \\        
+        process\textunderscore watch() & WFDEI & netCDF \\        
+        process\textunderscore modis() & MODIS & HDF4 \\        
+        process\textunderscore cru\textunderscore elv() & CRU TS 3.00 &  DAT \\        
+        process\textunderscore cru\textunderscore vpd() & CRU TS 3.21 & netCDF \\
+        process\textunderscore cru() & CRU TS 3.21 & netCDF \\
+        process\textunderscore glas() & GLAS & GeoTIFF\\
+        process\textunderscore alpha() & CRU TS 3.21 / WFDEI & ASCII Raster\\
+        \hline
+    \end{tabular}
+\end{table}
+
+The remainder of the script is left only to defining the directory where the source data exists, defining any ancillary parameters, and running the process function associated with the source data.  
+Output is saved in the same directory as the source data.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.3.1.2 -- db_setup.py
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsubsection{db\textunderscore setup.py}
+\label{sec:modeldbpy}
+This Python script interfaces with the postgreSQL database to initialize the database tables and populate them with data.  
+For each of the three tables (i.e., \texttt{met\textunderscore data}, \texttt{var\textunderscore list}, and \texttt{data\textunderscore set}), there are two functions: create table and populate table.  
+The create table function holds the SQL query for the table schema including the table column headers and their associated data types (e.g., integer, string, date, etc.).  
+
+To make the creation of tables simpler, two functions were created, resetdb() and cleandb().  
+For initialization of fresh unpopulated tables, the resetdb() function deletes all tables (if they exist) and creates them anew.  
+If the tables already exist, the information within them can be deleted using the cleandb() function.  
+An associated clean\textunderscore table() function is also available to delete data from only one table.  
+The size of the database (in bytes) can be queried following each addition to the database by calling on the db\textunderscore size() function.
+
+The remainder of the program is simply the definition of where the data (for the three tables) is located.  
+Based on the naming convention of table\textunderscore maker.py, each file is sought within the directory provided and processed with the appropriate pop function.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.3.1.3 -- model.py
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsubsection{model.py}
+\label{sec:modelmdpy}
+This Python script performs the modeling system's main processing that is outlined in \S \ref{sec:mes}.  
+Currently, only stages 1 and 2 are implemented.  
+This consists of the flux partitioning and the basic light-use efficiency modeling.
+
+\paragraph{Classes}
+\label{par:modelclass}
+The model contains three Python classes: FLUX\_PARTI, SOLAR, and LUE.
+
+The first class (i.e., FLUX\textunderscore PARTI) contains all the variables and methods necessary to carry out the monthly flux partitioning.  
+This includes the original flux tower observation data (NEE and PPFD), the statistics associated with these observations, the dynamically calculated flux partitioning parameters, the optimized flux partitioning parameters (and their associated errors and significance), the model fits, the observation data sets with outliers removed based on both the linear and hyperbolic fits, the statistics of the observation data with outliers removed, the outlier-removed dynamically calculated flux partitioning parameters, the outlier-removed optimized flux partitioning parameters (and their associated errors and significance), and the outlier-removed model fits.  
+All of this information is output into the summary\textunderscore statistics.txt file.  
+There is also a function for calculating GPP (which depends on the flux partitioning parameters).
+
+For the gap-filling of flux-tower observed PPFD (i.e., \S \ref{sec:mst2gfppfd}), the calculation of extraterrestrial solar radiation (i.e., Eq. \ref{eq:etsr}) is handled in the SOLAR class, including the conversion of solar energy to units of photon flux and daily integration.  
+This class also calculates the daylight hours.
+
+The LUE class is used for the light-use efficiency modeling.  
+Monthly datasets (e.g., GPP, PPFD, fPAR, VPD, Tc, etc.) are stored for each flux tower.  
+The basic light-use efficiency curve fitting can also be performed.
+
+\paragraph{Main program}
+\label{par:modelmain}
+The main program begins with a get\textunderscore stations() command that reads the postgreSQL database for stations where the dimension is ``0'' (i.e., point-based tower measurements) and the geometry is ``point'' (to distinguish flux towers from CO$_2$ station measurements) in the meta data and returns a sorted list of station names (i.e., \textit{stationid} fields).  
+To avoid processing all the flux towers, this function can be replaced with a list of specific stations of interest.
+
+Once a list of station names is retrieved, the summary statistics file is created and initialized (using the summary\_file\_init() function) with appropriate headers.  
+The output file is hard-coded to be saved in a subdirectory named ``out.''  
+This directory needs to be created before running the model. 
+Lines in the summary statistics file (which are based on the output from the FLUX\textunderscore PARTI class) are for each month used in the flux partitioning for each flux tower processed.  
+Columns are associated with the statistics defined in the class.
+
+After a new summary file has been created, a blank LUE class is created (called my\_lue).  
+The output file for the station specific modeled LUE is also defined.  
+The LUE class stores all the monthly variables required for LUE model and performs the regression on the monthly variables for the basic LUE model for each flux tower.  
+The output to the LUE\_All-Stations.txt is the LUE for each station, the standard error, and the coefficient of determination.
+
+The model goes on to iterate through each flux tower in the station list.  
+A station-specific light-use file is defined to hold the station's monthly LUE variables (e.g., GPP, PPFD, VPD, Tc, etc.).  
+
+The starting and ending time points for a flux tower's observation data are queried from the database using the get\_dates() function.  
+This function searches the data\textunderscore set table in the GePiSaT database for the first and last dates where the station has observations of either NEE or PPFD.  
+The starting date (sd) is reset to the first day of the month returned.  
+
+Before iterating through the flux tower's data, the associated 0.5$^{\circ}$ resolution grid cell is determined using the flux\_to\_grid() function. 
+This function first finds the flux tower's longitude and latitude from the met\_data table in the GePiSaT database using the get\_lon\_lat() function.  
+Based on the flux tower's coordinates, the nearest 0.5$^{\circ}$ pixel centroid is found using the grid\_centroid() function.  
+The grid\_centroid() function uses the nearest linear distance between a pair of regularly spaced pixel centroid coordinate to determine which pixel the flux tower is located within. 
+Should the unlikely event occur where a flux tower is positioned at an equal distance between two pixel centroids, the default is to select the northern/eastern pixel.  
+After determining the pixel centroid, the met\_data table in the GePiSaT database is queried for the grid \textit{stationid} field with the associated centroid coordinates. 
+The grid \textit{stationid} is then returned to the main program.
+
+With the associated grid station found for the current flux tower, the gridded variable IDs (i.e., the \textit{msvidx} field) needed for the LUE model can be  found using the get\_msvidx() function. 
+
+Once the starting and ending dates are found, the grid containing the flux tower identified, and the gridded data variable IDs saved, the flux tower's data is then stepped through one month at a time.
+
+The first step in the flux partitioning is querying for the monthly NEE and PPFD observation data using the monthly\_ppfd\_nee() function.  
+This function first finds the station specific variable IDs (i.e., the \textit{msvidx} field) for flux tower's NEE and PPFD observations.  
+Next, to find the end date for the querying period, it is calculated using the add\_one\_month() function to the current month (i.e., the starting date).  
+These parameters are sent to a pivot table query (postgreSQL's crosstab\footnotemark \footnotetext{tablefunc module: \url{http://www.postgresql.org/docs/9.1/static/tablefunc.html}} operator).  
+The pivot table searches three fields in the data\_set table: \textit{datetime}, \textit{msvidx}, and \textit{data}.  
+The \textit{datetime} field serves as the row name while the \textit{msvidx} fields serve as the two categories and the \textit{data} field serves as the value.  
+By using both the source SQL and category SQL queries in the crosstab function, the table of results will be paired NEE and PPFD observations (i.e., value columns based on the two categories) for each \textit{datetime} field.  
+If there is a missing PPFD or NEE observation at any given \textit{datetime}, the missing data is padded with a blank value.  
+For the flux partitioning, only matched pairs of NEE and PPFD can be used; therefore, the final step is to filter out any rows that do not contain both NEE and PPFD data.
+
+Once the arrays of PPFD and NEE observations are returned to the main program, their content is checked to make certain enough data is present for flux partitioning (i.e., length of arrays must be greater than three).  
+The flux partitioning is performed using the partition() function.  
+The partition() function allows the user to define the parameter to\textunderscore write as either ``0'' or ``1.''  If to\textunderscore write is defined as ``1,'' then observation files (for each month) are written.  
+If the parameter rm\textunderscore out is also set to ``1,'' then outlier removal will be performed and monthly outlier-free observation files will also be written. 
+
+The partition() function begins by creating a FLUX\_PARTI class with the flux tower's NEE and PPFD observations.  
+Inside the class, the statistics for both observation arrays are calculated and the initial model parameters are estimated.  
+Both partitioning models (i.e., the linear and hyperbolic) are then fit to the observations.  
+The optimized model parameters, associated errors, and statistical significance of the fits are saved.  
+If the to\_write flag is set to true, then these model fits are written to a file.  If the rm\_out flag is set to true, the class performs outlier removal using Peirce's criterion (see \S \ref{sec:mst1out}).  
+After outliers are identified and removed, the observation statistics are recalculated and model fitting parameters re-estimated.  
+All of this is accomplished using the class methods remove\_mh\_outliers() and remove\_ml\_outliers() for the hyperbolic and linear models respectively.  
+Both partitioning models are fit to the outlier-free observations and the optimized parameters, their associated errors, and their significance levels are saved.  
+If the to\_write flag is set to true, the outlier-free data are written to file.  
+The last operation performed is to select the model that best represents the data using the class method model\_selection().  
+The model selection is based on the optimized parameters meeting certain requirements (range of validity and significance tests) and the level of model fitness (coefficient of determination greater than 0.5).  
+If none of the models are adequate is representing the data, model selection is set to ``0'' and processing of this month stops.
+
+Back in the main program, the FLUX\_PARTI class used in the flux partitioning is returned by the partition() function (called monthly\_parti).  
+If the class was successful at identifying a best representative model (i.e., model selection not equal to ``0''), then the second stage of the model is commenced: the light-use efficiency.
+
+In stage 2, the first step is to gap-fill the PPFD observations over the entire month.  PPFD observations are measured half-hourly and the gap-filling is performed one day at a time.  
+The gap-filling procedure (see \S \ref{sec:mst2gfppfd}) is performed by the gapfill\_ppfd() function.  
+%LEFT OFF HERE%
+
+The monthly gap-filled PPFD data is then converted to GPP using the calc\textunderscore gpp() function in the FLUX\textunderscore PARTI class.  
+The arithmetic error propagation is also calculated.  
+The integration to monthly totals is handled using the Simpson method.  
+Following the integration, the units are updated from $\mu$mol$\cdot$m$^{-2}$ to mol$\cdot$m$^{-2}$.  
+The gridded fPAR and ancillary variables (e.g., VPD and canopy height) are queried from the database by first finding the appropriate gridded station (based on the location of the flux tower), then finding the msvidx associated with the gridded station and variable of interest, and finally queried with the get\textunderscore data\textunderscore point() function.  
+The monthly GPP, PPFD, fPAR, and ancillary variables are saved to the LUE class and the month's summary statistics are written to file.
+
+After all the months are processed for a flux tower, the LUE class is called to write out the monthly variables and perform the regression for the basic (or next-generation) LUE model. 
+After all stations are processed, the LUE class is called to write out the LUE model results.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.3.2
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsection{Running the R code}
+\label{sec:modelr}
+The R scripts are created for performing statistical analysis on the model output.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.3.2.1 -- plot_partitioning.R
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsubsection{plot\textunderscore partitioning.R}
+\label{sec:modelqpr}
+This script is for plotting the flux partitioning results (output from the partition() function in model.py).  
+Output files have either the extension ``.txt'' or ``\textunderscore ro.txt'' depending on whether the data was stripped of outliers.  
+This script assumes that these files have been placed in their own separate directories, one for the original observations (i.e., ``.txt'') and one for observations with outliers removed (i.e., ``\textunderscore ro.txt'').
+
+This script will create three output figures for each station.  
+One for the monthly partitioning of the linear and hyperbolic fits to the observation data.  
+One for the hyperbolic flux partitioning of observations with outliers removed. 
+One for the linear flux partitioning of observations with outliers removed. 
+The actual plotting of the flux partitioning for each month is carried out by one of three functions in the script: plot\textunderscore obs, plot\textunderscore ro\textunderscore h, and plot\textunderscore ro\textunderscore l. 
+
+The plotting functions are sent the filename and directory of the partitioning text files.  
+The partitioning text files are read by a function optim\textunderscore params, which reads the meta data from the file headers and returns them as a data frame.  
+The plotting functions then create a linear and/or hyperbolic regression line based on the header and content data, plot the NEE versus PPFD, add a legend to the plot, and add the regression lines to the plot. 
+The main loop captures the monthly plots for a flux station and saves them as a postscript image.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.3.2.2 -- plot_outliers.R
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsubsection{plot\textunderscore outliers.R}
+\label{sec:modelpor}
+This script, similar to the ones described in \S \ref{sec:modelqpr}, plots the flux partitioning based on the output files from model.py.  
+In this case, both the original and outlier-free datasets are required.  
+Once again, these files are assumed to be in their own directories.  
+It is further assumed that these files are further separated into individual directories based on the station ID of the file.  
+This orchestration of the files can be easily accomplished via the file\textunderscore handler-osx.pl or file\textunderscore handler-win.pl script.
+
+Each station ID is iterated through and the associated files for the original observation and outlier-free are read from the station-named subdirectories.  
+R handles file reading in a directory organized by file name; therefore, monthly file pairs are assumed.
+
+File pairs are iterated over in the station-named subdirectories, the meta data is read from the file headers, and the data is read from the file contents.  
+Either the linear or the hyperbolic outliers can be plotted (based on separate function calls, plot\textunderscore outlier\textunderscore modelL() or plot\textunderscore outlier\textunderscore modelH().  
+Both scripts plot the original observation data in red and the outlier-free data in grey.  
+The result is a plot that highlights the data points that were excluded based on the outlier identification and remove scheme (see \S \ref{sec:mst1out}).
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.3.2.3 -- summary_stats.R
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsubsection{summary\textunderscore stats.R}
+\label{sec:modelstr}
+This script reads the summary\textunderscore statistics.txt output file for the purposes of updating the dynamic parameter estimation (see \S \ref{sec:mst1dyn}).  
+
+For each of the three flux partitioning parameters for the hyperbolic model and the two parameters for the linear model, this script performs regressions on the optimization parameters against statistical properties of the data.  
+For the latest model fits, see Table \ref{tab:dpe}.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.3.2.4 -- plot_gpp.R
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsubsection{plot\textunderscore gpp.R}
+\label{sec:modelpgr}
+This script reads the LUE text files for each individual station output by model.py.  
+These files are designated by the file extension ``\textunderscore LUE.txt'' and are assumed to be located in their own directory.  
+Flux tower station IDs are listed under R-objects, designating them into categories based on the vegetation type (e.g., evergreen needleleaf forest, crops, and grasslands) and climate (e.g., temperate, boreal, and tropical) found in the flux meta data. 
+Each object can then be sent (including an object for all stations) to the function process\textunderscore gpp which calculates the total annual GPP for each station in the object's list as well as separate the monthly GPP for the purposes of producing object-based monthly statistics of GPP.  
+The annual GPP data is written to file (e.g., ``Annual\textunderscore GPP-All\textunderscore Stations.txt'').  The monthly GPP (which is saved to each R-object) can be viewed as a box plot by calling the box\textunderscore and\textunderscore whisker() function.  
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.3.2.4 -- plot_lue.R
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsubsection{plot\textunderscore lue.R}
+\label{sec:modelplr}
+This script creates plots of the basic LUE model from the station LUE output files (i.e., files designated by the file extension ``\textunderscore LUE.txt'') by fitting a linear regression through the monthly GPP versus the product of monthly fPAR and monthly gap-filled PPFD.  
+The regression coefficient along with goodness of fit diagnostics (i.e., R$^2$ and p values) can be added to plot via a legend.  
+The plots are saved to a postscript image.

@@ -1,0 +1,354 @@
+% gepisat_doc.tex
+%
+% written by Tyler W. Davis & Xavier Gilbert
+% Imperial College London
+%
+% 2013-08-08 -- created
+% 2014-10-29 -- last updated
+%
+% ------------
+% description:
+% ------------
+% This is a TeX document containing documentation on:
+% Part 1. The overview for this project
+% Part 2. The database theory and structure
+% Part 3. The modeling theory and approach 
+%
+% The required files/file structure:
+%   ./gepisat_doc.tex
+%   ./gepisat.bib
+%   ./tex/
+%      gepisat-1_code.tex
+%      gepisat-1_data.tex
+%      gepisat-1_future.tex
+%      gepisat-1_intro.tex
+%      gepisat-1_model.tex
+%      gepisat-2_install.tex
+%      gepisat-2_intro.tex
+%      gepisat-2_setup.tex
+%      gepisat-2_structure.tex
+%      gepisat-3_enviro.tex
+%      gepisat-3_stage1.tex
+%      gepisat-3_stage2.tex
+%      gepisat-3_stage3.tex
+%      gepisat_appdx_a.tex
+%      gepisat_appdx_b.tex
+%      gepisat_appdx_c.tex
+%   ./img/
+%      cpa_2002-06.eps
+%      dpe_hyp.eps
+%      dpe_lin.eps
+%      evi_2002-06.eps
+%      fluxnet_map.eps
+%      gapfill.eps
+%      lue_choe1.eps
+%      michaelis.eps
+%      olr_sedeg.eps
+%      parti.eps
+%      re_modis.eps
+%      swd_2002-07-01.eps
+%      title_page.eps
+%
+% ---------
+% to build:
+% ---------
+% To produce the "List of Notations" and "References"
+% 1. run latex (twice if ToC was changed), e.g.:
+%    $ latex gepisat_doc.tex
+% 2. run MakeIndex (twice), e.g.:
+%    $ makeindex -s nomencl.ist gepisat_doc.nlo -o gepisat_doc.nls
+% 3. run Bibtex (twice if new Bib entries added)
+% 4. QuickBuild, e.g.:
+%    $ latex gepisat_doc.tex
+%    $ dvips gepisat_doc.dvi
+%    $ ps2pdf gepisat_doc.ps
+%
+% ----------
+% changelog:
+% ----------
+% 00. document created [13.08.08] 
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ % 
+%     STARTED VERSION 1.0 
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ %
+% 01. added subsubsections for database structure [13.08.13]
+% 02. moved each chapter to start its own new page [13.08.13]
+% 03. added amsmath package to preamble [13.08.13]
+% 04. added section labels [13.08.20]
+% 05. added code snippets (Python) using texttt environment [13.08.20]
+% 06. <<NEW LaTeX EDITOR>> texmaker [13.08.21]
+% 07. much needed spell-checking of document [13.08.21]
+% 08. added new chapter to Part III: programming environment [13.08.21]
+% 09. added appendix package to preamble [13.09.25]
+% 10. added to calculating et solar radiation section [13.09.27]
+% 11. added appendix netcdf Python code snippet [13.09.30]
+% 12. added Ahmad-Tiwari 2011 reference [13.09.30]
+% 13. added FAPAR section in model description [13.09.30]
+% 14. added nomenclature (package to preamble)* [13.09.30]
+% 15. added makeidx to preamble* [13.09.30]
+% --> *based on http://www.simonsilk.com/content/simonsilk/2011-jun           \
+%        /latex-list-notations-nomenclature
+% 16. edited/updated nomenclature [13.09.30]
+% 17. added new sections to Project Documentation [13.10.02]
+% --> "The Modeling System" 
+% --> "The Python Portion"
+% --> "Python---table_maker.py"
+% 18. added graphicx package to preamble [13.10.04]
+% --> 2 figures in dynamic parameterization
+% --> updated both figures [13.10.08]
+% 19. added hdf.py to appendix [13.10.07]
+% 20. added resampling modis section [13.10.08]
+% --> included figure
+% 21. updated gap-filling ppfd [13.10.08]
+% --> included figure
+% 22. updated stage 2: lue [13.10.08]
+% --> included figure
+% 23. create table environments [13.10.08]
+% --> rm db table subsubsections
+% 24. outlier image [13.10.10]
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ % 
+%     STARTED VERSION 1.5
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ % 
+% 25. added to Database Installation [13.10.18]
+% --> instructions on how to change the psql data directory
+% 26. general edits and additions to "The Modeling System" [13.11.26]
+% 27. updates to database installation [14.01.10]
+% 28. updates to the modeling system [14.01.27]
+% 29. updated list of python libraries table [14.01.27]
+% 30. moved resampling modis to the appendix [14.01.27]
+% 31. added fluxnet map [14.01.27]
+% 32. added "running python" and "running r" sections [14.01.28]
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ % 
+%     STARTED VERSION 2.0
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ % 
+% 33. updated Figure 2 (parti.eps) [14.01.29]
+% 34. updated Figure 5 (olr_sedeg.eps) [14.01.29]
+% 35. updated Figure 7 (gapfill.eps) [14.01.29]
+% 36. updated gapfilling PPFD [14.01.29]
+% --> created eq:gapfill
+% 37. added Michaelis-Menton coefficient equations [14.01.29]
+% 38. added package 'booktabs' to preamble [14.01.29]
+% 39. created fig:michaelis (michaelis.eps) [14.01.29]
+% 40. created new subsections [14.01.29]
+% --> The "Next-Gen" Formulation
+% --> The Cramer-Prentice Moisture Index
+% 41. Created section 4.1 Observation data w/ subsections [14.02.05]
+% 44. Removed "Data processing" subsection [14.02.05]
+% 45. Promoted Dyn. Param. and Outlier handling to subsections [14.02.04]
+% 46. Added package cite to preamble [14.02.05]
+% 47. Started addressing citation numbering [14.02.05]
+% --> Started all citations with last name of first author
+% 48. Edits to the Installation chaptio [14.02.13]
+% 49. Updated chi & xi equations in new LUE [14.02.19]
+% 50. Added to section on VPD [14.02.19]
+% 51. Added MODIS EVI figure [14.02.27]
+% 52. Added WATCH SWdown figure [14.02.27]
+% 53. Added to NOAA data section [14.02.27]
+% 54. Moved CP Alpha to Observation Data section [14.02.27]
+% 55. Created 'gepisat.bib' [14.02.27]
+% 56. Replaced cite package with biblatex [14.02.27]
+% --> installed biblatex via Synaptic Package Manager
+% 57. Added package breakurl to preamble [14.02.28]
+% --> fixes problems with long urls
+% 58. Intext citations changed to 'parencite' [14.02.28]
+% 59. Updated biblatex preamble with new features [14.03.01]
+% 60. Added section on error propagation [14.03.18]
+% --> added two new bib entries
+% 61. Updated peirce's dev function (appendix) [14.04.11]
+% 62. Removed duplicate footnote from virtual machine setup [14.04.11]
+% 63. Updated query_plots.R to plot_partitioning.R [14.04.11]
+% 64. Added esp-pic package for title page image [14.04.15]
+% 65. Updated Python library table with model names [14.04.15]
+% 66. Fixed Michaelis-Menten typo [14.04.15]
+% 67. Fixed typo in demand (EET) equation [14.07.31]
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ % 
+%      STARTED VERSION 2.5
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ % 
+% 68. modularized LaTeX file [14.10.29]
+% 69. added graphicspath{} to preamble [14.10.29]
+% 70. updated cpa and evi figures [14.10.29]
+%
+% -----
+% todo:
+% -----
+% 01. redo two dynamic parameterization figures
+%     * highlight w/ color the different parameters
+% 02. consider a better month for outlier removal figure
+% 03. make footnotes in environment setup section url hyperlinks
+% 04. make footnotes in maps and countries section url hyperlinks
+% 05. add "plot_gapfill.R" to running the R code
+% 06. add "lue_analyzer.R" to running the R code
+% 07. equation for psychrometric constant
+%
+% ----------
+% resources:
+% ----------
+% Displaying formula's: http://en.wikipedia.org/wiki/Help:Formula
+% Biblatex: http://tex.stackexchange.com/questions/26730/citation-
+%           bib-style-with-biblatex
+%
+% Texmaker In-line Dictionary:
+% MacOSX:
+% * uses LibreOffice dictionary
+%   /Applications/LibreOffice.app/Contents/share/extensions/dict-en           \
+%   /en_[US|GB].dic
+%
+
+%% ------------------------------------------------------------------------ %%
+%% DEFINE DOCUMENT CLASS AND PACKAGES
+%% ------------------------------------------------------------------------ %%
+\documentclass[11pt,twoside,a4paper,titlepage]{article}
+
+\usepackage{amsmath}
+\usepackage{appendix}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{breakurl}
+\usepackage[refpage]{nomencl}
+\usepackage[citestyle=authoryear-icomp,%
+            backref=true,%
+            maxcitenames=2,%
+            maxbibnames=99,%
+            dashed=false,%
+            url=true,%
+            bibstyle=authoryear]{biblatex}
+\addbibresource{gepisat.bib}
+\usepackage{eso-pic}
+
+\renewcommand{\nomname}{List of Notations}
+\renewcommand*{\pagedeclaration}[1]{\unskip\dotfill\hyperpage{#1}}
+\makenomenclature
+
+\usepackage{makeidx}
+\makeindex
+
+% Create command for background image:
+\newcommand\BackgroundPic{\put(0,0){\parbox[b][\paperheight]{\paperwidth}{%
+\vfill
+\centering
+\includegraphics[width=\paperwidth,height=\paperheight,keepaspectratio]{./img/title_page.eps}%
+\vfill
+}}}
+
+% Create a special font for the title:
+\newcommand*{\TitleFont}{%
+      \usefont{\encodingdefault}{\rmdefault}{b}{n}%
+      \fontsize{16}{20}%
+      \selectfont}
+
+% Define graphics directory
+\graphicspath{{./img/}}
+
+%% ------------------------------------------------------------------------ %%
+%% BEGIN DOCUMENT
+%% ------------------------------------------------------------------------ %%
+\begin{document}
+
+%% ------------------------------------------------------------------------ %%
+%% TITLE, AUTHORS, and DATE
+%% ------------------------------------------------------------------------ %%
+\title{\TitleFont Global ecosystem Production in \\Space and Time \\(GePiSaT)}
+\author{
+         I. C. Prentice\\
+         AXA Chair Programme in Biosphere and Climate Impacts\\
+         Department of Life Sciences and Grantham Institute for Climate 
+         Change\\
+         Imperial College London, London, UK\\
+         \\
+         T. W. Davis\\
+         Department of Life Sciences\\
+         Imperial College London, London, UK\\
+         \\
+         B. J. Evans\\
+         Department of Biological Sciences\\
+         Macquarie University, North Ryde, NSW, Australia\\
+         \\
+         X. M. P. Gilbert\\
+         Department of Life Sciences\\
+         Imperial College London, London, UK\\
+         \\
+         \\
+         \\
+         VERSION 2.0}
+
+\date{Last updated: \today}
+
+\AddToShipoutPicture*{\BackgroundPic}
+
+\maketitle
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% TABLE OF CONTENTS
+%%///////////////////////////////////////////////////////////////////////// %%
+\tableofcontents
+
+\newpage
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% NOMENCLATURE
+%% //////////////////////////////////////////////////////////////////////// %%
+\printnomenclature
+
+\newpage
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1 -- PROJECT DOCUMENTATION
+%% //////////////////////////////////////////////////////////////////////// %%
+\part{Project Documentation}
+
+\include{./tex/gepisat-1_intro}
+
+\include{./tex/gepisat-1_model}
+
+\include{./tex/gepisat-1_code}
+
+\include{./tex/gepisat-1_data}
+
+\include{./tex/gepisat-1_future}
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2 -- DATABASE DOCUMENTATION
+%% //////////////////////////////////////////////////////////////////////// %%
+\part{Database Documentation}
+
+\include{./tex/gepisat-2_intro}
+
+\include{./tex/gepisat-2_install}
+
+\include{./tex/gepisat-2_setup}
+
+\include{./tex/gepisat-2_structure}
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 3 -- MODEL DOCUMENTATION
+%% //////////////////////////////////////////////////////////////////////// %%
+\part{Model Documentation}
+
+\include{./tex/gepisat-3_enviro}
+
+\include{./tex/gepisat-3_stage1}
+
+\include{./tex/gepisat-3_stage2}
+
+\include{./tex/gepisat-3_stage3}
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% THE APPENDICES
+%% //////////////////////////////////////////////////////////////////////// %%
+\appendix
+
+\include{./tex/gepisat_appdx_a}
+
+\include{./tex/gepisat_appdx_b}
+
+\include{./tex/gepisat_appdx_c}
+
+%% ------------------------------------------------------------------------ %%
+%% THE BIBLIOGRAPHY
+%% ------------------------------------------------------------------------ %%
+\printbibliography
+
+%% ------------------------------------------------------------------------ %%
+%% END DOCUMENT
+%% ------------------------------------------------------------------------ %%
+\end{document}

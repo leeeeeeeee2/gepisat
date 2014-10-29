@@ -1,0 +1,126 @@
+% gepisat-2_setup.tex
+%
+% written by Tyler W. Davis
+% Imperial College London
+%
+% 2014-10-29 -- created
+% 2014-10-29 -- last updated
+%
+% ------------
+% description:
+% ------------
+% This TEX file contains Part 2 database setup for the GePiSaT model documentation.
+%
+% ----------
+% changelog:
+% ----------
+% 01. modularized chapter [14.10.29]
+% 02. newline for each sentence [14.10.29]
+% --> simpler for Git version control
+%
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.3 -- SETUP
+%% //////////////////////////////////////////////////////////////////////// %%
+\section{Setup}
+\label{sec:dbsetup}
+In this section, a new PostgreSQL user and database are created.  
+The following steps are to be performed on either a native installation or within a virtual stack. 
+
+Creating a new user allows for individualism in project development as well as added security since the user will have its own password. 
+The new user should be given the privilege for creating databases (i.e., \texttt{CREATEDB}) and (optionally) the privilege to create other users (\texttt{CREATEUSER}). 
+It is not necessary to create a new user. 
+
+The new database is created based on the PostGIS template.  
+BitNami LAPP stack installations require first that the PostGIS template be created.  
+For native PostgreSQL and PostGIS installations, the PostGIS template should already be made available.  
+In addition to the PostGIS extensions, the database utilizes pivot tables as a means of querying and retrieving data.  
+To allow access to pivot tables, the tablefunc extension must be installed on the database. 
+BitNami LAPP stack installations include the \texttt{tablefunc} extension.  
+In the event that the \texttt{tablefunc} extension is not available, it is included in the additional facilities for postgreSQL package (e.g., \texttt{postgresql-contrib-9.1} under the Synaptic Package Manager in Linux).  
+Available PostgreSQL extensions can be viewed by querying the pg\textunderscore 
+available\textunderscore extensions table in the database.
+
+\begin{enumerate}
+    \item Create a new user (\emph{optional})
+    \begin{enumerate}
+        \item Log into the default PostgreSQL database:\\ 
+              $>$~\texttt{psql -h 127.0.0.1 -p 5432 -U postgres -d postgres}
+        \item On the PostgreSQL terminal line, create the new user account:\\ 
+              $\#$~\texttt{CREATE USER user PASSWORD `*' CREATEDB CREATEUSER;}\\
+              \\
+              NOTE: Replace \texttt{user} with your name and 
+              \texttt{`*'} with your own password.
+        \item Quit PostgreSQL:\\ 
+              $\#$~\texttt{\textbackslash q}
+        \item Log into PostgreSQL as the newly created user:\\ 
+              $>$~\texttt{psql -h 127.0.0.1 -p 5432 -U user -d postgres}
+    \end{enumerate}
+    \item Create a PostGIS template\\
+          \emph{Note:} for native PostGIS installations (i.e., not a LAPP 
+          stack installation) the template\textunderscore postgis is already 
+          created
+    \begin{enumerate}
+        \item From the PostgreSQL terminal, create a new database:\\ 
+              $\#$~\texttt{CREATE DATABASE template\textunderscore postgis;}
+        \item Allow non superusers to create a database from this template:\\ 
+              $\#$~\texttt{UPDATE pg\textunderscore database\\ 
+              SET datistemplate=`true'\\ 
+              WHERE datname=`template\textunderscore postgis';}\\
+              \\
+              Note: a response of ``UPDATE 1'' indicates success
+        \item Load PostGIS SQL routines to the newly created database
+        \begin{enumerate}
+            \item Log out back into PostgreSQL to the newly created 
+                  template\textunderscore postgis database as user postgres:\\ 
+                  $>$~\texttt{psql -h 127.0.0.1 -p 5432 -U postgres \hfill \ldots \\
+                  -d template\textunderscore postgis}
+            \item Install PostGIS extensions to the template:\\ 
+                  $\#$~\texttt{CREATE EXTENSION postgis;} \\
+                  $\#$~\texttt{CREATE EXTENSION postgis\textunderscore topology;}
+            \item Check that the extensions were installed correctly:\\ 
+                  $\#$~\texttt{SELECT name, default\textunderscore version,
+                  installed\textunderscore version\\ 
+                  FROM pg\textunderscore available\textunderscore extensions\\ 
+                  WHERE name LIKE `postgis\%';}\\
+                  \\
+                  Note: You should get a result showing postgis v. 
+                  2.0.1 and postgis\textunderscore topology v. 2.0.1 or similar
+            \item Enable users to alter the spatial tables:\\
+                  $\#$~\texttt{GRANT ALL ON geometry\textunderscore columns TO 
+                  PUBLIC;\\
+                  GRANT ALL ON geography\textunderscore columns TO PUBLIC;\\
+                  GRANT ALL ON spatial\textunderscore ref\textunderscore sys 
+                  TO PUBLIC;}
+            \item Log out of PostgreSQL:\\
+                  $\#$~\texttt{\textbackslash q;}
+            \item Check that everything is installed correctly:\\
+                  $>$~\texttt{sudo -u postgres psql template\textunderscore 
+                  postgis -c \hfill \ldots\\ 
+                  ``SELECT 
+                  PostGIS\textunderscore Full\textunderscore Version();''}
+            \item Hit ``q'' on your keyboard to exit the results screen
+        \end{enumerate}
+    \end{enumerate}
+    \item Create a new database based on PostGIS template:
+    \begin{enumerate}
+        \item Log into the default PostgreSQL database as user postgres
+        \item From the PostgreSQL terminal, create a new database:\\
+              $\#$~\texttt{CREATE DATABASE gepisat\\ 
+              WITH OWNER=user\\ 
+              TEMPLATE=template\textunderscore postgis;}\\
+              \\
+              Note: Use your user name for the owner or set owner to 
+              `postgres' is you chose not to create a new user
+        \item Log out of PostgreSQL
+    \end{enumerate}
+    \item Add extention to database to allow pivot tables:
+    \begin{enumerate}
+        \item Log into the newly created database:\\
+              $>$~\texttt{psql -h 127.0.0.1 -p 5432 -d gepisat -U user}
+        \item Add tablefunc extension:\\
+              $\#$~\texttt{CREATE EXTENSION tablefunc;}
+    \end{enumerate}
+\end{enumerate}
+
+An empty gepisat database is now ready for use.  
+The next step is to create the three database tables and populate them with data.

@@ -1,0 +1,70 @@
+% gepisat_appdx_c.tex
+%
+% written by Tyler W. Davis
+% Imperial College London
+%
+% 2014-10-29 -- created
+% 2014-10-29 -- last updated
+%
+% ------------
+% description:
+% ------------
+% This TEX file contains Appendix C: Some useful SQL commands for the GePiSaT model documentation.
+%
+% ----------
+% changelog:
+% ----------
+% 01. modularized chapter [14.10.29]
+% 02. newline for each sentence [14.10.29]
+% --> simpler for Git version control
+%
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% APPENDIX C -- SOME USEFUL SQL COMMANDS
+%% //////////////////////////////////////////////////////////////////////// %%
+\section{Some Useful SQL Commands}
+\label{app:sql}
+While working with the GePiSaT database, circumstances may arise that force the user to work directly with the database from the postgreSQL command prompt.  
+This appendix highlights some of these circumstances.  
+The syntax of each query is reviewed and explained such that it may assist in creating other queries that may be necessary.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% APPENDIX C.1 -- LIST OF VARIABLES (SQL)
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{List of variables}
+\label{app:sqlvar}
+\texttt{SELECT DISTINCT varname FROM var\textunderscore list;}\\
+
+\noindent This command queries the field \textit{varname} from the table \texttt{var\textunderscore list} and returns a list of all the variable names currently in the database.  
+The \texttt{DISTINCT} keyword limits the query results to only unique values of \textit{varname} (i.e., removes all duplicate results). 
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% APPENDIX C.2 -- FIND MSVIDX (SQL)
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Find msvidx}
+\label{app:sqlmsvidx}
+\texttt{SELECT varname, varid, msvidx FROM var\textunderscore list WHERE varname = `VPD' LIMIT 1;}\\
+
+\noindent This query returns the fields \textit{varname}, \textit{varid}, and \textit{msvidx} from the table \texttt{var\textunderscore list} for a specified variable name.  
+In this example the specified variable is ``VPD.''  Note that in the query syntax the variable name is placed between a pair of single quotes. 
+The variable name can be any of the observation data in the database (see Table \ref{tab:gepisatobs} for observation variables; see also Appendix \ref{app:sqlvar} for querying variable names).  
+The \texttt{LIMIT 1} at the end of the query suppresses the number of rows returned by the query to one (since all rows will have the same \textit{varname} and \textit{varid}).  
+The station that is associated with the \textit{msvidx} will be chosen by postgreSQL by random.  
+The purpose of this command is to associate a variable name with its identifier.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% APPENDIX C.3 -- DELTE SINGLE VARIABLE DATA (SQL)
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Delete single variable data}
+\label{app:sqldelone}
+\texttt{DELETE FROM data\textunderscore set WHERE msvidx LIKE '\%20';}\\
+
+\noindent This query performs the action of deleting data (i.e., rows) from the table \texttt{data\textunderscore set} where the \textit{msvidx} field meets a specific criteria.  
+As defined in \S \ref{sec:dbvtdes}, the \textit{msvidx} field is comprised of both the \textit{stationid} and \textit{varid} fields.  
+By definition the last two characters in the \textit{msvidx} field are associated with the \textit{varid}.  
+This query takes advantage of this knowledge and the knowledge of the \textit{varid} for the variable of interest (see Appendix \ref{app:sqlmsvidx}).  
+The \texttt{LIKE} keyword prompts postgreSQL for a ``regular expression'' search string.  
+In postgreSQL, the escape character for ``match anything'' is the percent sign (\%).  
+In this example, the \textit{varid} is 20, which is associated with the ``VPD'' variable name.  
+The `\%20' (note the single quotes) will therefore match all \textit{stationid} parts in the \textit{msvidx} where the \textit{varid} part matches `20.' 
+
+Following the successful query execution, postgreSQL will return the number of fields that were removed from the database.

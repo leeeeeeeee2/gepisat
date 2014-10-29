@@ -1,0 +1,366 @@
+% gepisat-2_structure.tex
+%
+% written by Tyler W. Davis
+% Imperial College London
+%
+% 2014-10-29 -- created
+% 2014-10-29 -- last updated
+%
+% ------------
+% description:
+% ------------
+% This TEX file contains Part 2 database structure for the GePiSaT model documentation.
+%
+% ----------
+% changelog:
+% ----------
+% 01. modularized chapter [14.10.29]
+% 02. newline for each sentence [14.10.29]
+% --> simpler for Git version control
+%
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.4 -- STRUCTURE
+%% //////////////////////////////////////////////////////////////////////// %%
+\section{Structure}
+\label{sec:dbstruc}
+The database structure is based on three tables.  
+The first table stores the meta data regarding a particular data source.  
+This includes individual flux towers, meteorological stations, and satellite pixels.  
+The meta data includes such information as geolocation, climate, and vegetation details.  
+The second table stores information regarding the data types (e.g., eco-climatological variables) available for each station or grid point.  
+Information regarding the data variables includes the variable name and units of measure.  
+The third and last table stores the actual observation data.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.4.1 -- META DATA TABLE
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Meta-data table}
+\label{sec:dbmt}
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.4.1.1 -- META DATA TABLE: DESCRIPTION
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsubsection{Field descriptions}
+\label{sec:dbmtdes}
+The \emph{mapid} and \emph{map} fields are included in the meta data as a means for quickly referencing all data within a large region.  
+The current convention assigns a continent (North America, South America, Europe, Africa, Asia, Australia, or Antarctica) to each station location.  
+For instances where stations are located on an island far removed from a continent, they are instead assigned to an ocean (North Atlantic, South Atlantic, North Pacific, South Pacific, Indian, Arctic, Southern).
+
+%% ------------------------------------------------------------------------ %%
+%% tab:metdata | PostgreSQL met data table fields
+%% ------------------------------------------------------------------------ %%
+\begin{table}[h]
+    \caption{Description of meta data table postgreSQL database fields.}
+    \label{tab:metdata}
+    \centering
+    \begin{tabular}{l l}
+        \hline
+        \bf{Name} & \bf{Description} \\
+        \hline
+        \emph{mapid} & Identifier for the part of the world (e.g., continents) \\
+        
+        \emph{map} & Name of continent, ocean, etc. \\
+        
+        \emph{countryid} & ISO alpha-2 country abbreviation \\
+        
+        \emph{country} & Country name \\
+        
+        \emph{stationid} & Unique ID for flux towers, met. stations, etc. \\
+        
+        \emph{station} & Station name \\
+        
+        \emph{lon} & Longitude (DD) of station (or pixel centroid) \\
+        
+        \emph{lat} & Latitude (DD) of station (or pixel centroid) \\
+        
+        \emph{ele} & Approximate ground elevation (m) \\
+        
+        \emph{classid} & IGBP land cover type abbreviation  \\
+        
+        \emph{class} & IGBP land cover type name \\
+        
+        \emph{climateid} & K\"{o}ppen climate classification abbreviation \\
+        
+        \emph{climate} & K\"{o}ppen climate classification name \\
+        
+        \emph{data\textunderscore years} & List of years where data is available \\
+        
+        \emph{years\textunderscore data} & Number of years of data available \\
+        
+        \emph{network} & Data network (e.g., AmeriFlux) \\
+        
+        \emph{url} & Web address for data or tower \\
+        
+        \emph{created} & Date data was created \\
+        
+        \emph{uploaded} & Date data was uploaded to database \\
+        
+        \emph{geom} & Geometry of data (point or grid) \\
+        
+        \emph{coor} & Coordinate projection system (for lon / lat) \\
+        
+        \emph{dim} & Dimension of the data (e.g., gridded data = 2) \\
+        
+        \emph{res} & Resolution of the data, e.g., pixel size \\
+        \hline
+    \end{tabular}
+\end{table}
+
+For most stations, the \emph{lon}, \emph{lat}, and \emph{ele} fields are easily taken from the station's website or source.  
+Often the country where the station resides is also given (e.g., the \emph{country} field).  
+However, to get the \emph{countryid} field, ISO alpha-2 references are available online.
+
+Station identifiers (i.e., the \emph{stationid} field) may be given by their source provider (e.g., Fluxdata.org gives each flux station a six-character identifier) or they may be assigned by the user.  
+For gridded data (e.g., satellite observations), each pixel is considered an independent station such that each pixel can have its own set of variables each with its own set of observation data. 
+Due to difficulty in dealing with gridded data of differing resolutions, gridded stations are unique for a single resolution only. 
+The major grid resolution used in this project consists of 0.5$^{\circ}$ resolution pixels (i.e., 5600 km squares).  
+At this resolution, there are 720 pixels spanning across longitude values -180$^{\circ}$ to 180$^{\circ}$ and 360 pixels spanning across latitude values -90$^{\circ}$ to 90$^{\circ}$.  
+Therefore, gridded data at 0.5$^{\circ}$ resolution consists of 259200 pixels.  
+For the purposes of station numbering, the pixel located at in the bottom left-hand corner (i.e., farthest south-west) at coordinates -180$^{\circ}$, -90$^{\circ}$ is station number 0 and the pixel located at the top right-hand corner (i.e., farthest north-east) at coordinates 180$^{\circ}$, 90$^{\circ}$ is station number 259199.  
+All pixels between these two locations are numbered sequentially in row-major fashion.  
+A prefix of `HDG' is given to each pixel number to represent the half-degree grid.
+
+The \emph{station} field is meant to allow for a longer non-unique name to describe each station.
+
+The  \emph{classid}, \emph{class}, \emph{climateid}, and \emph{climate} fields are included to allow for quick referencing data that exist within similar environments (i.e., not necessarily within the same geographic region). 
+
+Two fields are provided to describe the amount of data and associated time periods available (e.g., \emph{data\textunderscore years} and \emph{years\textunderscore data} fields). 
+The \emph{years\textunderscore data} field is assumed to be an integer; however, it should be noted that data may not be available for the entire year listed.
+
+The \emph{network} and \emph{url} fields are provided to indicate the origins of the data presented in this database.  
+Networks may be institutions, organizations, or other affiliations.  
+To help ensure that data is properly sourced, a website can accompany the network.  
+
+Because the data that is used in this study is subject to periodic revisionary updates, two additional fields have been recommended to help maintain fidelity between data revisions.  
+The first field is \emph{created} which indicates the date that the data was created.  
+This is typically published with the data by its source.  
+The second field is \emph{uploaded} which indicates the date that the data was uploaded to the database.  
+
+The final fields (i.e., \emph{geom}, \emph{coor}, \emph{dim}, and \emph{res}) provide additional information regarding the shape of the data (e.g., point or gridded observation), the coordinate system (for referencing the \emph{lon} and \emph{lat} fields), the dimension of the data, and the resolution of the data (specifically for defining the pixel size of gridded data).
+
+Table \ref{tab:metdata} provides a description for each of the column headers used in the meta data for the postgreSQL database.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.4.1.2 -- META DATA TABLE: SQL COMMAND
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsubsection{Meta-data SQL table creation command}
+\label{sec:dbmtsql}
+To create the meta-data table, the following SQL query may be used. 
+The \emph{stationid}, \emph{lat}, \emph{lon}, \emph{years}, \emph{created}, \emph{uploaded}, and \emph{dim} fields are listed as \texttt{NOT NULL} and therefore must be included in the database.  
+The \emph{stationid} is the primary key for this table, meaning it must be a unique value for each entry (i.e., no duplicate stations or pixel names are allowed).\\
+
+\noindent \texttt{CREATE TABLE met\textunderscore data (\\
+\indent mapid       character(3),\\
+\indent map         text,\\
+\indent countryid   character(2),\\
+\indent country     text,\\
+\indent stationid   varchar(12) NOT NULL,\\
+\indent station     text,\\
+\indent lat         real NOT NULL,\\
+\indent lon         real NOT NULL,\\
+\indent ele         real,\\
+\indent classid     character(3),\\
+\indent class       text,\\
+\indent climateid   varchar(4),\\
+\indent climate     text,\\
+\indent data\textunderscore years    text,\\
+\indent years\textunderscore data    integer NOT NULL DEFAULT 0,\\
+\indent network     text,\\
+\indent url         text,\\
+\indent created     timestamp NOT NULL,\\
+\indent uploaded    timestamp NOT NULL,\\
+\indent geom        text,\\
+\indent coor        text,\\
+\indent dim         integer NOT NULL,\\
+\indent res         text,\\
+\indent CONSTRAINT set\textunderscore pk1 PRIMARY KEY (stationid)\\
+)\\
+WITH (\\
+\indent OIDS=FALSE\\
+);}\\
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.4.1.3 -- META DATA TABLE: GETTING DATA
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsubsection{Acquiring data}
+\label{sec:dbmtget}
+It is of practical use to know where to obtain the information for the meta data table.  
+This section presents some resources and methods for getting the meta data.
+
+\paragraph{Maps and countries}
+The idea behind this hierarchy of spatial data labelling was to make it intuitive as to where in the world each data in the database represents.  
+The first and top-most hierarchal level is the \emph{mapid} and \emph{map} fields.  
+The \emph{map} field is a broad generalisation of global regions based on the least specific classification: continents and oceans.  
+Unfortunately there is no easy link between local land-based point measurements and the continent; however, there are references linking countries with their respective continent.  
+For example, the Gazetteer of Planetary Nomenclature\footnotemark \footnotetext{http://planetarynames.wr.usgs.gov/Abbreviations} provides a comprehensive list of countries (including ethnic/cultural groups) by continent with their own nomenclature.  
+For the purposes of this project, the International Organization for Standardization (ISO) country codes (i.e., two-letter ISO-3166\footnotemark \footnotetext{http://www.iso.org/iso/country\textunderscore codes}) are used to identify the countries of the world.
+
+A Python script (i.e., \texttt{map\textunderscore country.py}) was written to quickly map the \emph{country} and \emph{countryid} fields to return all four meta data fields (i.e., \emph{mapid}, \emph{map}, \emph{countryid}, and \emph{country}).
+
+For the purposes of getting the country names, most data are supplied with coordinates (i.e., longitude and latitude) to accompany the measurements.  
+If not, it is only a matter of assigning an approximate location based on mapping software (e.g., Google Maps\footnotemark \footnotetext{https://maps.google.co.uk}).  
+After geolocation information is acquired, country information can be extracted from electronic maps.
+
+Geographic information system (GIS) software is available for mapping and overlaying geographic information. One such open-source software is GRASS GIS\footnotemark. \footnotetext{http://grass.osgeo.org} 
+GRASS is available for all major computer operating systems (i.e., Windows, Mac OSX, and Linux) and supports a variety of geographic file formats.  
+For the purposes of data extraction, instructions will assume the use of GRASS GIS.
+
+Shapefiles (or vector-based boundary maps) can be downloaded from a variety of sources which map out various geographic information.  
+For example, open data analysis and maps are available from Geocommons.com for 2002 world country boundaries\footnotemark \footnotetext{http://geocommons.com/overlays/5603} and world country administrative boundaries\footnotemark. \footnotetext{http://geocommons.com/overlays/33578}  
+After downloading a shapefile from the internet, extract the compressed information (e.g., unzip) and examine the contents of the folder.  
+There should be a set of files all with the same name but with different extensions (e.g., .dbf, .shp, .shx, etc.).  
+Keep all these files together.
+
+In GRASS GIS, following the instructions online to setup a project mapset\footnotemark. \footnotetext{http://grass.osgeo.org/documentation/first-time-users/} 
+Import the shapefile to the map (\texttt{File $\rightarrow$ Import vector data $\rightarrow$ Common import formats}).  
+The point locations need to be in a column format ASCII text file (e.g., .txt or .csv file extension).  
+A simple method for this is to use a spreadsheet software (e.g., MS Office Excel, OpenOffice Calc, etc.) and save the document as a ``CSV format.'' 
+The only information required to add points from a text file to the map are the longitude and latitude values; separate these value pairs into their own columns.  
+Add the points to the map (\texttt{File $\rightarrow$ Import vector data $\rightarrow$ ASCII points/GRASS ASCII vector import}).  
+Once the boundary map and point locations are loaded, extract the country information from the boundary file to the points based on the proximity of the points to each country's region.  
+GRASS GIS has the vector function \texttt{v.distance} to calculate the distance between vector features (i.e., points, lines, boundaries, areas, etc.).  
+The \texttt{v.distance} function can also return the feature from one layer that is closest to a feature in another layer.  
+First open the attribute table of the point data layer (\texttt{right-click layer name in GRASS GIS Layer Manager $\rightarrow$ Show attribute data}).  
+Create a new attribute in the point data layer to store the country data to.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.4.2 -- VARIABLES TABLE
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Variable list table}
+\label{sec:dbvt}
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.4.2.1 -- VARIABLES TABLE: DESCRIPTION
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsubsection{Description}
+\label{sec:dbvtdes}
+The variables table organizes information regarding each station's observation types.  
+To join the table of station variables with the station's meta data, it is necessary to maintain the \emph{stationid} field.  
+Each eco-climatological variable included in this database (e.g., net ecosystem exchange, shortwave down-dwelling radiation, etc.) is given a unique identification number represented by the \emph{varid} field.  
+Therefore, to create a unique identifier for a specific station's observations, a new field is created, called \emph{msvidx}. 
+The \emph{msvidx} field is a combination of the \emph{stationid} and \emph{varid} fields and is used to match a station with its variable observations.
+
+The \emph{varname} field is included to provide a description for each \emph{varid}. 
+The \emph{varunit} describes the units of measure that accompany the variable (e.g., days, m$\cdot$s$^{-1}$, or W$\cdot$m$^{-2}$).  
+The \emph{vartype} field indicates the general data source (e.g., flux tower, meteorological station, or remote satellite). 
+Lastly, the \emph{varcore} field is included to indicate whether a variable is core (i.e., available across all other stations of the same \emph{vartype}) or secondary (i.e, not necessarily available at other stations).
+
+Table \ref{tab:varlist} provides a description for each of the column headers used in the variables list for the postgreSQL database.
+
+%% ------------------------------------------------------------------------ %%
+%% tab:varlist | PostgreSQL var list table fields
+%% ------------------------------------------------------------------------ %%
+\begin{table}
+    \caption{Description of variable list table postgreSQL database fields.}
+    \label{tab:varlist}
+    \centering
+    \begin{tabular}{l l}
+        \hline
+        \bf{Name} & \bf{Description}\\
+        \hline
+        \emph{stationid} & Identifier for individual flux towers, met. stations, etc.\\
+        
+        \emph{varid} & Identifier for measurement variable\\
+        
+        \emph{msvidx} & Identifier for a specific station's variable\\
+        
+        \emph{varname} & Variable name or description\\
+        
+        \emph{varunit} & Units of measure\\
+        
+        \emph{vartype} & Flux tower, met. station, or gridded data product\\
+        
+        \emph{varcore} & Boolean for core or non-core variables\\
+        \hline
+    \end{tabular}
+\end{table}
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.4.2.2 -- VARIABLES TABLE: SQL COMMAND
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsubsection{Variable list SQL table creation command}
+\label{sec:dbvtsql}
+To create the variables table, the following SQL query may be used. 
+The \emph{msvidx}, \emph{varid}, and \emph{vartype} fields are listed as \texttt{NOT NULL.}  
+The \emph{msvidx} field is this table's primary key.  
+The \texttt{UNIQUE} command on the field pairs \emph{stationid} and \emph{varid} maintains the unique status of the \emph{msvidx} field (which is the combination of the \emph{stationid} and \emph{varid} fields).  
+Object IDs (i.e., \texttt{OIDS}) are not necessary because this table has a primary key.  
+The field \emph{stationid} is referenced to the same field in the meta data table.  
+Therefore, the meta data table must be created and populated before this table is populated. \\
+
+\noindent \texttt{CREATE TABLE var\textunderscore list (\\
+\indent msvidx varchar(15) NOT NULL,\\
+\indent stationid varchar(12) REFERENCES met\textunderscore data(stationid),\\
+\indent varid integer NOT NULL,\\
+\indent varname text,\\
+\indent varunit text,\\
+\indent vartype character(4) NOT NULL,\\
+\indent varcore integer,\\
+\indent UNIQUE(stationid, varid)\\
+\indent CONSTRAINT set\textunderscore pk2 PRIMARY KEY (msvidx)\\
+)\\
+WITH (\\
+\indent OIDS = FALSE\\
+);}\\
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.4.3 -- DATA TABLE
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Data set table}
+\label{sec:dbdt}
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.4.3.1 -- DATA TABLE: DESCRIPTION
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsubsection{Description}
+\label{sec:dbdtdes}
+The data table is the simplest table with only four fields.  
+The first two fields are \emph{msvidx} and \emph{stationid} which provides a link connecting the data set to both the variable list and meta data.
+
+The \emph{datetime} field provides a timestamp for each observation.  
+The \emph{data} field provides the associated measurement at each timestamp.
+
+Table \ref{tab:dataset} provides a description for each of the column headers used in the data set database table.
+
+%% ------------------------------------------------------------------------ %%
+%% tab:dataset | PostgreSQL data set table fields
+%% ------------------------------------------------------------------------ %%
+\begin{table}[h]
+    \caption{Description of data set table postgreSQL database fields.}
+    \label{tab:dataset}
+    \centering
+    \begin{tabular}{l l}
+        \hline
+        \bf{Name} & \bf{Description}\\
+        \hline
+        \emph{msvidx} & Identifier for a specific station's variable\\
+        
+        \emph{datetime} & Universal timestamp value (\%Y-\%m-\%d \%H:\%M:\%S)\\
+        
+        \emph{data} & Station's variable observation in time\\
+        \hline
+    \end{tabular}
+\end{table}
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.4.3.3 -- DATA TABLE: SQL COMMAND
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsubsection{Data set SQL table creation command}
+\label{sec:dbdtsql}
+To create the data table, the following SQL command may be used.  
+The \emph{msvidx} field references the same field in the variables table.  
+Therefore, the variables table must be created and populated before this table is populated.  
+The \emph{stationid} field references the same field in the meta data table.  
+There can only be a single observation for each station's variable; hence, there is a \texttt{UNIQUE} condition placed on \emph{msvidx} and \emph{datetime} fields.  
+This reduces the risk of having simultaneous measurements of the same observation giving different values.\\
+
+\noindent \texttt{CREATE TABLE data\textunderscore set (\\
+\indent msvidx varchar(15) REFERENCES var\textunderscore list(msvidx),\\
+\indent stationid varchar(12) REFERENCES met\textunderscore data(stationid),\\
+\indent datetime timestamp,\\
+\indent data float,\\
+\indent UNIQUE(msvidx, datetime)\\
+)\\
+WITH (\\
+\indent OIDS = FALSE\\
+);}\\

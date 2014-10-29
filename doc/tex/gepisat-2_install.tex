@@ -1,0 +1,240 @@
+% gepisat-2_install.tex
+%
+% written by Tyler W. Davis
+% Imperial College London
+%
+% 2014-10-29 -- created
+% 2014-10-29 -- last updated
+%
+% ------------
+% description:
+% ------------
+% This TEX file contains Part 2 database installation for the GePiSaT model documentation.
+%
+% ----------
+% changelog:
+% ----------
+% 01. modularized chapter [14.10.29]
+% 02. newline for each sentence [14.10.29]
+% --> simpler for Git version control
+%
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.2 -- INSTALLATION
+%% //////////////////////////////////////////////////////////////////////// %%
+\section{Installation}
+\label{sec:dbinstall}
+PostgreSQL can be installed on a variety of operating systems. 
+A popular alternative to installing PostgreSQL directly onto your computer is to use a virtual computer which operates independently and can be easily ported from one machine to another.  
+BitNami\footnotemark \footnotetext{\url{http://bitnami.com}} is a provider of  pre-packaged virtual computers with applications already configured for software development. 
+The database for this modeling system was tested on both a native PostgreSQL installation and on the BitNami Linux Application (LAPP) stack. 
+The LAPP stack provides a complete PostgreSQL development environment which also includes the PostGIS extensions.  
+In order to run a virtual machine, virtualization software is required.  
+There are numerous virtualization software providers, however, the most common are VirtualBox\footnotemark \footnotetext{\url{https://www.virtualbox.org}} and VMWare\footnotemark \footnotetext{\url{http://www.vmware.com}}.  
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.2.1 -- INSTALLATION USING VIRTUAL MACHINE
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Virtual machine setup}
+\label{sec:dbinstvm}
+The following instructions give a step by step overview on how to install the LAPP stack virtual machine on OSX.  
+
+\begin{enumerate}
+	\item Download and install VMware Fusion 6\footnotemark \footnotetext{\url{https://www.vmware.com/fr/products/fusion/}}. VMware fusion is not open source and a license purchase is required.
+	\item Download Bitnami LAPP Stack\footnotemark \footnotetext{\url{http://bitnami.com/stack/lapp}} (Virtual Machine, LAPP Stack on VMware) and extract the \textbf{.zip} file to your home directory.
+	\item Start VMware fusion:
+		\begin{enumerate}
+		\item Case 1, first time using VMware
+			\begin{enumerate}
+			\item VMware will offer you to install a virtual machine through several ways. Choose: \\ 
+				``More options...'' $\rightarrow$ ``Import an already existing virtual machine''.
+			\item Browse to your home directory, where you have extracted the \textbf{.zip} file; the directory should be named:\\ 
+				bitnami-lappstack-5.4.24-0-ubuntu-12.04 
+			\item Select the \textbf{.ovf} file; it should be named:\\ 
+				bitnami-lappstack-5.4.24-0-ubuntu-12.04-VBOX3.ovf
+			\item Choose a place to install the virtual machine; the default location on OSX is: ``Documents/Virtual Machines''
+			\end{enumerate}
+		\item Case 2, add a new virtual machine to an already existing VMware installation
+			 \begin{enumerate}
+			 \item In VMware, navigate to \texttt{File} $\rightarrow$ \texttt{New...}
+			 \item At the prompt for the installation method, follow the same procedure as in Case 1 above.
+			 \end{enumerate}
+		\end{enumerate}
+	\item If you are using a \textbf{wifi connection}:
+		\begin{enumerate}
+		\item Once the BitNami is installed (you should get an installation report with confirmation of success, partition size, etc.), click on ``Configuration''.
+		\item Select ``Network interface controller''.
+		\item Tick ``wifi'' and make sure the ``Network interface controller'' is activated. You will be prompted for your \textbf{OSX} admin password.
+		\item Close the window and start BitNami.\\
+		\textbf{NOTE}: If you forgot to activate the wifi as described above just after the installation process, BitNami configuration will fail on starting up. Run the command: \texttt{sudo poweroff} to power down BitNami.  Go to \texttt{Virtual machine} $\rightarrow$ Configuration... $\rightarrow$ ``Network interface controller'' and repeat the procedure described above. Keyboard shortcut: \textbf{cmd + E}. 
+		\end{enumerate}			
+	\item Run BitNami
+	\item On starting up BitNami, the following will displayed at the top of the screen, including the ip address: \\
+		\texttt{*** You can access the application at\\~~~~http://XXX.XXX.X.XX ***} \\
+		This address can later be accessed with the \texttt{ifconfig} command.
+	\item Sign in with the default username (\texttt{bitnami}) and password (\texttt{bitnami}) at the screen prompts.\\
+		You will be prompted for changing the password following the first login.
+\end{enumerate}
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.2.2 -- INSTALLATION USING NATIVE LINUX
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Native Linux setup}
+\label{sec:dbinstnl}
+The following instructions give a basic overview of installing PostgreSQL with PostGIS on a native Linux system.
+
+\begin{enumerate}
+    \item Download and install the PostgreSQL core distribution for your 
+          operating system\footnotemark 
+          \footnotetext{\url{http://www.postgresql.org/download}}
+          or use the native application installer (e.g., apt-get) or package 
+          manager (e.g., Synaptic Package Manager)
+    \item Setup the password for the default postgres user.\\
+          \emph{Note:} for BitNami LAPP stack installations, the postgres user 
+          already has a default password (e.g., `bitnami') and PostgreSQL can
+          be accessed the first time using: \texttt{psql -U postgres -d 
+          postgres}
+    \begin{enumerate}
+        \item Log into PostgreSQL terminal:\\
+              $>$~\texttt{sudo -u postgres psql postgres}
+        \item Create a new password on the PostgreSQL terminal:\\ 
+              $\#$~\textbackslash \texttt{password postgres}
+        \item Enter and confirm the new password
+        \item Quit PostgreSQL:\\ 
+              $\#$~\texttt{\textbackslash q}
+    \end{enumerate} 
+\end{enumerate}
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 2.2.2 -- RESIZING POSTGRESQL DATABASE
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Resizing Linux for postgreSQL database}
+\label{sec:dbresize}
+The database in this model can reach a disk size greater than the default disk size of the BitNami virtual machine (i.e., $\approx$ 17 GB).   
+Additionally, some Linux OS disk partitions are not sized adequately for the database installed in the default location (e.g., /usr/lib/postgresql/9.1/main/data).  
+Therefore, the database data directory needs to be relocated to a partition with adequate space to hold the observations for the model.  
+The following instructions are for moving the default postgreSQL database data directory.
+
+\begin{enumerate}
+    \item Create or identify a partition for holding the database data
+    \begin{enumerate}
+        \item BitNami
+        \begin{enumerate}
+            \item While the virtual machine is turned off, expand the hard disk 
+                  settings to a larger capacity, (e.g. navigate to: VMWare Fusion 
+	               $\rightarrow$ Virtual Machine $\rightarrow$ Hard Disk (IDE) 
+	               $\rightarrow$ Hard Disk (IDE) Settings $\ldots$ and move the 
+	               slider to allocate additional space)
+            \item Turn on the virtual machine
+            \item List the disk partitions:\\
+                  $>$~\texttt{sudo fdisk -l}\\
+                  \\
+                  The partitioning table will be displayed, providing a breakdown
+    	           of device names, start and end positions, number of blocks 
+    	           (e.g., size of each device), partition id and associated system
+    	           name.  At the top of the list, the total disk size should be 
+    	           displayed corresponding to the size selected previously 
+    	           (e.g., /dev/sda: 85.9 GB, 167772160 sectors, sector = 512 
+    	           bytes).  Note that the blocks listed in the partition table 
+    	           correspond the the sectors.  For example, the current table
+    	           may only have two devices: /dev/sda1 and /dev/sda2 
+    	           corresponding to a Linux and Linux swap system, respectively.
+    	           The end position of the second device (i.e., /dev/sda2) should
+    	           be less than the number of sectors listed for the drive (e.g., 
+    	           end = 33998847).
+            \item Determine the main partition of your LAPP stack based on the 
+                  results from the previous step (e.g., /dev/sda)
+            \item Format the disk, e.g.:\\
+                     $>$~\texttt{sudo fdisk /dev/sda}
+            \item Create new partition for holding the database by typing the following keystrokes in \texttt{fdisk}:\\
+                  \texttt{p}: prints the partition table\\
+                  \texttt{n}: creates a new partition\\
+                  \texttt{p}: sets new partition type to ``primary''\\
+                  \texttt{3}: defines partition number\\
+                  \texttt{<default>}: sets the start position to default\\
+                  \texttt{<default>}: sets the end position to default\\
+                  \\
+                  Note: the default start and end positions may fall in a small 
+                  gap located between /dev/sda1 and /dev/sda2; if this is 
+                  the case, create another primary partition:\\
+                  \texttt{n}: creates new partition\\
+                  \texttt{p}: sets partition type to ``primary''\\
+                  \texttt{4}: defines partition number\\
+                  \texttt{<default>}: sets the start position to default\\
+                  \texttt{<default>}: sets the end position to default\\
+                  \textbf{w}: writes partition table
+            \item Restart the virtual machine:\\
+                  $>$~\texttt{sudo poweroff}
+            \item Make new partition into a file system (Note: in this example
+                   /dev/sda4 is the new partition with start position 33998848 
+                   and end position 167772159, e.g., 85.9 GB):\\
+                   $>$~\texttt{sudo mkfs -t ext3 /dev/sda4}
+             \item Create a mounting point for this partition, e.g.:\\
+                   $>$~\texttt{sudo mkdir /database}
+             \item Mount new partition to a directory.\\
+             		Open the fstab document:\\
+                   $>$~\texttt{sudo pico /etc/fstab}\\
+                   \\
+                   Add the following line to the end of the document and save:\\
+                   \texttt{/dev/sda4~~~/database~~~ext3~~~defaults~~~0~~~0}
+    	\end{enumerate}
+        \item Native Linux
+        \begin{enumerate}
+            \item Create a directory for holding the database on a partition 
+                  with adequate space available (e.g., $>$80 GB).  On most Linux 
+                  machines, the /home directory is on a large partition. \\
+                  $>$~\texttt{mkdir \textasciitilde /Database}
+        \end{enumerate}
+    \end{enumerate}
+    \item Create a data directory in the database directory created in the 
+         previous step (e.g., for BitNami):\\
+         $>$~\texttt{sudo mkdir /database/data}
+   \item Change directory owner to user ``postgres'' (e.g., for BitNami):\\
+         $>$~\texttt{sudo chown postgres:postgres /database/data}
+   \item Stop postgresql service (e.g., BitNami):\\
+         $>$~\texttt{sudo /opt/bitnami/ctrlscript.sh stop}
+   \item Initialize new data directory (e.g., BitNami):\\
+         $>$~\texttt{su - postgres -c `/opt/bitnami/postgresql/bin/initdb \\
+         ~~-D /database/data'}\\
+         \\
+         Note: a request will be made for postgres user's password, which may
+         not be set yet.  If it is not set (i.e., the above command fails for 
+         postgres password), first create a password for postgres and then
+         try running the command again:\\
+         $>$~\texttt{sudo passwd postgres}
+   \item Edit postgresql start up script (e.g. BitNami):\\
+   		 Backup the \texttt{ctl} script with the following command:\\
+         $>$~\texttt{sudo cp /opt/bitnami/postgresql/scripts/ctl.sh \hfill \ldots \\
+         ~~/opt/bitnami/postgresql/scripts/ctl.sh.bak}\\
+         \\
+         Open the \texttt{ctl} script:\\ 
+         $>$~\texttt{sudo pico /opt/bitnami/postgresql/scripts/ctl.sh}\\
+         \\
+         Edit the start-up commands (i.e., the two lines that start with ``POSTGRESQL\textunderscore START'' and ``POSTGRESQL\textunderscore STOP'') by changing the directory path following the ``-D'' with the new database data data directory (e.g., ``/database/data'')
+   \item Start postgresql service (e.g., BitNami):\\
+         $>$~\texttt{sudo /opt/bitnami/ctrlscript.sh start}
+   \item Check that postgresql is running correctly:\\
+         $>$~\texttt{ps auxw | grep postgresql | grep -- -D}\\
+         \\
+         Note the directory listed following the -D.  If it is the right one 
+         (e.g., /database/data), proceed.
+   \item Create postgres password:\\
+         Log into database:\\ 
+         $>$~\texttt{psql -U postgres -d postgres}\\
+         \\
+         Set password:\\ 
+         $\#$~\textbackslash \texttt{password postgres} \\
+         \\
+         Exit psql:\\ 
+         $\#$~ \textbackslash \texttt{q}
+   \item Stop postgresql service (e.g. BitNami):\\
+         $>$~\texttt{sudo /opt/bitnami/ctrlscript.sh stop}
+   \item Edit pg\textunderscore hba.conf file in the newly established data directory (e.g. 
+         BitNami):\\
+         $>$~\texttt{su - postgres -c `pico /database/data/pg\textunderscore hba.conf'}\\
+         \\
+         Change all the instances of ``trust'' to ``md5''
+   \item Follow setup instructions (\S \ref{sec:dbsetup}) to create the 
+         database
+\end{enumerate}
+
+Note that in the old database can still be accessed by stopping the postgresql service, replacing the start-up script (e.g., the ``ctl.sh'' script located in /opt/bitnami/postgresql/scripts directory) with the original (i.e., ``ctl.sh.bak'') and restarting the service.

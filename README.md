@@ -1,6 +1,6 @@
 # README
 ---------------
-* LAST UPDATED: 2014-10-28
+* LAST UPDATED: 2014-10-29
 * TEAM: labprentice
 * REPO: gepisat (private)
 
@@ -19,6 +19,26 @@ This directory holds the documentation for the GePiSaT model.
     * Contains EPS figures
 * __tex/__
     * Contains LaTeX section files for documentation
+
+### main/
+This directory contains the main GePiSaT model Python code. 
+
+* __table_maker.py__
+    * Data manager script for PostgreSQL database
+    * Reads multiple input file types
+    * Produces variable lists and data sets for db_setup.py
+* __db_setup.py__
+    * Setup script for PostgreSQL database
+    * Creates tables with appropriate schemas 
+    * Populates tables with data
+* __model.py__
+    * Main model code
+    * Performs monthly flux partitioning of NEE and PPFD observation pairs
+    * Gap-fills PPFD observations
+    * Calculates GPP based on flux partitioning parameters
+    * Integrates PPFD and GPP to monthly totals
+    * Reads monthly meteorological data from database
+    * Estimates LUE
 
 ## Global ecosystem Production in Space and Time (GePiSaT)
 ------------------------------------------------------------------------------------

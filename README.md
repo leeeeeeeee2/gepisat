@@ -7,7 +7,18 @@
 ## Contents
 --------------------
 ### doc/
-This directory holds the current PDF documentation for the GePiSaT model.
+This directory holds the documentation for the GePiSaT model.
+
+* __gepisat_doc.pdf__
+    * The current PDF format of the model documentation
+* __gepisat_doc.tex__
+    * The main LaTeX document
+* __gepisat.bib__
+    * The BibLaTeX file for documentation references
+* __img/__
+    * Contains EPS figures
+* __tex/__
+    * Contains LaTeX section files for documentation
 
 ## Global ecosystem Production in Space and Time (GePiSaT)
 ------------------------------------------------------------------------------------

@@ -1,19 +1,21 @@
 # Enthought Canopy v 1.4
 #
-# daily_gpp.py
+# gepisat_gpp.py
+# * based on daily_gpp.py
 #
 # written by Tyler W. Davis
 # Imperial College London
 #
 # 2014-06-11 -- created
-# 2014-09-17 -- last updated
+# 2014-12-01 -- last updated
 #
 # ------------
 # description:
 # ------------
-# This script reads the output from GePiSaT for gapfilling PPFD,
-# calculates the daily PPFD totals, finds the associated flux partitioning
-# parameters, and calculates daily GPP.
+# This script reads the output from GePiSaT for gapfilling PPFD (aka 
+# ST-NAME-GF_YYYY-MM-01.txt), calculates the daily PPFD totals, finds the 
+# associated flux partitioning parameters (via summary_statistics.txt), and 
+# calculates daily GPP.
 #
 # ----------
 # changelog:
@@ -23,9 +25,10 @@
 # 03. added sort to ppfd file iteration [14.06.25]
 # 04. added check for negative GPP (set equal to zero) [14.06.25]
 # 05. updated function doc [14.09.17]
+# 06. general housekeeping [14.12.01]
 #
 ################################################################################
-#### IMPORT MODULES ############################################################
+## IMPORT MODULES:
 ################################################################################
 import datetime
 import glob
@@ -34,12 +37,12 @@ import os.path
 import re
 
 ################################################################################
-#### GLOBAL VARIABLES ##########################################################
+## GLOBAL CONSTANTS:
 ################################################################################
 TIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 ################################################################################
-#### FUNCTIONS #################################################################
+## FUNCTIONS
 ################################################################################
 def add_one_day(dt0):
     """
@@ -70,7 +73,8 @@ def get_flux_station(fileName):
         except AttributeError:
             print "Station name not found in file:", fileName
             #
-        return sname
+        finally:
+            return sname
 
 def calc_daily(sday, d):
     """
@@ -99,8 +103,8 @@ def calc_daily(sday, d):
     total_errs = simpson(my_errs, 1800)
     #
     # Convert to moles:
-    total_vals = (total_vals/1000000.)
-    total_errs = (total_errs/1000000.)
+    total_vals = (1e-6)*total_vals
+    total_errs = (1e-6)*total_errs
     #
     return (total_vals, total_errs)
 
@@ -158,19 +162,15 @@ def calc_gpp(stat_array, my_dict):
         else:
             # Calculate GPP and GPP err:
             for ts,ppfd in my_dict.iteritems():
-                gpp = (1.0*alpha*foo*ppfd)/(alpha*ppfd + foo)
+                # Variable substitutes:
+                apf = alpha*ppfd + foo
+                afp = alpha*foo*ppfd
+                afpp = alpha*foo*(ppfd**2)
+                #
+                gpp = afp/apf
                 gpp_err = numpy.sqrt(
-                    (
-                        (
-                            (foo*ppfd*(alpha*ppfd+foo) - alpha*foo*ppfd**2)/
-                            (alpha*ppfd+foo)**2
-                        )**2 * (alpha_err**2)
-                    ) + (
-                        (
-                            (alpha*ppfd*(alpha*ppfd+foo) - alpha*foo*ppfd)/
-                            (alpha*ppfd+foo)**2
-                        )**2 * (foo_err**2)
-                    )
+                    (alpha_err**2)*((foo*ppfd*apf - afpp)/(apf**2))**2 + 
+                    (foo_err**2)*((alpha*ppfd*apf - afp)/(apf**2))**2
                 )
                 #
                 # Check for negative GPP:
@@ -193,19 +193,15 @@ def calc_gpp(stat_array, my_dict):
         #
         # Calculate GPP & GPP_err
         for ts,ppfd in my_dict.iteritems():
-            gpp = (1.0*alpha*foo*ppfd)/(alpha*ppfd + foo)
+            # Variable substitutes:
+            apf = alpha*ppfd + foo
+            afp = alpha*foo*ppfd
+            afpp = alpha*foo*(ppfd**2)
+            #
+            gpp = afp/apf
             gpp_err = numpy.sqrt(
-                (
-                    (
-                        (foo*ppfd*(alpha*ppfd+foo) - alpha*foo*ppfd**2)/
-                        (alpha*ppfd+foo)**2
-                    )**2 * (alpha_err**2)
-                ) + (
-                    (
-                        (alpha*ppfd*(alpha*ppfd+foo) - alpha*foo*ppfd)/
-                        (alpha*ppfd+foo)**2
-                    )**2 * (foo_err**2)
-                )
+                (alpha_err**2)*((foo*ppfd*apf - afpp)/(apf**2))**2 + 
+                (foo_err**2)*((alpha*ppfd*apf - afp)/(apf**2))**2
             )
             #
             # Check for negative GPP:
@@ -246,10 +242,10 @@ def simpson(my_array, h):
     s = my_array[0] + my_array[-1]
     #
     for i in xrange(1, n, 2):
-        s += 4.0 * my_array[i]
+        s += 4.0*my_array[i]
     for j in xrange(2, n-1, 2):
-        s += 2.0 * my_array[j]
-    s = s * h / 3.0
+        s += 2.0*my_array[j]
+    s = s*h/3.0
     return s
 
 def writeout(f, d):
@@ -269,7 +265,7 @@ def writeout(f, d):
         OUT.close()
 
 ################################################################################
-#### MAIN ######################################################################
+## MAIN PROGRAM
 ################################################################################
 # Define directory for gap filled PPFD files
 mac = 0

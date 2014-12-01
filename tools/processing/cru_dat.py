@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-01-23 -- created
-# 2014-01-23 -- last updated
+# 2014-12-01 -- last updated
 #
 # ------------
 # description:
@@ -25,6 +25,7 @@
 # changelog:
 # ----------
 # 00. created [14.01.23]
+# 01. general housekeeping [14.12.01]
 #
 ###############################################################################
 ## IMPORT MODULES
@@ -78,9 +79,7 @@ header = (
     )
 
 # Define/write-out raster output filename:
-rast_out = "%s%s.txt" % (file_directory, 
-                        "CRU-TS3.00_elv_0.5-Raster", 
-                        )
+rast_out = "%s%s.txt" % (file_directory, "CRU-TS3.00_elv_0.5-Raster")
 writeout(rast_out, header)
 
 # Iterate through data:

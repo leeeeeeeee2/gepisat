@@ -6,18 +6,26 @@
 # Imperial College London
 #
 # 2013-11-05 -- created
-# 2014-09-17 -- last updated
+# 2014-12-01 -- last updated
 #
 # ------------
 # description:
 # ------------
 # This script reads NetCDF files (e.g., CRU TS 3.21) and extracts variables of
 # interest (e.g., monthly average max and min air temperature, monthly average
-# vapor pressure). Writes variable of interest to raster format. 
+# vapor pressure). Writes variable of interest to ASCII raster format. 
 #
 # NOTE: CRU TS 3.21 is made of 0.5 deg. resolution pixels
 #       Indexes begin at -179.75, -89.75
 #       Indexes end at 179.75, 89.75 
+#
+#       Example files:
+#       1. cru_ts3.21.1901.2012.cld.dat.nc, cloudiness, %
+#       2. cru_ts3.21.1901.2012.pre.dat.nc, precipitation, mm
+#       3. cru_ts3.21.1901.2012.tmn.dat.nc, min. temperature, deg. C
+#       4. cru_ts3.21.1901.2012.tmp.dat.nc, mean temperature, deg. C
+#       5. cru_ts3.21.1901.2012.tmx.dat.nc, max. temperature, deg. C
+#       6. cru_ts3.21.1901.2012.vap.dat.nc, vapor pressure, hPa
 #
 # NOTE 2: CRU TS3.21 data is from January 1901 to December 2012
 #         Only interested in data from 1990--2012
@@ -38,11 +46,14 @@
 # 10. fixed error with VPD calc [14.02.18]
 # --> 237.3 not 273.
 # 11. updated function documentation [14.09.17]
+# 12. code housekeeping [14.12.01]
 #
 # -----
 # todo:
 # -----
-# Check stationid properness by implementing process_poly
+# 1. Check stationid properness by implementing process_poly
+# 2. Make distinction between get_lon_lat function for top-left and bottom-left 
+#    numbering (e.g., MODIS HDF versus WATCH netCDF)
 #
 ###############################################################################
 ## IMPORT MODULES
@@ -112,16 +123,12 @@ def writeout(f, d):
 def get_time_index(bt, ct, aot):
     """
     Name:     get_time_index
-    Input:    - datetime date, base timestamp
-              - datetime date, current timestamp
-              - numpy nd.array, days since base timestamp
+    Input:    - datetime date, base timestamp (bt)
+              - datetime date, current timestamp to be found (ct)
+              - numpy nd.array, days since base timestamp (aot)
     Output:   int
     Features: Finds the index in an array of CRU TS days for a given timestamp 
     """
-    # bt :: base timestamp for array of values
-    # ct :: current timestamp (for searching)
-    # aot :: array of time values (days since bt)
-    #
     # For CRU TS 3.21, the aot is indexed for mid-month days, e.g. 15--16th
     # therefore, to make certain that ct index preceeds the index for the
     # correct month in aot, make the day of the current month less than
@@ -149,10 +156,6 @@ def get_monthly_cru(d, ct, v):
     Features: Returns 360x720 monthly CRU TS dataset for a given month and 
               variable of interest (e.g., cld, pre, tmp)
     """
-    # d :: data directory
-    # ct :: current datetime object
-    # v :: variable of interest
-    #
     # Search directory for netCDF file:
     my_file = glob.glob(d + "*" + v + ".dat.nc")[0]
     #
@@ -163,7 +166,7 @@ def get_monthly_cru(d, ct, v):
         # Save data for variables of interest:
         # NOTE: for CRU TS 3.21: 
         #       variables: 'lat', 'lon', 'time', v
-        #       where v is 'tmp', 'pre', 'cld'
+        #       where v is 'tmp', 'pre', 'cld', 'vap'
         # LAT:  -89.75 -- 89.75
         # LON:  -179.75 -- 179.75
         # TIME:
@@ -174,6 +177,7 @@ def get_monthly_cru(d, ct, v):
         #       'cld' units = %
         #       'pre' units = mm
         #       'tmp' units = deg. C
+        #       'vap' units = hPa
         #       Missing value = 9.96e+36
         # Save the base time stamp:
         bt = datetime.date(1900,1,1)
@@ -207,8 +211,7 @@ def calculate_vpd(tmin, tmax, vap):
     """
     # Initialize array:
     # NOTE: maintains large number for missing values
-    vpd = numpy.array([1.e7*(i+1)/(i+1) for i in xrange(360*720)])
-    vpd = vpd.reshape(360, 720)
+    vpd = 1e7*numpy.ones((360, 720))
     #
     # Iterate through each data point:
     lat, lon = tmin.shape
@@ -220,11 +223,7 @@ def calculate_vpd(tmin, tmax, vap):
             ea = vap[y,x]
             if tm < 1.e6 and tx < 1.e6 and ea < 1.e6:
                 to = 0.5*(tm + tx)
-                vpd[y,x] = (
-                    0.611 * numpy.exp(
-                        (17.27 * to)/(to + 237.3)
-                        ) - 0.10*ea
-                    )
+                vpd[y,x] = (0.611*numpy.exp((17.27*to)/(to + 237.3)) - 0.10*ea)
     return vpd
 
 def process_raster(data, var_name, out_dir, time_stamp):
@@ -333,14 +332,14 @@ def process_poly(d, var_name, data, time_stamp):
 
 def get_lon_lat(x,y,r):
     """
-        Name:     get_lon_lat
-        Input:    - int/nd.array, longitude index (x)
-                  - int/nd.array, latitude index (y)
-                  - float, pixel resolution (r)
-        Output:   float/nd.array tuple, longitude(s) and latitude(s), degrees
-        Features: Returns lon-lat pair for an x-y index pair (numbered from the 
-                  bottom-left corner) and pixel resolution
-        """
+    Name:     get_lon_lat
+    Input:    - int/nd.array, longitude index (x)
+              - int/nd.array, latitude index (y)
+              - float, pixel resolution (r)
+    Output:   float/nd.array tuple, longitude(s) and latitude(s), degrees
+    Features: Returns lon-lat pair for an x-y index pair (numbered from the 
+              bottom-left corner) and pixel resolution
+    """
     # Offset lat, lon to pixel centroid
     lon = -180.0 + (0.5*r)
     lat = -90.0 + (0.5*r)
@@ -353,19 +352,18 @@ def get_lon_lat(x,y,r):
 
 def get_stationid(lon, lat):
     """
-        Name:     get_stationid
-        Input:    - float, longitude, degrees (lon)
-                  - float, latitude, degrees (lat)
-        Output:   int, station id (st_id)
-        Features: Returns the half-degree (HDG) station ID for a pixel
-                  numbered from 0 (bottom-left / south-west corner) to 259199 
-                  (top-right / north-east corner) as defined in the GePiSaT 
-                  database numbering scheme
-        """
+    Name:     get_stationid
+    Input:    - float, longitude, degrees (lon)
+              - float, latitude, degrees (lat)
+    Output:   int, station id (st_id)
+    Features: Returns the half-degree (HDG) station ID for a pixel
+              numbered from 0 (bottom-left / south-west corner) to 259199 
+              (top-right / north-east corner) as defined in the GePiSaT 
+              database numbering scheme
+    """
     st_id = (
-        720.0 * (359.0 - ((90.0 - lat)/0.5 - 0.5))
-        + ((lon + 180.0)/0.5 - 0.5)
-        )
+        720.0*(359.0 - ((90.0 - lat)/0.5 - 0.5)) + ((lon + 180.0)/0.5 - 0.5)
+    )
     return int(st_id)
 
 def get_clip(d):
@@ -378,7 +376,7 @@ def get_clip(d):
     """
     temp_array = d - d.max()
     temp_array = temp_array.clip(min=-1)
-    temp_array = -1.0 * temp_array
+    temp_array = -1.0*temp_array
     return temp_array
 
 def get_missing(d):
@@ -388,7 +386,7 @@ def get_missing(d):
     Output:   numpy nd.array (temp_array)
     Features: Returns an array where ocean pixels (based on the output of the 
               get_clip function) are set equal to error value -9999.0"""
-    temp_array = 9999.0 * (d - 1.0)
+    temp_array = 9999.0*(d - 1.0)
     return temp_array
 
 ###############################################################################
@@ -409,11 +407,10 @@ start_date = datetime.date(1988,12,1)
 end_date = datetime.date(2013,1,1)
 
 ###############################################################################
-## MAIN
+## MAIN PROGRAM
 ###############################################################################
-# Initialize mean VPD field:
-vpd_mean = numpy.array([0.0*(i+1)/(i+1) for i in xrange(360*720)])
-vpd_mean = vpd_mean.reshape(360, 720)
+# Initialize mean monthly VPD field (based on multiple years):
+vpd_mean = numpy.zeros((360, 720))
 
 # Process each month between start and end dates:
 cur_date = start_date
@@ -438,8 +435,8 @@ while cur_date < end_date:
     #process_poly(output_directory, "VPD", vpd, cur_date)
     #
     # Update date field:
-    #cur_date = add_one_month(cur_date)
-    cur_date = add_years(cur_date, 1)
+    #cur_date = add_one_month(cur_date)  # <- for monthly processing
+    cur_date = add_years(cur_date, 1)  # <- for annual means
 #
 # Compute mean vpd:
 vpd_mean = (0.04)*vpd_mean

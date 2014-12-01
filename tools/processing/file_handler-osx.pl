@@ -1,16 +1,16 @@
 #!/usr/bin/perl
 #
-# file_handler.pl
+# file_handler-osx.pl
 #
-# written by Tyler Davis
+# written by Tyler W. Davis
 # 
 # 2013-10-28 -- created
-# 2014-01-29 -- last updated
+# 2014-12-01 -- last updated
 #
 # ------------
 # description:
 # ------------
-# This script is meant to speed up file handling in Mac OSX.
+# This script is meant to speed up file handling in Mac OSX (or Linux).
 # 1. Creates subdirectories if they do not already exist
 # 2. Moves files into their corresponding subdirectory
 #
@@ -18,9 +18,10 @@
 # changelog:
 # ----------
 # 01. added grep to readdir() for only reading text files [14.01.29]
+# 02. general housekeeping [14.12.01]
 #
 ##############################################################################
-## MODULES
+## IMPORT MODULES
 ##############################################################################
 use warnings;
 use strict;
@@ -33,7 +34,6 @@ use File::Copy;
 
 ### USER DEFINED VARIABLE ###
 my $obs_dir = "/home/user/Projects/gepisat/results/2002-06/attempt25/gapfill_v25/";
-#############################
 
 my @files;
 my $file;
@@ -42,7 +42,7 @@ my $my_subdir;
 my $obs_dir_new;
 
 ##############################################################################
-## MAIN
+## MAIN PROGRAM
 ##############################################################################
 opendir DIR, $obs_dir or die "Cannot open dir $obs_dir: $!";
 @files = grep {/.*txt/} readdir DIR;

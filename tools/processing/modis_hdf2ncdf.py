@@ -1,15 +1,14 @@
 #!/usr/bin/python
 #
 # modis_hdf2ncdf.py
+# * based on modis_hdf.py (2013-10)
 #
 # written by Tyler W. Davis
 # Imperial College London
-# (Enthought Canopy Python Environment)
 #
 # 2013-08-21 -- created
 # 2014-11-24 -- last updated
 #
-# based on modis_hdf.py (2013-10)
 #
 # ------------
 # description:
@@ -269,16 +268,13 @@ def get_foh_evi(lon, lat, data):
 def upscale_evi(d):
     """
     Name:     upscale_evi
-    Input:    numpy nd.array (d)
+    Input:    numpy nd.array, 0.05 deg MODIS EVI (d)
     Output:   numpy nd.array (hdf_evi)
     Features: Returns an array of resampled 0.05 deg EVI to 0.5 deg resolution
               rounded to four decimal places
     Depends:  - get_lon_lat
               - get_foh_evi
     """
-    # Variable definitions:
-    #    d :: data file with 0.05 deg EVI
-    #
     # Initialize data array of floating points values:
     hdf_evi = numpy.zeros(shape=(360,720))
     #

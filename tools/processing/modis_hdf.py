@@ -4,10 +4,9 @@
 #
 # written by Tyler W. Davis
 # Imperial College London
-# (Enthought Canopy Python Environment)
 #
 # 2013-08-21 -- created
-# 2013-10-23 -- last updated
+# 2014-12-01 -- last updated
 #
 # ------------
 # description:
@@ -44,6 +43,7 @@
 # --> divide by 100; should scale back pixels with few points
 # --> changed back to mean (performs poorly against original 0.05 data)
 # 14. added file looping [13.10.23]
+# 15. general housekeeping [14.12.01]
 #
 #
 #  Table 1. Standard deviations of the differences between raster images of 
@@ -69,6 +69,8 @@
 # -----
 # todo:
 # -----
+# 1. Distinguish get_lon_lat function for top-left and bottom-left numbering
+#    schemes (e.g., MODIS HDF versus WATCH netCDF).
 # x Implement resolution resampling (0.05 to 0.5 deg) [13.09.24]
 # x Reprocess FOH and HDG files with EVI in integer (100000x's) units
 # x Output to ASCII Raster format [13.09.26]
@@ -87,32 +89,48 @@ from pyhdf import SD   # installed 0.8.3 in canopy package manager
 ## FUNCTION DEFINITIONS
 ##############################################################################
 def get_lon_lat(x,y,r):
-    """Returns lat-lon pair for x-y index from top-left corner"""
-    # x (longitude): 0...7199 (0...719)
-    # y (latitude): 0...3599 (0...359)
-    pixel_res = r   
+    """
+    Name:     get_lon_lat
+    Input:    - int/nd.array, longitude index (x)
+              - int/nd.array, latitude index (y)
+              - float, pixel resolution (r)
+    Output:   float/nd.array tuple, longitude(s) and latitude(s), degrees
+    Features: Returns lat-lon pair for x-y index pair (numbered from top-left 
+              corner) and pixel resolution
+    """
     # Offset lat, lon to pixel centroid
-    lon = -180.0 + 0.5*pixel_res
-    lat = 90.0 - 0.5*pixel_res
+    lon = -180.0 + (0.5*r)
+    lat = 90.0 - (0.5*r)
+    #
     # Offset lat, lon based on pixel index
-    lon = lon + x*pixel_res
-    lat = lat - y*pixel_res
+    lon = lon + (x*r)
+    lat = lat - (y*r)
     #
     return (lon, lat)
 
 def get_x_y(lon, lat, r):
-    """Returns x and y indices for lon-lat pair at 0.05 deg resolution"""
-    # Pixel resolution:
-    pixel_res = r
-    #
-    # Solve x and y indices:
-    x = (lon + 180.0)/pixel_res - 0.5
-    y = (90.0 - lat)/pixel_res - 0.5
-    #
+    """
+    Name:     get_x_y
+    Input:    - float, longitude, degrees (lon)
+              - float, latitude, degrees (lat)
+              - float, resolution (r)
+    Output:   tuple, x-y index pair
+    Features: Returns x and y indices for lon-lat pair at given resolution 
+              based on a numbering scheme starting from the top-left corner
+              (i.e., north-west corner)
+    """
+    x = (lon + 180.0)/r - 0.5
+    y = (90.0 - lat)/r - 0.5
     return (int(x), int(y))
 
 def writeout(f, d):
-    """Writes new/overwrites existing file"""
+    """
+    Name:     writeout
+    Input:    - string, file name with path (t)
+              - string, data to be written to file (d)
+    Output:   None
+    Features: Writes new/overwrites existing file with data string
+    """
     try:
         OUT = open(f, 'w')
         OUT.write(d)
@@ -122,7 +140,13 @@ def writeout(f, d):
         OUT.close()
 
 def get_ts(f):
-    """Reads filename to retrieve timestamp"""
+    """
+    Name:     get_ts
+    Input:    str, filename with path (f)
+    Output:   datetime.datetime
+    Features: Returns the timestamp (datetime object) associated with a MODIS
+              file name (e.g., MYD13C2.A2002182.005.2007199145757.hdf)
+    """
     f_name = os.path.basename(f)
     try:
         f_date = re.search('A(\d{7})\.', f_name).group(1)
@@ -138,10 +162,15 @@ def get_ts(f):
         return f_timestamp
 
 def get_evi(f):
-    """Opens an HDF file and returns an SD object"""
+    """
+    Name:     get_evi
+    Input:    str, input file name with path (f)
+    Output:   numpy.ndarray, MODIS CMG 0.05 Deg Monthly EVI
+    Features: Returns the numpy array of MODIS monthly EVI from a given file
+    """
     if os.path.isfile(f):
-        # Open SD file:
         try:
+            # Opens HDF4 file type:
             my_hdf = SD.SD(f)
         except:
             print "Unexpected error opening file", f
@@ -152,8 +181,9 @@ def get_evi(f):
             #
             #d_key = my_hdf.datasets().keys()
             #d_name = d_key[8]
-            key_name = "CMG 0.05 Deg Monthly EVI"
             #d_set = f.datasets()[d_name]
+            #
+            key_name = "CMG 0.05 Deg Monthly EVI"
             if key_name in my_hdf.datasets().keys():
                 # Pull data from dataset into array:
                 d_select = my_hdf.select(key_name)
@@ -169,7 +199,14 @@ def get_evi(f):
         print "File does not exist!", f
 
 def get_foh_grid(hdg_lon, hdg_lat):
-    """Converts 0.5 deg lon-lat pair to 100 lon-lat pairs at 0.05 deg"""
+    """
+    Name:     get_foh_grid
+    Input:    - float, half-degree grid longitude, degrees (hdg_lon)
+              - float, half-degree grid latitude, degrees (hdg_lat)
+    Output:   list of tuples, lon-lat pairs at 0.05 degree
+    Features: Returns the 100 lon-lat pairs at 0.05 deg corresponding to a 
+              single 0.5 pixel
+    """
     # Initialize five one-hundreths grid:
     foh_grid = []
     #
@@ -180,8 +217,6 @@ def get_foh_grid(hdg_lon, hdg_lat):
     # Calculate the binding box at 0.5 deg:
     westing = hdg_lon - 0.5*hdg_res
     northing = hdg_lat + 0.5*hdg_res
-    #easting = hdg_lon + 0.5*hdg_res
-    #southing = hdg_lat - 0.5*hdg_res
     #
     # Initialize centroid offsetting for foh_grid:
     foh_lon = westing + 0.5*foh_res
@@ -197,7 +232,13 @@ def get_foh_grid(hdg_lon, hdg_lat):
     return foh_grid
 
 def grid_to_index(grid):
-    """Converts lon-lat pairs to indices for 0.05 deg grid"""
+    """
+    Name:     grid_to_index
+    Input:    list of tuples, lon-lat pairs (grid)
+    Output:   list of tuples, x-y pairs
+    Features: Returns the x-y indices for lon-lat pairs at 0.05 degree 
+              resolution
+    """
     foh_indices = []
     for grid_pair in grid:
         lon, lat = grid_pair
@@ -207,12 +248,16 @@ def grid_to_index(grid):
     return foh_indices
 
 def get_foh_evi(lon, lat, data):
-    """Returns array of EVI values at 0.05 for a single 0.5 pixel"""
-    # Variable definitions:
-    #   lon  :: longitude at regular 0.5 degree resolution
-    #   lat  :: latitude at regular 0.5 degree resolution
-    #   data :: EVI data array at 0.05 degree resolution
-    #
+    """
+    Name:     get_foh_evi
+    Input:    - float, longitude at 0.5 deg resolution (lon)
+              - float, latitude at 0.5 deg resolution (lat)
+              - numpy.ndarray, MODIS EVI data at 0.05 deg resolution (data)
+    Output:   numpy.ndarray, 0.05 deg MODIS EVI data for given 0.5 deg pixel
+    Features: Returns array of EVI values at 0.05 for a single 0.5 pixel
+    Depends:  - get_foh_grid
+              - grid_to_index
+    """
     my_grid_evi = numpy.array([])
     my_grid_pnts = get_foh_grid(lon, lat)
     my_grid_indx = grid_to_index(my_grid_pnts)
@@ -227,11 +272,14 @@ def get_foh_evi(lon, lat, data):
     return my_grid_evi
 
 def process_foh_raster(f, d):
-    """Processes 0.05 degree EVI data to file"""
-    # Variable definitions:
-    #    f :: output file to save EVI
-    #    d :: data holding 0.05 EVI
-    #
+    """
+    Name:     process_foh_raster
+    Input:    - str, output file (f)
+              - numpy.ndarray, 0.05 deg MODIS EVI data (d)
+    Output:   None.
+    Features: Writes 0.05 degree EVI data to ASCII raster file
+    Depends:  writeout
+    """
     # Open and write header line for ASCII raster:
     header = (
         "NCOLS 7200\n"
@@ -264,11 +312,14 @@ def process_foh_raster(f, d):
         OUT.close()
 
 def process_foh_poly(f, d):
-    """Processes 0.05 degree EVI data to file"""
-    # Variable definitions:
-    #    f :: output file to save EVI
-    #    d :: data holding 0.05 EVI
-    #
+    """
+    Name:     process_foh_poly
+    Input:    - str, output file (f)
+              - numpy.ndarray, 0.05 deg MODIS EVI data (d)
+    Features: Writes 0.05 degree EVI data to polygon (shapefile CSV) file
+    Depends:  - writeout
+              - get_lon_lat
+    """
     # Open and write header line for CSV file:
     header = "id,lon,lat,evi\n"
     writeout(f, header)
@@ -298,11 +349,17 @@ def process_foh_poly(f, d):
             i += 1
 
 def process_hdg_raster(f, d):
-    """Resample and process 0.05 deg EVI to 0.5 deg"""
-    # Variable definitions:
-    #    f :: output file for saving 0.5 deg EVI
-    #    d :: data file with 0.05 deg EVI
-    #
+    """
+    Name:     process_hdg_raster
+    Input:    - str, output files (f)
+              - numpy.ndarray, 0.05 deg MODIS EVI data (d)
+    Output:   None.
+    Features: Writes 0.5 degree EVI to ASCII raster file, resampled based on
+              0.05 degree MODIS EVI
+    Depends:  - writeout
+              - get_lon_lat
+              - get_foh_evi
+    """
     # Open and write header line for ASCII raster:
     header = (
         "NCOLS 720\n"
@@ -344,12 +401,19 @@ def process_hdg_raster(f, d):
         OUT.close()
 
 def process_hdg_poly(f, d):
-    """Resample and process 0.05 deg EVI to 0.5 deg"""
-    # Variable definitions:
-    #    f :: output file for saving 0.5 deg EVI
-    #    d :: data file with 0.05 deg EVI
-    #
-    # Open and write header line for CSV file:
+    """
+    Name:     process_hdg_poly
+    Input:    - str, output file (f)
+              - numpy.ndarray, 0.05 deg MODIS EVI data (d)
+    Output:   None.
+    Features: Writes 0.5 degree EVI data to vector (shapefile CSV) file based 
+              on 0.05 degree MODIS EVI
+    Depends:  - writeout
+              - get_stationid
+              - get_foh_evi
+              - get_lon_lat
+    """
+   # Open and write header line for CSV file:
     header = "id,lon,lat,evi\n"
     writeout(f, header)
     #
@@ -382,18 +446,21 @@ def process_hdg_poly(f, d):
             OUT.close()
 
 def get_stationid(lon, lat):
-    """Returns station ID for 0.5 deg pixel"""
-    # Station ID is based on 0 being the bottom (south) left (west) corner
-    # and 259199 being the top (north) right (east) corner as is used in 
-    # the postgreSQL database naming scheme.
-    st_id = (
-        720.0 * (359.0 - ((90.0 - lat)/0.5 - 0.5))
-        + ((lon + 180.0)/0.5 - 0.5)
-        )
+    """
+    Name:     get_stationid
+    Input:    - float, longitude, degrees (lon)
+              - float, latitude, degrees (lat)
+    Output:   int, station id (st_id)
+    Features: Returns the half-degree (HDG) station ID for a pixel
+              numbered from 0 (bottom-left / south-west corner) to 259199 
+              (top-right / north-east corner) as defined in the GePiSaT 
+              database numbering scheme
+    """
+    st_id = 720.0*(359.0 - ((90.0 - lat)/0.5 - 0.5)) + ((lon + 180.0)/0.5 - 0.5)
     return int(st_id)
 
 ##############################################################################
-## MAIN
+## MAIN PROGRAM:
 ##############################################################################
 # Open directory with HDF files and read file names:
 #mydir = (
@@ -402,7 +469,7 @@ def get_stationid(lon, lat):
 mydir = (
     "/Users/twdavis/Projects/data/modis/vi_cgm_monthly/aqua/"
     )
-myfiles = glob.glob(mydir+'MYD13C2.A2006*.hdf')
+myfiles = glob.glob(mydir + 'MYD13C2.A2006*.hdf')
 #myfile = myfiles[0]
 
 for myfile in myfiles:

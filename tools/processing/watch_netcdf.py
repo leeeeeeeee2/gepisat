@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2013-08-07 -- created
-# 2013-10-23 -- last updated
+# 2014-12-01 -- last updated
 #
 # ------------
 # description:
@@ -29,18 +29,13 @@
 # 04. added necessary modules to import [13.10.22]
 # 05. finished process_raster function [13.10.23]
 # --> SWdown is 1000x's units
+# 06. general housekeeping [14.12.01]
 #
 # -----------
 # references:
 # ----------- 
 # 1. http://gfesuite.noaa.gov/developer/netCDFPythonInterface.html
 # 2. http://www.gisintersect.com/?p=186
-#
-# -------------
-# requirements:
-# -------------
-# 1. NumPy: http://www.numpy.org
-# 2. SciPy: http://www.scipy.org
 #
 ###############################################################################
 ## IMPORT MODULES
@@ -56,7 +51,13 @@ from scipy.io import netcdf
 ## FUNCTIONS
 ###############################################################################
 def writeout(f, d):
-    """Writes new/overwrites existing file"""
+    """
+    Name:     writeout
+    Input:    - str, file name with path (t)
+              - str, data to be written to file (d)
+    Output:   None.
+    Features: Writes new/overwrites existing file with data string
+    """
     try:
         OUT = open(f, 'w')
         OUT.write(d)
@@ -65,8 +66,18 @@ def writeout(f, d):
     else:
         OUT.close()
 
-def process_raster(yr, mo, d):
-    """Writes output in raster format"""
+def process_raster(my_dir, yr, mo, d):
+    """
+    Name:     process_raster
+    Input:    - str, output file directory (my_dir)
+              - int, year (yr)
+              - int, month (mo)
+              - numpy.ndarray, daily WATCH SWdown data (d)
+    Output:   None.
+    Features: Saves daily WATCH shortwave downwelling radiation data in ASCII 
+              raster format (int value x1000)
+    Depends:  writeout
+    """
     # Define header line for ASCII raster:
     header = (
         "NCOLS 720\n"
@@ -83,13 +94,11 @@ def process_raster(yr, mo, d):
     # Iterate through time:
     for t in xrange(tstep):
         # Save/create time stamp:
-        this_day = t+1
-        time_stamp = datetime.date(this_year, this_month, this_day)
+        this_day = t + 1
+        time_stamp = datetime.date(yr, mo, this_day)
         #
         # Create output file name:
-        rast_out = "%s%s_%s.txt" % (file_directory, 
-                                    "WATCH_0.5-Raster", 
-                                    time_stamp)
+        rast_out = "%s%s_%s.txt" % (my_dir, "WATCH_0.5-Raster", time_stamp)
         #
         # Save header line to file:
         writeout(rast_out, header)
@@ -109,7 +118,7 @@ def process_raster(yr, mo, d):
                 # *** set error/missing value to -9999
                 swd = data[t,y,x]
                 if swd < 1.0e6:
-                    swd = int(swd * 1000)
+                    swd = int(1e3*swd)
                 else:
                     swd = -9999
                 #
@@ -154,7 +163,7 @@ if my_files:
         data = f.variables[var_voi].data
         #
         # Output data to raster format:
-        process_raster(this_year, this_month, data)
+        process_raster(file_directory, this_year, this_month, data)
         #
         # Close netCDF file:
         f.close()

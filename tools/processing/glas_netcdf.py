@@ -6,7 +6,11 @@
 # Imperial College London
 #
 # 2013-11-20 -- created
-# 2013-11-21 -- last updated
+# 2014-12-01 -- last updated
+#
+###############################################################################
+#              DO NOT USE THIS DATA IN THE GePiSaT DATABASE!!!!
+###############################################################################
 #
 # ------------
 # description:
@@ -17,10 +21,6 @@
 # The dataset was downloaded from ORNL DAAC wesite:
 # http://webmap.ornl.gov/wcsdown/dataset.jsp?ds_id=10023
 #
-###############################################################################
-# THIS DATA IS NOT TO BE USED IN THE GePiSaT DATABASE!!!!
-###############################################################################
-#
 # The data resolution was set using the web tool to 0.5 degree (WGS84).
 # The indexing of pixels starts in the top-left corner, similar to the 
 # MODIS HDF files.
@@ -30,7 +30,13 @@
 # ----------
 # 00. created based on cru_netcdf.py [13.11.20]
 # 01. created process_poly() function [13.11.21]
+# 02. general housekeeping [14.12.01]
 #
+# -----
+# todo:
+# -----
+# 1. Make distinction between get_lon_lat function for top-left and bottom-left 
+#    numbering (e.g., MODIS HDF versus WATCH netCDF)
 #
 ###############################################################################
 ## IMPORT MODULES
@@ -42,7 +48,13 @@ from scipy.io import netcdf
 ## FUNCTIONS
 ###############################################################################
 def writeout(f, d):
-    """Writes new/overwrites existing file"""
+    """
+    Name:     writeout
+    Input:    - string, file name with path (t)
+              - string, data to be written to file (d)
+    Output:   None
+    Features: Writes new/overwrites existing file with data string
+    """
     try:
         OUT = open(f, 'w')
         OUT.write(d)
@@ -52,7 +64,15 @@ def writeout(f, d):
         OUT.close()
 
 def process_raster(data, var_name, out_dir):
-    """This function outputs monthly rasters of variable of interest (m)"""
+    """
+    Name:     process_raster
+    Input:    - numpy nd.array (data)
+              - string, variable name for output file (var_name)
+              - string, output directory w/ path (out_dir)
+    Output:   None.
+    Features: Saves data in ASCII raster format
+    Depends:  writeout
+    """
     # Define header line for ASCII raster:
     header = (
         "NCOLS 720\n"
@@ -99,11 +119,13 @@ def process_raster(data, var_name, out_dir):
         OUT.close()
 
 def process_poly(d, data):
-    """Process 0.5 deg canopy height to polygon"""
-    # Variable definitions:
-    #    d    :: output file
-    #    data :: data array
-    #
+    """
+    Name:     process_poly
+    Input:    - string, output file w/ path (d)
+              - numpy nd.array (data)
+    Output:   None.
+    Features: Saves 0.5 deg canopy height data in polygon (shapefile) CSV format
+    """
     # Open and write header line for CSV file:
     f = d + "GLAS_RH100_Poly_2005.csv"
     header = "id,lon,lat,rh100\n"
@@ -120,35 +142,42 @@ def process_poly(d, data):
             #
             # Save RH100 to file:
             OUT = open(f, 'a')
-            outline = "%d,%0.3f,%0.3f,%d\n" % (
-                stid, lon, lat, val
-                )
+            outline = "%d,%0.3f,%0.3f,%d\n" % (stid, lon, lat, val)
             OUT.write(outline)
             OUT.close()
 
 def get_lon_lat(x,y,r):
-    """Returns lat-lon pair for x-y index from top-left corner"""
-    # x (longitude): 0...7199 (0...719)
-    # y (latitude): 0...3599 (0...359)
-    pixel_res = r   
+    """
+    Name:     get_lon_lat
+    Input:    - int/nd.array, longitude index (x)
+              - int/nd.array, latitude index (y)
+              - float, pixel resolution (r)
+    Output:   float/nd.array tuple, longitude(s) and latitude(s), degrees
+    Features: Returns lat-lon pair for x-y index pair (numbered from top-left 
+              corner) and pixel resolution
+    """
     # Offset lat, lon to pixel centroid
-    lon = -180.0 + 0.5*pixel_res
-    lat = 90.0 - 0.5*pixel_res
+    lon = -180.0 + (0.5*r)
+    lat = 90.0 - (0.5*r)
+    #
     # Offset lat, lon based on pixel index
-    lon = lon + x*pixel_res
-    lat = lat - y*pixel_res
+    lon = lon + (x*r)
+    lat = lat - (y*r)
     #
     return (lon, lat)
 
 def get_stationid(lon, lat):
-    """Returns station ID for 0.5 deg pixel"""
-    # Station ID is based on 0 being the bottom (south) left (west) corner
-    # and 259199 being the top (north) right (east) corner as is used in 
-    # the postgreSQL database naming scheme.
-    st_id = (
-        720.0 * (359.0 - ((90.0 - lat)/0.5 - 0.5))
-        + ((lon + 180.0)/0.5 - 0.5)
-        )
+    """
+    Name:     get_stationid
+    Input:    - float, longitude, degrees (lon)
+              - float, latitude, degrees (lat)
+    Output:   int, station id (st_id)
+    Features: Returns the half-degree (HDG) station ID for a pixel
+              numbered from 0 (bottom-left / south-west corner) to 259199 
+              (top-right / north-east corner) as defined in the GePiSaT 
+              database numbering scheme
+    """
+    st_id = 720.0*(359.0 - ((90.0 - lat)/0.5 - 0.5)) + ((lon + 180.0)/0.5 - 0.5)
     return int(st_id)
 
 ###############################################################################

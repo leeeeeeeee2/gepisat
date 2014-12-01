@@ -28,7 +28,7 @@
 # ~~~~~
 # todo:
 # ~~~~~
-# 1. add CPA to output stats
+# 1. add LUE class and other functions to GePiSaT's model.py
 #
 ###############################################################################
 ## IMPORT MODULES:
@@ -318,7 +318,7 @@ def next_gen_lue(x, phi_o, beta):
               water use efficiency model.
     """
     # Define constants:
-    kc = 0.41
+    kc = 0.41    # Jmax cost parameter
     #
     # Check beta parameter (divide by zero):
     if beta == 0:
@@ -351,7 +351,7 @@ def predict_params(ca, d, eta, gpp, gs, iabs, k):
     Output:   tuple
     Features: Returns statistically-based estimates of phio and beta
     """
-    # Predict phio
+    # Predict phio (statistical relationship)
     phio_p = ((1.761e-1)*gs['min'] + (1.702e-2)*gpp['std'] -
               (6.894e-3)*k['min'] - (3.531e-4)*iabs['ave'])
     #
@@ -507,14 +507,14 @@ def calc_lue(lue_class, station):
     # Save fit to LUE class
     params = (tuple([st_rsqr, est_phio, st_phio, est_beta, st_beta, 
                      st_phio_err, st_beta_err, st_phio_t, st_beta_t, 
-                     st_phio_p, st_beta_p]) +
-             tuple(gpp_stats[0]) +
-             tuple(iabs_stats[0]) +
-             tuple(ca_stats[0]) +
-             tuple(gs_stats[0]) +
-             tuple(vpd_stats[0]) +
-             tuple(k_stats[0]) +
-             tuple(eta_stats[0]))
+                     st_phio_p, st_beta_p]) + 
+                     tuple(gpp_stats[0]) +
+                     tuple(iabs_stats[0]) +
+                     tuple(ca_stats[0]) +
+                     tuple(gs_stats[0]) +
+                     tuple(vpd_stats[0]) +
+                     tuple(k_stats[0]) +
+                     tuple(eta_stats[0]))
     lue_class.station_lue[station] = params
 
 ###############################################################################

@@ -6,7 +6,7 @@
 # University of Pittsburgh
 #
 # 2012-01-15 -- created
-# 2014-10-27 -- last updated
+# 2014-12-01 -- last updated
 #
 # ------------
 # description:
@@ -23,16 +23,17 @@
 # ----------
 # 01. Updated for LUE files [13.11.18]
 # 02. Added 'Station,' to headerline [14.10.22]
+# 03. General housekeeping [14.12.01]
 #
-# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-## LOAD MODULES
-# /////////////////////////////////////////////////////////////////////////////
+##############################################################################
+## IMPORT MODULES
+##############################################################################
 use strict;
 use warnings;
 
-# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-## VARIABLES
-# /////////////////////////////////////////////////////////////////////////////
+##############################################################################
+## DEFINITIONS
+##############################################################################
 my $outname = "";     # Output file name prefix
 my $output = "";      # Output file name (prefix + "_All_Data.txt"
 my $ans = "";         # User response to if output file already exists
@@ -45,10 +46,10 @@ my $stationid = "";   # Station ID read from file name
 my @lines;            # Array of lines read from file
 my $line = "";        # Individual line (from lines array)
 
-# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-## MAIN
-# /////////////////////////////////////////////////////////////////////////////
-# Prompt for testbed name (used to name the outfile):
+##############################################################################
+## MAIN PROGRAM
+##############################################################################
+# Prompt for name (used to name the outfile):
 print "Enter output name: ";
 $outname = <>;
 chomp( $outname );
@@ -67,11 +68,6 @@ if (-e $output) {
 # Continue if user says it's okay:
 if ( lc( $ans ) eq "y" ) 
 {
-    # Prompt user for a file prefix:
-    #print "Enter search prefix: ";
-    #my $prefix = <>;
-    #chomp( $prefix );
-    
     # Open the directory and read all files matching regex
     # and sort the files you found by their filenames:
     opendir(DIR, $directory) or die $!;
@@ -98,8 +94,7 @@ if ( lc( $ans ) eq "y" )
         # Open outfile for writing/appending:
 	    open(OUT, ">>$output") or die $!;
         
-        # Iterate through each file found:
-        foreach $file (@filelist) 
+        foreach $file (@filelist)
         {
             print "$file\n";
             $stationid = substr $file, 0, 6;
@@ -109,24 +104,24 @@ if ( lc( $ans ) eq "y" )
             @lines = <FILE>;
             foreach $line (@lines)
             {
+                # Should avoid blank lines.
                 if ($line =~ /^\d+.*/)
                 {
-                    # Should avoid blank lines.
                     print OUT "$stationid,$line";
                 }
             }
             close(FILE);
         }
-        
-        # Close out file:
         close(OUT);
     }
-    else        # array was empty
+    else
     {
+        # Array was empty.
         print "Found no files.\n";
     }
 }
 else
 {
+    # User opted to not overwrite existing file.
     print "Quitting.\n";
 }

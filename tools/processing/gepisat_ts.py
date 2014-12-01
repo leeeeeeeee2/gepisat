@@ -1,12 +1,13 @@
 #!/usr/bin/python
 #
-# timeseries.py
+# gepisat_ts.py
+# * based on timeseries.py
 #
 # written by Tyler W. Davis
 # Imperial College London
 #
 # 2014-03-20 -- created
-# 2014-10-22 -- last updated
+# 2014-12-01 -- last updated
 #
 # ------------
 # description:
@@ -28,6 +29,12 @@
 # 05. changed output director to same as model.py [14.10.22]
 # 06. changed default return value in get_data_point [14.10.22]
 # ->  type 'None' to -9999
+# 07. general housekeeping [14.12.01]
+#
+# -----
+# todo:
+# -----
+# 01. incorporate database name into user.txt
 #
 ################################################################################
 ## IMPORT MODULES 
@@ -66,7 +73,6 @@ def connect_sql():
     try:
         con = psycopg2.connect(
             database='gepisat', 
-            #database='flux_test',
             user=my_user, 
             host='localhost', 
             password=my_pass
@@ -228,8 +234,8 @@ def grid_centroid(my_lon, my_lat):
     lon_min = -180 + 0.5*grid_res
     lat_dim = 360
     lon_dim = 720
-    lats = [lat_min + y * grid_res for y in xrange(lat_dim)]
-    lons = [lon_min + x * grid_res for x in xrange(lon_dim)]
+    lats = [lat_min + y*grid_res for y in xrange(lat_dim)]
+    lons = [lon_min + x*grid_res for x in xrange(lon_dim)]
     #
     # Find bounding longitude:
     centroid_lon = None

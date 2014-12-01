@@ -6,7 +6,11 @@
 # Imperial College London
 #
 # 2014-01-22 -- created
-# 2014-01-23 -- last updated
+# 2014-12-01 -- last updated
+#
+###############################################################################
+#              DO NOT USE THIS DATA IN THE GePiSaT DATABASE!!!!
+###############################################################################
 #
 # ------------
 # description:
@@ -32,6 +36,7 @@
 # 00. created [14.01.22]
 # 01. added raster output [14.01.23]
 # 02. included 'soilw' variable attributes [14.01.23]
+# 03. general housekeeping [14.12.01]
 #
 ###############################################################################
 ## IMPORT MODULES

@@ -6,13 +6,13 @@
 # Imperial College London
 #
 # 2013-08-23 -- created
-# 2013-08-23 -- last updated
+# 2014-12-11 -- last updated
 # 
 # ------------
 # description:
 # ------------
 # This script holds two functions for mapping country names or country IDs to 
-# continents for the purposes of producing GEPiSaT meta-data fields:
+# continents for the purposes of producing part of the GePiSaT meta-data fields:
 # 1. mapid :: two-character identifier for continent
 # 2. map :: name of continent
 # 3. countryid :: two-character identifier for country
@@ -29,12 +29,25 @@
 # changelog:
 # ----------
 # 01. created [13.08.23]
+# 02. updated doc strings [14.11.27]
+# 04. general housekeeping [14.12.11]
 #
+###############################################################################
+## IMPORT MODULES:
+###############################################################################
+import re
+
 ################################################################################
-## DEFINE FUNCTIONS
+## FUNCTIONS:
 ################################################################################
 def meta_from_country(country):
-    """Get meta data based on country name"""
+    """
+    Name:     meta_from_country
+    Input:    str, country name (country)
+    Output:   str, 
+    Features: Returns the countinent ID, continent name, country ID, and 
+              country name based on a given country name
+    """
     # Define dictionary:
     country_dict = {
         'Angola' : 'AF,Africa,AO,Angola',
@@ -325,7 +338,9 @@ def meta_from_country(country):
     return list_val
 #
 def meta_from_countryid(countryid):
-    """Get meta data based on country ID"""
+    """
+    Features: Get meta data based on country ID
+    """
     # Define dictionary:
     # NOTE: some countryids are associated with more than one country (name)
     #       duplicates have been commented out (change as appropriate)

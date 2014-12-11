@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2013-08-21 -- created
-# 2014-12-01 -- last updated
+# 2014-12-11 -- last updated
 #
 # ------------
 # description:
@@ -44,6 +44,7 @@
 # --> changed back to mean (performs poorly against original 0.05 data)
 # 14. added file looping [13.10.23]
 # 15. general housekeeping [14.12.01]
+# 16. started flux tower time series processing [14.12.11]
 #
 #
 #  Table 1. Standard deviations of the differences between raster images of 
@@ -69,6 +70,7 @@
 # -----
 # todo:
 # -----
+# 0. Finish flux station EVI time-series processing
 # 1. Distinguish get_lon_lat function for top-left and bottom-left numbering
 #    schemes (e.g., MODIS HDF versus WATCH netCDF).
 # x Implement resolution resampling (0.05 to 0.5 deg) [13.09.24]
@@ -86,7 +88,7 @@ import numpy
 from pyhdf import SD   # installed 0.8.3 in canopy package manager
 
 ##############################################################################
-## FUNCTION DEFINITIONS
+## FUNCTIONS
 ##############################################################################
 def get_lon_lat(x,y,r):
     """
@@ -462,22 +464,55 @@ def get_stationid(lon, lat):
 ##############################################################################
 ## MAIN PROGRAM:
 ##############################################################################
-# Open directory with HDF files and read file names:
-#mydir = (
-#    "/Users/twdavis/Qgis/resampling_modis/2002_07/"
-#    )
-mydir = (
-    "/Users/twdavis/Projects/data/modis/vi_cgm_monthly/aqua/"
-    )
-myfiles = glob.glob(mydir + 'MYD13C2.A2006*.hdf')
-#myfile = myfiles[0]
+# Directory naming:
+mac = 0
+if mac:
+    terra_dir = "/Users/twdavis/Projects/data/modis/vi_cgm_monthly/terra/"
+    aqua_dir = "/Users/twdavis/Projects/data/modis/vi_cgm_monthly/aqua/"
+    met_dir = '/Users/twdavis/Dropbox/Work/Imperial/flux/data/psql-data/flux/'
+    out_dir = "/Users/twdavis/Desktop/"
+else:
+    terra_dir = '/usr/local/share/database/modis/evi/terra/'
+    aqua_dir = '/usr/local/share/database/modis/evi/aqua/'
+    met_dir = '/home/user/Dropbox/Work/Imperial/flux/data/psql-data/flux/'
+    out_dir = '/home/user/Desktop/'
+#
+# Read Aqua and Terra HDF4 files; note multiple years of data in Aqua dir
+my_files = []
+for y in range(2002, 2007):
+    if y == 2002:
+        # Terra
+        temp_files = glob.glob(terra_dir + 'MOD13C2.A2002*.hdf')
+    else:
+        # Aqua
+        temp_files = glob.glob(aqua_dir + 'MYD13C2.A' + str(y) + '*.hdf')
+    if temp_files:
+            for temp_f in numpy.sort(temp_files):
+                my_files.append(temp_f)
 
-for myfile in myfiles:
+# Read flux station meta data (if processing EVI for each site)
+met_files = glob.glob(met_dir + '*2002-06.csv')
+met_file = met_files[0]
+met_data = numpy.loadtxt(
+    met_file, 
+    delimiter=",", 
+    skiprows=1,
+    usecols=(4, 6, 7),
+    dtype={'names' : ('station', 'lat', 'lon'),
+           'formats' : ('S6', 'f4', 'f4')},
+)
+
+# Prepare array for EVI time series:
+monthly_evi_temp = numpy.repeat(numpy.nan, 60)
+for d in met_data:
+    
+
+for my_file in my_files:
     # Get time value for this file:
-    myts = get_ts(myfile)
+    myts = get_ts(my_file)
     #
     # Get EVI data:
-    data = get_evi(myfile)
+    data = get_evi(my_file)
     #
     if data.any():
         print "Processing month: %s" % myts
@@ -487,7 +522,7 @@ for myfile in myfiles:
         #process_foh_raster(outfile_1, data)
         #
         # Resample to 0.5 degree resolution:
-        outfile_2 = "%s%s_%s.txt" % (mydir, "MODIS_0.5rs-Raster", myts)
+        outfile_2 = "%s%s_%s.txt" % (out_dir, "MODIS_0.5rs-Raster", myts)
         process_hdg_raster(outfile_2, data)
         #
         # Output resampled 0.5 data as poly:

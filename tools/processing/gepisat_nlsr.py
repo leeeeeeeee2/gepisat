@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-11-18 -- created
-# 2014-11-24 -- last updated
+# 2014-12-11 -- last updated
 #
 # ~~~~~~~~~~~~
 # description:
@@ -24,6 +24,7 @@
 # 03. added prediction functions for phi_o and beta [14.11.22]
 # 04. updated plotting (PDF file) [14.11.24]
 # 05. added function of alpha to next_gen_lue & calc_lue [14.11.24]
+# 06. general housekeeping [14.12.11]
 # 
 # ~~~~~
 # todo:
@@ -603,7 +604,7 @@ temp_stats = numpy.array(tuple([-9999., -9999., -9999., -9999., -9999.,
                                              'f4')},
                          ndmin=1)
 #
-#station = 'ES-VDA'
+#station = 'ES-ES1'
 for station in numpy.sort(all_stations):
     # Initialize return values:
     st_rsqr = -9999.     # model coef. of determination

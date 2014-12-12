@@ -1,14 +1,12 @@
 #!/usr/bin/python
 #
-#
 # grid_centroid.py
-#
 #
 # written by Tyler W. Davis
 # Imperial College London
 #
 # 2013-09-09 -- created
-# 2014-12-01 -- last updated
+# 2014-12-11 -- last updated
 #
 # ------------
 # description:
@@ -46,6 +44,7 @@
 #     implemented if necessary [13.09.09]
 # 02. changed function name from gridwork to grid_centroid [13.09.13]
 # 03. general housekeeping [14.12.01]
+# 04. updated for user-defined grid resolution [14.12.11]
 #
 ###############################################################################
 ## IMPORT MODULES
@@ -55,23 +54,23 @@ import numpy
 ################################################################################
 ## FUNCTIONS:
 ################################################################################
-def grid_centroid(my_lon, my_lat):
+def grid_centroid(my_lon, my_lat, grid_res):
     """
     Name:     grid_centroid
     Input:    - float, longitude, degrees (my_lon)
               - float, latitude, degrees (my_lat)
+              - float, grid resolution, degrees (grid_res)
     Output:   tuple, longitude latitude pair (my_centroid)
-    Features: Returns the nearest 0.5 deg. grid centroid per given coordinates
-              based on the Euclidean distance to each of the four surrounding 
-              grids; if any distances are equivalent, the pixel north and east
-              is selected by default
+    Features: Returns the nearest grid centroid per given coordinates and 
+              resolution based on the Euclidean distance to each of the four 
+              surrounding grids; if any distances are equivalent, the pixel 
+              north and east is selected by default
     """
     # Create lists of regular latitude and longitude:
-    grid_res = 0.5
     lat_min = -90 + 0.5*grid_res
     lon_min = -180 + 0.5*grid_res
-    lat_dim = 360
-    lon_dim = 720
+    lat_dim = int(180.0/grid_res)
+    lon_dim = int(360.0/grid_res)
     lats = [lat_min + y*grid_res for y in xrange(lat_dim)]
     lons = [lon_min + x*grid_res for x in xrange(lon_dim)]
     #
@@ -104,8 +103,7 @@ def grid_centroid(my_lon, my_lat):
             bb_lat_max = lats[-1] + grid_res
         #
     # Determine nearest centroid:
-    # NOTE: if dist_A equals dist_B, then 
-    #       centroid defaults positively (i.e., north / east)
+    # NOTE: if dist_A equals dist_B, then centroid defaults positively (NE)
     if centroid_lon and centroid_lat:
         my_centroid = (centroid_lon, centroid_lat)
     elif centroid_lon and not centroid_lat:
@@ -129,18 +127,10 @@ def grid_centroid(my_lon, my_lat):
     else:
         # Calculate distances between lat:lon and bounding box:
         # NOTE: if all distances are equal, defaults to NE grid
-        dist_A = numpy.sqrt(
-            (bb_lon_max - my_lon)**2.0 + (bb_lat_max - my_lat)**2.0
-        )
-        dist_B = numpy.sqrt(
-            (bb_lon_max - my_lon)**2.0 + (my_lat - bb_lat_min)**2.0
-        )
-        dist_C = numpy.sqrt(
-            (my_lon - bb_lon_min)**2.0 + (bb_lat_max - my_lat)**2.0
-        )
-        dist_D = numpy.sqrt(
-            (my_lon - bb_lon_min)**2.0 + (my_lat - bb_lat_min)**2.0
-        )
+        dist_A = numpy.sqrt((bb_lon_max - my_lon)**2 + (bb_lat_max - my_lat)**2)
+        dist_B = numpy.sqrt((bb_lon_max - my_lon)**2 + (my_lat - bb_lat_min)**2)
+        dist_C = numpy.sqrt((my_lon - bb_lon_min)**2 + (bb_lat_max - my_lat)**2)
+        dist_D = numpy.sqrt((my_lon - bb_lon_min)**2 + (my_lat - bb_lat_min)**2)
         min_dist = min([dist_A, dist_B, dist_C, dist_D])
         #
         # Determine centroid based on min distance:
@@ -157,9 +147,10 @@ def grid_centroid(my_lon, my_lat):
     return my_centroid
 
 ################################################################################
-## MAIN PROGRAM:
+## EXAMPLE PROGRAM:
 ################################################################################
 some_lon = 0.0
 some_lat = 0.0
-grid_lon, grid_lat = grid_centroid(some_lon, some_lat)
+some_res = 0.5
+grid_lon, grid_lat = grid_centroid(some_lon, some_lat, some_res)
 print grid_lon, grid_lat

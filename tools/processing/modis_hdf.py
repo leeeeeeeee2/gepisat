@@ -90,6 +90,21 @@ from pyhdf import SD   # installed 0.8.3 in canopy package manager
 ##############################################################################
 ## FUNCTIONS
 ##############################################################################
+def add_one_month(dt0):
+    """
+    Name:     add_one_month
+    Input:    datetime.date (dt0)
+    Output:   datetime.date (dt3)
+    Features: Adds one month to datetime
+    Ref:      A. Balogh (2010), ActiveState Code
+              http://code.activestate.com/recipes/577274-subtract-or-add-a-
+              month-to-a-datetimedate-or-datet/
+    """
+    dt1 = dt0.replace(day=1)
+    dt2 = dt1 + datetime.timedelta(days=32) 
+    dt3 = dt2.replace(day=1)
+    return dt3
+
 def get_lon_lat(x,y,r):
     """
     Name:     get_lon_lat
@@ -240,6 +255,7 @@ def grid_to_index(grid):
     Output:   list of tuples, x-y pairs
     Features: Returns the x-y indices for lon-lat pairs at 0.05 degree 
               resolution
+    Depends:  get_x_y
     """
     foh_indices = []
     for grid_pair in grid:
@@ -461,6 +477,98 @@ def get_stationid(lon, lat):
     st_id = 720.0*(359.0 - ((90.0 - lat)/0.5 - 0.5)) + ((lon + 180.0)/0.5 - 0.5)
     return int(st_id)
 
+def grid_centroid(my_lon, my_lat, grid_res):
+    """
+    Name:     grid_centroid
+    Input:    - float, longitude, degrees (my_lon)
+              - float, latitude, degrees (my_lat)
+              - float, grid resolution, degrees (grid_res)
+    Output:   tuple, longitude-latitude pair (my_centroid)
+    Features: Returns the nearest grid centroid per given coordinates and 
+              resolution based on the Euclidean distance to each of the four 
+              surrounding grids; if any distances are equivalent, the pixel 
+              north and east is selected by default
+    """
+    # Create lists of regular latitude and longitude:
+    lat_min = -90 + 0.5*grid_res
+    lon_min = -180 + 0.5*grid_res
+    lat_dim = int(180.0/grid_res)
+    lon_dim = int(360.0/grid_res)
+    lats = [lat_min + y*grid_res for y in xrange(lat_dim)]
+    lons = [lon_min + x*grid_res for x in xrange(lon_dim)]
+    #
+    # Find bounding longitude:
+    centroid_lon = None
+    if my_lon in lons:
+        centroid_lon = my_lon
+    else:
+        lons.append(my_lon)
+        lons.sort()
+        lon_index = lons.index(my_lon)
+        bb_lon_min = lons[lon_index-1]
+        try:
+            bb_lon_max = lons[lon_index+1]
+        except IndexError:
+            bb_lon_max = lons[-1] + grid_res
+        #
+    # Find bounding latitude:
+    centroid_lat = None
+    if my_lat in lats:
+        centroid_lat = my_lat
+    else:
+        lats.append(my_lat)
+        lats.sort()
+        lat_index = lats.index(my_lat)
+        bb_lat_min = lats[lat_index-1]
+        try:
+            bb_lat_max = lats[lat_index+1]
+        except IndexError:
+            bb_lat_max = lats[-1] + grid_res
+        #
+    # Determine nearest centroid:
+    # NOTE: if dist_A equals dist_B, then centroid defaults positively (NE)
+    if centroid_lon and centroid_lat:
+        my_centroid = (centroid_lon, centroid_lat)
+    elif centroid_lon and not centroid_lat:
+        # Calculate the distances between lat and bounding box:
+        dist_A = bb_lat_max - my_lat
+        dist_B = my_lat - bb_lat_min
+        if dist_A > dist_B:
+            centroid_lat = bb_lat_min
+        else:
+            centroid_lat = bb_lat_max
+        my_centroid = (centroid_lon, centroid_lat)
+    elif centroid_lat and not centroid_lon:
+        # Calculate the distances between lon and bounding box:
+        dist_A = bb_lon_max - my_lon
+        dist_B = my_lon - bb_lon_min
+        if dist_A > dist_B:
+            centroid_lon = bb_lon_min
+        else:
+            centroid_lon = bb_lon_max
+        my_centroid = (centroid_lon, centroid_lat)
+    else:
+        # Calculate distances between lat:lon and bounding box:
+        # NOTE: if all distances are equal, defaults to NE grid
+        dist_A = numpy.sqrt((bb_lon_max - my_lon)**2 + (bb_lat_max - my_lat)**2)
+        dist_B = numpy.sqrt((bb_lon_max - my_lon)**2 + (my_lat - bb_lat_min)**2)
+        dist_C = numpy.sqrt((my_lon - bb_lon_min)**2 + (bb_lat_max - my_lat)**2)
+        dist_D = numpy.sqrt((my_lon - bb_lon_min)**2 + (my_lat - bb_lat_min)**2)
+        min_dist = min([dist_A, dist_B, dist_C, dist_D])
+        #
+        # Determine centroid based on min distance:
+        if dist_A == min_dist:
+            my_centroid = (bb_lon_max, bb_lat_max)
+        elif dist_B == min_dist:
+            my_centroid = (bb_lon_max, bb_lat_min)
+        elif dist_C == min_dist:
+            my_centroid = (bb_lon_min, bb_lat_max)
+        elif dist_D == min_dist:
+            my_centroid = (bb_lon_min, bb_lat_min)
+            #
+    # Return nearest centroid:
+    return my_centroid
+
 ##############################################################################
 ## MAIN PROGRAM:
 ##############################################################################
@@ -504,12 +612,55 @@ met_data = numpy.loadtxt(
 
 # Prepare array for EVI time series:
 monthly_evi_temp = numpy.repeat(numpy.nan, 60)
+i = 0
 for d in met_data:
-    
+    my_tuple = ()
+    my_formats = ()
+    my_names = ()
+    #
+    my_station, my_lat, my_lon = d
+    my_tuple += (my_station, my_lat, my_lon)
+    my_formats += ('S6', 'f4', 'f4')
+    my_names += ('station', 'lat', 'lon')
+    #
+    grid_lon, grid_lat = grid_centroid(my_lon, my_lat, 0.05)
+    my_tuple += (grid_lat, grid_lon)
+    my_formats += ('f4', 'f4')
+    my_names += ('grid_lat', 'grid_lon')
+    #
+    grid_x, grid_y = get_x_y(grid_lon, grid_lat, 0.05)
+    my_tuple += (grid_y, grid_x)
+    my_formats += ('i4', 'i4')
+    my_names += ('grid_y', 'grid_x')
+    #
+    base_date = datetime.date(2002, 1, 1)
+    for evi in monthly_evi_temp:
+        my_tuple += (evi,)
+        my_formats += ('f4',)
+        date_name = 'EVI_%d-%02d' % (base_date.year, base_date.month)
+        my_names += (date_name,)
+        base_date = add_one_month(base_date)
+    #
+    if i == 0:
+        all_station_data = numpy.array(my_tuple, 
+                                       dtype={'names' : my_names, 
+                                              'formats' : my_formats}, 
+                                       ndmin=1)
+    else:
+        tmp_station_data = numpy.array(my_tuple, 
+                                       dtype={'names' : my_names, 
+                                              'formats' : my_formats}, 
+                                       ndmin=1)
+        all_station_data = numpy.append(all_station_data, tmp_station_data, 
+                                        axis=0)
+    #
+    i += 1
+
 
 for my_file in my_files:
     # Get time value for this file:
     myts = get_ts(my_file)
+    myts_name = 'EVI_%d-%02d' % (myts.year, myts.month)
     #
     # Get EVI data:
     data = get_evi(my_file)
@@ -522,12 +673,44 @@ for my_file in my_files:
         #process_foh_raster(outfile_1, data)
         #
         # Resample to 0.5 degree resolution:
-        outfile_2 = "%s%s_%s.txt" % (out_dir, "MODIS_0.5rs-Raster", myts)
-        process_hdg_raster(outfile_2, data)
+        #outfile_2 = "%s%s_%s.txt" % (out_dir, "MODIS_0.5rs-Raster", myts)
+        #process_hdg_raster(outfile_2, data)
         #
         # Output resampled 0.5 data as poly:
         #outfile_3 = "%s%s_%s.csv" % (mydir, "MODIS_05rs-Poly", myts)
         #process_hdg_poly(outfile_3, data)
+        #
+        # Fill all_station_data array:
+        num_stations = len(all_station_data['station'])
+        for j in xrange(num_stations):
+            my_x = all_station_data[j]['grid_x']
+            my_y = all_station_data[j]['grid_y']
+            my_evi = data[my_y][my_x]
+            # Valid range for values -2000 to 10000:
+            if my_evi < -2000:
+                my_evi = numpy.nan
+            elif my_evi > 10000:
+                my_evi = 10000
+            all_station_data[j][myts_name] = (1e-4)*my_evi
+
+# Print out all_station_data
+out_file = 'FLUXNET_MODIS-0.05-EVI_2002-06.txt'
+my_header = ''
+for my_name in my_names:
+    my_header += my_name
+    my_header += ','
+my_header = my_header.rstrip(',')
+my_header += '\n'
+writeout(out_dir + out_file, my_header)
+out_formats = '%s,%f,%f,%0.3f,%0.3f,%d,%d,' + '%0.4f,'*59 + '%0.4f\n' 
+for station_data in all_station_data:
+    try:
+        f = open(out_dir + out_file, 'a')
+    except IOError:
+        print "Cannot write to file:", out_file
+    else:
+        f.write(out_formats % tuple(station_data))
+        f.close()
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ##
 # Save data to array:

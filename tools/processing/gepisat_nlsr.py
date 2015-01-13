@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-11-18 -- created
-# 2014-12-11 -- last updated
+# 2014-12-12 -- last updated
 #
 # ~~~~~~~~~~~~
 # description:
@@ -25,6 +25,7 @@
 # 04. updated plotting (PDF file) [14.11.24]
 # 05. added function of alpha to next_gen_lue & calc_lue [14.11.24]
 # 06. general housekeeping [14.12.11]
+# 07. added get_lue() for quick processing with plot_mo_lue.py [14.12.12]
 # 
 # ~~~~~
 # todo:
@@ -518,6 +519,146 @@ def calc_lue(lue_class, station):
                      tuple(eta_stats[0]))
     lue_class.station_lue[station] = params
 
+def get_lue(lue_class, station):
+    """
+    Name:     get_lue
+    Input:    - LUE class (lue_class)
+              - string, station name (station)
+    Output:   tuple
+              - numpy.ndarray, Iabs (x_data)
+              - numpy.ndarray, GPP (y_data)
+              - float, fitted phi_o (st_phio)
+              - float, fitted beta (st_beta)
+              - float, R-squared (st_rsqr)
+    Features: Fits the next generation LUE model to the monthly flux tower 
+              data and saves the fit to LUE class
+    Depends:  - next_gen_lue
+              - calc_gstar
+              - calc_k
+              - viscosity_h2o
+    """
+    # Initialize fitness parameters:
+    st_rsqr = -9999.     # model coef. of determination
+    st_phio = -9999.     # intrinsic quantum efficiency parameter
+    st_beta = -9999.     # beta parameter
+    st_phio_err = -9999. # \ standard errors 
+    st_beta_err = -9999. # /  of the estimates
+    st_phio_t = -9999.   # \ t-values 
+    st_beta_t = -9999.   # /  of the estimates
+    st_phio_p = -9999.   # \ p-values
+    st_beta_p = -9999.   # /  of the estimates
+    #
+    # Initialize data statistics:
+    temp_stats = numpy.array(tuple([-9999., -9999., -9999., -9999., -9999., 
+                                    -9999.]),
+                             dtype={'names' : ('max', 'min', 'ave', 'std', 
+                                               'skw', 'krt'),
+                                    'formats' : ('f4', 'f4', 'f4', 'f4', 'f4', 
+                                                 'f4')},
+                             ndmin=1)
+    #
+    gpp_stats = numpy.copy(temp_stats)
+    iabs_stats = numpy.copy(temp_stats)
+    ca_stats = numpy.copy(temp_stats)
+    gs_stats = numpy.copy(temp_stats)
+    k_stats = numpy.copy(temp_stats)
+    eta_stats = numpy.copy(temp_stats)
+    vpd_stats = numpy.copy(temp_stats)
+    #
+    if station in lue_class.station_vals.keys():
+        num_rows = len(lue_class.station_vals[station])
+        for i in xrange(num_rows):
+            (st_time, st_gpp, st_gpp_err, st_fpar, st_ppfd, st_vpd, st_cpa, 
+            st_tair, st_co2, st_patm) = lue_class.station_vals[station][i]
+            #
+            # Calculate other necessary parameters for regression:
+            st_ca = (1.e-6)*st_co2*st_patm       # Pa, atms. CO2
+            st_gs = calc_gstar(st_tair)          # Pa, photores. comp. point
+            st_k = calc_k(st_tair, st_patm)      # Pa, Michaelis-Menten coef.
+            st_eta = viscosity_h2o(st_tair)      # mPa s, water viscosity
+            st_iabs = st_fpar*st_ppfd            # mol/m2, abs. PPFD
+            st_fa = (st_cpa/1.26)**(0.25)        # unitless, func. of alpha
+            #
+            # Filter variables out of range:
+            if st_vpd < 0:
+                st_vpd = numpy.nan
+            #
+            if i == 0:
+                x_data = numpy.array(
+                    tuple([st_iabs, st_ca, st_gs, st_vpd, st_k, st_eta, st_fa]),
+                    dtype={'names' : ('Iabs', 'ca', 'Gs', 'D', 'K', 'eta', 'fa'),
+                        'formats' : ('f4', 'f4', 'f4', 'f4', 'f4', 'f4', 'f4')},
+                    ndmin=1
+                )
+                y_data = numpy.array([st_gpp,])
+            else:
+                x_temp = numpy.array(
+                    tuple([st_iabs, st_ca, st_gs, st_vpd, st_k, st_eta, st_fa]),
+                    dtype={'names' : ('Iabs', 'ca', 'Gs', 'D', 'K', 'eta', 'fa'),
+                        'formats' : ('f4', 'f4', 'f4', 'f4', 'f4', 'f4', 'f4')},
+                    ndmin=1
+                )
+                x_data = numpy.append(x_data, x_temp, axis=0)
+                y_data = numpy.append(y_data, [st_gpp,])
+        #
+        # Remove nans from data sets:
+        st_idx = numpy.where(~numpy.isnan(x_data['D']))[0]
+        x_data = x_data[st_idx,]
+        y_data = y_data[st_idx]
+        num_rows = len(st_idx)
+        #
+        # Calculate predictor statistics:
+        gpp_stats[0] = lue_class.calc_statistics(y_data)
+        iabs_stats[0] = lue_class.calc_statistics(x_data['Iabs'])
+        ca_stats[0] = lue_class.calc_statistics(x_data['ca'])
+        gs_stats[0] = lue_class.calc_statistics(x_data['Gs'])
+        vpd_stats[0] = lue_class.calc_statistics(x_data['D'])
+        k_stats[0] = lue_class.calc_statistics(x_data['K'])
+        eta_stats[0] = lue_class.calc_statistics(x_data['eta'])
+        #
+        est_phio, est_beta = predict_params(ca_stats, vpd_stats, eta_stats, 
+                                            gpp_stats, gs_stats, iabs_stats, 
+                                            k_stats)
+        # Curve fit:
+        try:
+            fit_opt, fit_cov = curve_fit(next_gen_lue, 
+                                        x_data, 
+                                        y_data, 
+                                        p0=[est_phio, est_beta])
+        except:
+            st_phio = -9999.
+            st_beta = -9999.
+        else:
+            st_phio, st_beta = fit_opt
+            #
+            try:
+                fit_var = numpy.diag(fit_cov)
+            except ValueError:
+                fit_var = [0.0, 0.0]
+            else:
+                if numpy.isfinite(fit_var).all() and not (fit_var < 0).any():
+                    # Get parameter standard errors:
+                    (st_phio_err, st_beta_err) = numpy.sqrt(fit_var)
+                    #
+                    # Calculate t-values:
+                    st_phio_t = st_phio/st_phio_err
+                    st_beta_t = st_beta/st_beta_err
+                    # 
+                    # Calculate p-values:
+                    st_phio_p, st_beta_p = scipy.stats.t.pdf(
+                        -abs(numpy.array([st_phio_t, st_beta_t])),
+                        num_rows
+                    )
+                    #
+                    # Calculate r-squared:
+                    sse = (
+                        (y_data - next_gen_lue(x_data, st_phio, st_beta))**2
+                    ).sum()
+                    sst = ((y_data - y_data.mean())**2).sum()
+                    st_rsqr = 1.0 - sse/sst
+    #
+    return (x_data, y_data, st_phio, st_beta, st_rsqr)
+
 ###############################################################################
 ## MAIN PROGRAM:
 ###############################################################################
@@ -587,6 +728,10 @@ for station in all_stations:
 my_lue.write_out_lue(out_dir + "GePiSaT_nxgn.txt")
 
 
+
+
+# For plot_mo_lue.py basic v advanced plot
+x_data, y_data, st_phio, st_beta, st_rsqr = get_lue(my_lue, 'ES-ES1')
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

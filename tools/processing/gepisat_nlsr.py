@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-11-18 -- created
-# 2015-02-01 -- last updated
+# 2015-02-02 -- last updated
 #
 # ~~~~~~~~~~~~
 # description:
@@ -49,6 +49,14 @@ from scipy.optimize import curve_fit
 import scipy.stats
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
+
+###############################################################################
+## GLOBAL VARIABLES:
+###############################################################################
+kc = 0.41             # Jmax cost coefficient
+kcc = kc**(2./3.)
+kh = numpy.sqrt(1.6)
+kphio = 0.093         # Long et al. (1993)
 
 ###############################################################################
 ## CLASSES:
@@ -441,10 +449,9 @@ def next_gen_lue(x, beta):
     Output:   numpy.ndarray (gpp)
     Features: Returns array of GPP based on the next-generation light and
               water use efficiency model.
+    Depends:  - kc
+              - kphio
     """
-    # Define constants:
-    kc = 0.41      # Jmax cost parameter
-    phi_o = 0.093  # Long et al. (1993)
     #
     if beta >= 0:
         # Correct divide by zero errors:
@@ -453,7 +460,7 @@ def next_gen_lue(x, beta):
         #
         # Define variable substitutes:
         vdg = x['ca'] - x['Gs']
-        vag = x['ca'] + 2.0*x['Gs']
+        vag = x['ca'] + 2.*x['Gs']
         vsr = numpy.sqrt(
             1.6*x['ns']*x['D']/(beta*(x['K'] + x['Gs']))
         )
@@ -466,7 +473,7 @@ def next_gen_lue(x, beta):
             gpp /= x['Iabs']
             gpp *= 1e20
         else:
-            gpp = phi_o*x['Iabs']*x['fa']*numpy.sqrt(temp_part)
+            gpp = kphio*x['Iabs']*x['fa']*numpy.sqrt(temp_part)
     else:
         gpp = x['Iabs']
         gpp /= x['Iabs']
@@ -827,7 +834,101 @@ station = 'CZ-wet'
 x_data = my_lue.st_lue_vars[station]
 y_data = my_lue.st_lue_vars[station]['GPP']
 w_data = numpy.power(my_lue.st_lue_vars[station]['GPP_err'], -1)
-w_data /= w_data.sum()
+
+# Initialize parameter statistics:
+# max_val, min_val, ave_val, std_val, skew_val, kurt_val
+temp_stats = numpy.array(tuple([-9999., -9999., -9999., 
+                                -9999., -9999., -9999.]),
+                         dtype={'names' : ('max', 'min', 'ave', 
+                                           'std', 'skw', 'krt'),
+                                'formats' : ('f4', 'f4', 'f4', 
+                                             'f4', 'f4', 'f4')},
+                         ndmin=1)
+#
+gs_stats = numpy.copy(temp_stats)
+k_stats = numpy.copy(temp_stats)
+ns_stats = numpy.copy(temp_stats)
+vpd_stats = numpy.copy(temp_stats)
+
+vpd_stats[0] = my_lue.calc_statistics(x_data['D'])
+ns_stats[0] = my_lue.calc_statistics(x_data['ns'])
+gs_stats[0] = my_lue.calc_statistics(x_data['Gs'])
+k_stats[0] = my_lue.calc_statistics(x_data['K'])
+
+# Initial guess for beta and iteration parameters:
+est_beta = predict_params(vpd_stats, ns_stats, gs_stats, k_stats)
+m = len(y_data)
+dlam = 1e20
+ccounter = 0
+maxiter = 1e5
+
+# Define static variable substitues:
+ccg = x_data['ca'] - x_data['Gs']
+ccg2 = ccg**2.
+ccg43 = ccg**(4./3.)
+ckg = x_data['K'] + x_data['Gs']
+cnd = x_data['ns']*x_data['D']
+c3hg = 3.*kh*x_data['Gs']
+
+cn1 = 2.*kh*x_data['Gs']*kcc*ccg43
+cn2 = kcc*ccg43
+cn4 = c3hg*ccg2
+cs1 = kphio*x_data['fa']*x_data['Iabs']
+#
+# Cross fingers and hope for convergence:
+while (dlam > 5e-3 and ccounter <= maxiter):
+    # Define substitute variables:
+    cv1 = numpy.sqrt(x_data['ns']*x_data['D']/(est_beta*(ckg)))
+    cv2 = (est_beta**2.)*(x_data['K'] + x_data['Gs'])*cv1
+    #
+    cn3 = c3hg*cv1 + 2.*x_data['Gs'] + x_data['ca']
+    cnn3 = cn3**2.
+    cn33 = cn3**3.
+    cn34 = cn3**(4./3.)
+    cn37 = cn3**(7./3.)
+    #
+    cs2 = 2.*numpy.sqrt(ccg2/cnn3 - cn2/cn34)
+    #
+    # Calculate partial derivative:
+    dydb = cnd*(cs1/cs2)*(cn4/(cv2*cn33) - cn1/(cv2*cn37))
+    #
+    # Create array dB & apply weights:
+    y_hat = next_gen_lue(x_data, est_beta)
+    db = y_data - y_hat
+    db *= w_data
+    #
+    # Calculate the change in lambda & update beta: 
+    dlam = numpy.dot(numpy.transpose(dydb), db)
+    est_beta += dlam
+    #
+    ccounter += 1
+#
+# Calculate fitness:
+ssxx = numpy.power(y_hat, 2).sum() - m*(y_hat.mean()**2)
+ssyy = numpy.power(y_data, 2).sum() - m*(y_data.mean()**2)
+ssxy = (y_hat*y_data).sum() - m*y_hat.mean()*y_data.mean()
+rsqr = ssxy**2/(ssxx*ssyy)
+
+# Calc t and p-value
+# Calculate the p-value of hte estimate:
+beta_err = numpy.sqrt(dlam)
+beta_t = est_beta/beta_err
+beta_p = scipy.stats.t.pdf(-abs(beta_t), m)
+
+# Plot results:
+text_str = ("$\\mathrm{%s}$\n"
+            "$\\beta=%0.2f\pm%0.2f$\n$R^2=%0.3f$") % (station, est_beta, 
+                                                      beta_err, rsqr)
+props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+
+fig = plt.figure()
+ax1 = fig.add_subplot(111)
+ax1.plot(y_hat, y_data, 'ro', numpy.sort(y_data), numpy.sort(y_data), '--k', 
+         label='LUE')
+ax1.set_ylabel('Observed GPP, mol CO$_2$ m$^{-2}$')
+ax1.set_xlabel('Modeled GPP, mol CO$_2$ m$^{-2}$')
+ax1.text(0.05, 0.95, text_str, transform=ax1.transAxes, fontsize=12, 
+         verticalalignment='top', bbox=props)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # BEGIN calc_lue FUNCTION:

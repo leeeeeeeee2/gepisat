@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-11-18 -- created
-# 2015-02-02 -- last updated
+# 2015-02-07 -- last updated
 #
 # ~~~~~~~~~~~~
 # description:
@@ -32,11 +32,13 @@
 # 10. updated LUE class [15.02.01]
 #     --> added calc_gstar, calc_k, viscosity_h2o
 #     --> added dictionary for LUE variables & units
+# 11. imported scipy.optimize.leastsq [15.02.07]
+# 12. created func and func_der functions [15.02.07]
 # 
 # ~~~~~
 # todo:
 # ~~~~~
-# 1. add LUE class and other functions to GePiSaT's model.py
+# 1. Re-write calc_lue based on leastsq method
 #
 ###############################################################################
 ## IMPORT MODULES:
@@ -45,7 +47,7 @@ import datetime
 import glob
 import numpy
 import os.path
-from scipy.optimize import curve_fit
+from scipy.optimize import leastsq
 import scipy.stats
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
@@ -54,8 +56,6 @@ import matplotlib.pyplot as plt
 ## GLOBAL VARIABLES:
 ###############################################################################
 kc = 0.41             # Jmax cost coefficient
-kcc = kc**(2./3.)
-kh = numpy.sqrt(1.6)
 kphio = 0.093         # Long et al. (1993)
 
 ###############################################################################
@@ -240,6 +240,36 @@ class LUE:
                     axis=0
                     )
     #
+    def beta_estimate(self, station):
+        """
+        Name:     LUE.beta_estimate
+        Input:    str, station name (station)
+        Output:   float
+        Features: Returns an estimate for beta based on Colin's method
+        Depends:  calc_statistics
+        """
+        if station in self.st_lue_vars.keys():
+            x_data = self.st_lue_vars[station]
+            #
+            d_stats = self.calc_statistics(x_data['D'])
+            my_d = 0.5*(d_stats['max'][0] + d_stats['min'][0])
+            #
+            n_stats = self.calc_statistics(x_data['ns'])
+            my_n = 0.5*(n_stats['max'][0] + n_stats['min'][0])
+            #
+            g_stats = self.calc_statistics(x_data['Gs'])
+            my_g = 0.5*(g_stats['max'][0] + g_stats['min'][0])
+            #
+            my_k = self.calc_statistics(x_data['K'])['ave'][0]
+            #
+            chi = 0.5 - (0.5 - 0.9)*(2.5e3 - my_d)/(2.5e3)
+            beta_p = 1.6*my_d/(my_k + my_g)
+            beta_p *= ((chi - my_g)/(1.0 - chi))**2
+            beta_p *= my_n
+            beta_p *= 0.0017154
+            #
+            return beta_p
+    #
     def calc_gstar(self, tc):
         """
         Name:     LUE.calc_gstar
@@ -400,6 +430,15 @@ class LUE:
         if not isinstance(my_array, numpy.ndarray):
             my_array = numpy.array(my_array)
         #
+        # Initialize return array:
+        my_stats = numpy.array(tuple([-9999., -9999., -9999., 
+                                      -9999., -9999., -9999.]),
+                               dtype={'names' : ('max', 'min', 'ave', 
+                                                 'std', 'skw', 'krt'),
+                                      'formats' : ('f4', 'f4', 'f4', 
+                                                   'f4', 'f4', 'f4')},
+                               ndmin=1)
+        #
         # Make sure my_array is not empty or crashes on skew/kurt:
         if my_array.any() and len(my_array) > 1:
             # Max, min, mean, st dev, skew, kurtosis (offset from normal)
@@ -429,7 +468,8 @@ class LUE:
             skew_val = -9999.
             kurt_val = -9999.
             #
-        return (max_val, min_val, ave_val, std_val, skew_val, kurt_val)
+        my_stats[0] = (max_val, min_val, ave_val, std_val, skew_val, kurt_val)
+        return my_stats
 
 ###############################################################################
 ## FUNCTIONS:
@@ -469,47 +509,12 @@ def next_gen_lue(x, beta):
         temp_part = (vdg/(vag + 3.*x['Gs']*vsr))**2 - kc**(2./3.)*(
             vdg/(vag + 3.*x['Gs']*vsr))**(4./3.)
         if (temp_part <= 0).any():
-            gpp = x['Iabs']
-            gpp /= x['Iabs']
-            gpp *= 1e20
+            gpp = numpy.zeros(x.shape[0])
         else:
             gpp = kphio*x['Iabs']*x['fa']*numpy.sqrt(temp_part)
     else:
-        gpp = x['Iabs']
-        gpp /= x['Iabs']
-        gpp *= 1e20
+        gpp = numpy.zeros(x.shape[0])
     return gpp
-
-def predict_params(d, eta, gs, k):
-    """
-    Name:     predict_params
-    Input:    -numpy.ndarray, atmos. CO2 conc. (ca)          DON'T NEED
-              -numpy.ndarray, vap. press. deficit (d)
-              -numpy.ndarray, water visc. (eta)
-              -numpy.ndarray, GPP (gpp)                      DON'T NEED
-              -numpy.ndarray, photo. resp. comp. point (gs)
-              -numpy.ndarray, abs. PAR (iabs)                DON'T NEED
-              -numpy.ndarray, Michaelis-Menten coef. (k)
-    Output:   float
-    Features: Returns statistically-based estimates of beta
-    """
-    # Predict phio (statistical relationship)
-    #phio_p = ((1.761e-1)*gs['min'] + (1.702e-2)*gpp['std'] -
-    #          (6.894e-3)*k['min'] - (3.531e-4)*iabs['ave'])
-    #
-    # Predict beta (based on Colin's method)
-    my_d = 0.5*(d['max'] + d['min'])
-    my_k = k['ave']
-    my_g = 0.5*(gs['max'] + gs['min'])
-    my_n = 0.5*(eta['max'] + eta['min'])
-    #
-    chi = 0.5 - (0.5 - 0.9)*(2.5e3 - my_d)/(2.5e3)
-    beta_p = 1.6*my_d/(my_k + my_g)
-    beta_p *= ((chi - my_g)/(1.0 - chi))**2
-    beta_p *= my_n
-    beta_p *= 0.0017154
-    #
-    return beta_p[0]
 
 def calc_lue(lue_class, station):
     """
@@ -752,6 +757,156 @@ def get_lue(lue_class, station):
     #
     return (x_data, y_data, st_phio, st_beta, st_rsqr)
 
+def grad_hess(my_vars, beta):
+    """
+    Name:     grad_hess
+    Inputs:   - numpy.ndarray (my_vars)
+              - float (beta)
+    Outputs:  tuple
+              - numpy.ndarray (grad_f)
+              - numpy.ndarray (grad2_f)
+    Features: Returns the gradient (first partial derivative) and hessian 
+              (second partial derivative) for the light-use efficiency equation
+    """
+    # Variable substitues:
+    kc23 = kc**(2./3.)
+    xh = numpy.sqrt(1.6)
+    b2 = beta*beta
+    b3 = b2*beta
+    b4 = b3*beta
+    ced = my_vars['ns']*my_vars['D']
+    cgh = my_vars['Gs']*xh
+    v1 = xh*my_vars['Gs']*my_vars['ns']*my_vars['D']
+    v2 = my_vars['ca'] - my_vars['Gs']
+    v22 = v2**2
+    v243 = v2**(4./3.)
+    v3 = my_vars['K'] + my_vars['Gs']
+    v32 = v3**2
+    bv3 = beta*v3
+    v4 = ced/bv3
+    xv4 = numpy.sqrt(v4)
+    v432 = v4**(3./2.)
+    v5 = 3.*xh*my_vars['Gs']*xv4 + 2.*my_vars['Gs'] + my_vars['ca']
+    v52 = v5**2
+    v53 = v5**3
+    v54 = v5**4
+    v543 = v5**(4./3.)
+    v573 = v5**(7./3.)
+    v503 = v5**(10./3.)
+    s1 = kphio*my_vars['fa']*my_vars['Iabs']
+    f1 = v3*xv4
+    f2 = v22/v52
+    f3 = v243/v543
+    f4 = kc23*v1*v243
+    f5 = v1*v22
+    f6 = f2 - kc23*f3
+    #
+    # First partial derivative
+    n1 = 3.*f5
+    n2 = 2.*f4
+    d1 = b2*f1*v53
+    d2 = b2*f1*v573
+    d3 = 2.*numpy.sqrt(f6)
+    grad_f = s1*(n1/d1 - n2/d2)
+    grad_f /= d3
+    #
+    # Second partial derivative
+    n5 = 3.*f5
+    d5 = b2*f1*v53
+    t5 = n5/d5
+    n6 = 2.*f4
+    d6 = b2*f1*v573
+    t6 = n6/d6
+    n20 = 4.*f4
+    d20 = b3*f1*v573
+    t20 = n20/d20
+    n21 = f4*ced
+    d21 = b4*v32*v432*v573
+    t21 = n21/d21
+    n22 = 6.*f5
+    d22 = b3*f1*v53
+    t22 = n22/d22
+    n23 = 3.*f5*ced
+    d23 = 2.*b4*v32*v432*v53
+    t23 = n23/d23
+    n24 = 7.*f4*cgh
+    d24 = b3*v3*v503
+    t24 = n24/d24
+    n25 = 27.*f5*cgh
+    d25 = 2.*b3*v3*v54
+    t25 = n25/d25
+    #
+    n3 = t25 - t24 + t23 - t22 - t21 + t20
+    n4 = (t5 - t6)**2
+    d4 = 4.*numpy.power(f6, 1.5)
+    grad2_f = s1*(n3/d3 - n4/d4)
+    #
+    return(grad_f, grad2_f)
+
+def func(p, x, y):
+    """
+    Name:     func
+    Inputs:   - float, model estimate (p)
+              - numpy.ndarray, model predictors (x)
+              - numpy.ndarray, model observations (y)
+    Features: Returns the weighted residuals of the light-use efficiency model
+              for a given model estimate
+    Depends:  next_gen_lue
+    """
+    sigma = x['GPP_err']
+    y_hat = next_gen_lue(x, p)
+    err = (y_hat - y)/sigma
+    return err
+
+def func_der(p, x, y):
+    """
+    Name:     func_der
+    Inputs:   - float, model estimate (p)
+              - numpy.ndarray, model predictors (x)
+              - numpy.ndarray, model observations (y)
+    Outputs:  numpy.ndarray (jacob)
+    Features: Returns the Jacobian (first partial derivative) for the light-use 
+              efficiency equation (w.r.t. beta)
+    Depends:  - kc
+              - kphio
+    """
+    # Variable substitutes:
+    kc23 = kc**(2./3.)
+    xh = numpy.sqrt(1.6)
+    b2 = p**2
+    ced = x['ns']*x['D']
+    v1 = xh*x['Gs']*x['ns']*x['D']
+    v2 = x['ca'] - x['Gs']
+    v22 = v2**2
+    v243 = v2**(4./3.)
+    v3 = x['K'] + x['Gs']
+    bv3 = p*v3
+    v4 = ced/bv3
+    xv4 = numpy.sqrt(v4)
+    v5 = 3.*xh*x['Gs']*xv4 + 2.*x['Gs'] + x['ca']
+    v52 = v5**2
+    v53 = v5**3
+    v543 = v5**(4./3.)
+    v573 = v5**(7./3.)
+    s1 = kphio*x['fa']*x['Iabs']
+    f1 = v3*xv4
+    f2 = v22/v52
+    f3 = v243/v543
+    f4 = kc23*v1*v243
+    f5 = v1*v22
+    f6 = f2 - kc23*f3
+    #
+    # First partial derivative
+    n1 = 3.*f5
+    n2 = 2.*f4
+    d1 = b2*f1*v53
+    d2 = b2*f1*v573
+    d3 = 2.*numpy.sqrt(f6)
+    jacob = s1*(n1/d1 - n2/d2)
+    jacob /= d3
+    #
+    return(jacob)
+
 ###############################################################################
 ## MAIN PROGRAM:
 ###############################################################################
@@ -831,104 +986,44 @@ my_lue.write_out_lue(out_dir + "GePiSaT_nxgn.txt")
 # BEGIN my_ls_fit FUNCTION:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 station = 'CZ-wet'
-x_data = my_lue.st_lue_vars[station]
-y_data = my_lue.st_lue_vars[station]['GPP']
-w_data = numpy.power(my_lue.st_lue_vars[station]['GPP_err'], -1)
+x_data = numpy.copy(my_lue.st_lue_vars[station])
+y_data = x_data['GPP']
 
-# Initialize parameter statistics:
-# max_val, min_val, ave_val, std_val, skew_val, kurt_val
-temp_stats = numpy.array(tuple([-9999., -9999., -9999., 
-                                -9999., -9999., -9999.]),
-                         dtype={'names' : ('max', 'min', 'ave', 
-                                           'std', 'skw', 'krt'),
-                                'formats' : ('f4', 'f4', 'f4', 
-                                             'f4', 'f4', 'f4')},
-                         ndmin=1)
-#
-gs_stats = numpy.copy(temp_stats)
-k_stats = numpy.copy(temp_stats)
-ns_stats = numpy.copy(temp_stats)
-vpd_stats = numpy.copy(temp_stats)
+p0 = my_lue.beta_estimate(station)
+plsq,cov,infodict,mesg,ier = leastsq(residuals, p0, args=(x_data, y_data), Dfun=jacobian, full_output=True)
+beta_fit = plsq[0][0]
+y_fit = next_gen_lue(x_data, beta_fit)
 
-vpd_stats[0] = my_lue.calc_statistics(x_data['D'])
-ns_stats[0] = my_lue.calc_statistics(x_data['ns'])
-gs_stats[0] = my_lue.calc_statistics(x_data['Gs'])
-k_stats[0] = my_lue.calc_statistics(x_data['K'])
-
-# Initial guess for beta and iteration parameters:
-est_beta = predict_params(vpd_stats, ns_stats, gs_stats, k_stats)
-m = len(y_data)
-dlam = 1e20
-ccounter = 0
-maxiter = 1e5
-
-# Define static variable substitues:
-ccg = x_data['ca'] - x_data['Gs']
-ccg2 = ccg**2.
-ccg43 = ccg**(4./3.)
-ckg = x_data['K'] + x_data['Gs']
-cnd = x_data['ns']*x_data['D']
-c3hg = 3.*kh*x_data['Gs']
-
-cn1 = 2.*kh*x_data['Gs']*kcc*ccg43
-cn2 = kcc*ccg43
-cn4 = c3hg*ccg2
-cs1 = kphio*x_data['fa']*x_data['Iabs']
-#
-# Cross fingers and hope for convergence:
-while (dlam > 5e-3 and ccounter <= maxiter):
-    # Define substitute variables:
-    cv1 = numpy.sqrt(x_data['ns']*x_data['D']/(est_beta*(ckg)))
-    cv2 = (est_beta**2.)*(x_data['K'] + x_data['Gs'])*cv1
-    #
-    cn3 = c3hg*cv1 + 2.*x_data['Gs'] + x_data['ca']
-    cnn3 = cn3**2.
-    cn33 = cn3**3.
-    cn34 = cn3**(4./3.)
-    cn37 = cn3**(7./3.)
-    #
-    cs2 = 2.*numpy.sqrt(ccg2/cnn3 - cn2/cn34)
-    #
-    # Calculate partial derivative:
-    dydb = cnd*(cs1/cs2)*(cn4/(cv2*cn33) - cn1/(cv2*cn37))
-    #
-    # Create array dB & apply weights:
-    y_hat = next_gen_lue(x_data, est_beta)
-    db = y_data - y_hat
-    db *= w_data
-    #
-    # Calculate the change in lambda & update beta: 
-    dlam = numpy.dot(numpy.transpose(dydb), db)
-    est_beta += dlam
-    #
-    ccounter += 1
-#
 # Calculate fitness:
-ssxx = numpy.power(y_hat, 2).sum() - m*(y_hat.mean()**2)
+m = len(y_data)
+ssxx = numpy.power(y_fit, 2).sum() - m*(y_fit.mean()**2)
 ssyy = numpy.power(y_data, 2).sum() - m*(y_data.mean()**2)
-ssxy = (y_hat*y_data).sum() - m*y_hat.mean()*y_data.mean()
+ssxy = (y_fit*y_data).sum() - m*y_fit.mean()*y_data.mean()
 rsqr = ssxy**2/(ssxx*ssyy)
 
 # Calc t and p-value
 # Calculate the p-value of hte estimate:
-beta_err = numpy.sqrt(dlam)
-beta_t = est_beta/beta_err
-beta_p = scipy.stats.t.pdf(-abs(beta_t), m)
+#beta_err = numpy.sqrt(dlam)
+#beta_t = est_beta/beta_err
+#beta_p = scipy.stats.t.pdf(-abs(beta_t), m)
 
 # Plot results:
 text_str = ("$\\mathrm{%s}$\n"
-            "$\\beta=%0.2f\pm%0.2f$\n$R^2=%0.3f$") % (station, est_beta, 
-                                                      beta_err, rsqr)
+            "$\\beta=%0.2f$\n$R^2=%0.3f$") % (station, beta_fit, rsqr)
 props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
 
 fig = plt.figure()
 ax1 = fig.add_subplot(111)
-ax1.plot(y_hat, y_data, 'ro', numpy.sort(y_data), numpy.sort(y_data), '--k', 
+ax1.plot(next_gen_lue(x_data, beta_fit), y_data, 'ro', 
+         next_gen_lue(x_data, p0), y_data, 'ko',
+         label='model')
+ax1.plot(numpy.sort(y_data), numpy.sort(y_data), '--k', 
          label='LUE')
 ax1.set_ylabel('Observed GPP, mol CO$_2$ m$^{-2}$')
 ax1.set_xlabel('Modeled GPP, mol CO$_2$ m$^{-2}$')
 ax1.text(0.05, 0.95, text_str, transform=ax1.transAxes, fontsize=12, 
          verticalalignment='top', bbox=props)
+plt.show()
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # BEGIN calc_lue FUNCTION:

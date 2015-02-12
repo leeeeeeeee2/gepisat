@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-11-18 -- created
-# 2015-02-07 -- last updated
+# 2015-02-12 -- last updated
 #
 # ~~~~~~~~~~~~
 # description:
@@ -34,6 +34,8 @@
 #     --> added dictionary for LUE variables & units
 # 11. imported scipy.optimize.leastsq [15.02.07]
 # 12. created func and func_der functions [15.02.07]
+# 13. moved next_gen_lue, lue_resid and lue_jacob into LUE class [15.02.12]
+# 14. changed density equation to Tumlirz (Fisher et al., 1975) [15.02.12]
 # 
 # ~~~~~
 # todo:
@@ -53,12 +55,6 @@ from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 
 ###############################################################################
-## GLOBAL VARIABLES:
-###############################################################################
-kc = 0.41             # Jmax cost coefficient
-kphio = 0.093         # Long et al. (1993)
-
-###############################################################################
 ## CLASSES:
 ###############################################################################
 class LUE:
@@ -67,6 +63,14 @@ class LUE:
     Features: This class stores monthly LUE estimates and writes results to
               file.
     """
+    # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+    # Class Variable Definitions
+    # ////////////////////////////////////////////////////////////////////////
+    kc = 0.41          # Jmax cost coefficient
+    kphio = 0.093      # (Long et al., 1993)
+    kPo = 101325.      # standard atmosphere, Pa (Allen, 1973)
+    kTo = 25.          # base temperature, deg C (Prentice, unpublished)
+    #
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
     # ////////////////////////////////////////////////////////////////////////
@@ -129,6 +133,9 @@ class LUE:
         #
         # Dictionary of stations' light-use efficiency model fit/fitness:
         self.station_lue = {}
+        #
+        # Define standard viscosity of water, Pa s
+        self.n25 = self.viscosity_h2o(self.kTo, self.kPo)
     #
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
@@ -153,6 +160,7 @@ class LUE:
         Depends:  - calc_gstar
                   - calc_k
                   - viscosity_h2o
+                  - kPo
         """
         # Check for missing alpha (due to new STASH code):
         if alpha is None:
@@ -168,8 +176,8 @@ class LUE:
         gs = self.calc_gstar(tair)          # Pa, photores. comp. point
         d = (1e3)*vpd                       # Pa, vapor pressure deficit
         k = self.calc_k(tair, patm)         # Pa, Michaelis-Menten coef.
-        no = 1.00                           # mPa s, viscosity at 20 degC
-        ns = self.viscosity_h2o(tair)/no    # unitless, water viscosity
+        ns = self.viscosity_h2o(tair, patm) # Pa s, viscosity
+        ns /= self.n25                      # unitless, water viscosity
         fa = (alpha/1.26)**(0.25)           # unitless, func. of alpha
         var_params = (gpp, gpp_err, iabs, ca, gs, d, k, ns, fa)
         #
@@ -260,6 +268,10 @@ class LUE:
             g_stats = self.calc_statistics(x_data['Gs'])
             my_g = 0.5*(g_stats['max'][0] + g_stats['min'][0])
             #
+            t_data = self.station_vals[station]['Tair']
+            t_stats = self.calc_statistics(t_data)
+            my_t = 0.5*(t_stats['max'][0] + t_stats['min'][0])
+            #
             my_k = self.calc_statistics(x_data['K'])['ave'][0]
             #
             chi = 0.5 - (0.5 - 0.9)*(2.5e3 - my_d)/(2.5e3)
@@ -310,21 +322,290 @@ class LUE:
         kR = 8.3145      # J/mol/K
         kco = 2.09476e5  # ppm, US Standard Atmosphere
         #
-        kc = kc25*numpy.exp(dhac*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
-        ko = ko25*numpy.exp(dhao*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
-        k = kc*(1 + kco*(1e-6)*patm/ko)
+        vc = kc25*numpy.exp(dhac*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
+        vo = ko25*numpy.exp(dhao*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
+        k = vc*(1 + kco*(1e-6)*patm/vo)
         return k
     #
-    def viscosity_h2o(self, tc):
+    #
+    def calc_statistics(self, my_array):
+        """
+        Name:     LUE.calc_statistics
+        Input:    numpy.ndarray (my_array)
+        Output:   tuple, statistical quantities
+                  - float, max value (max_val)
+                  - float, min value (min_val)
+                  - float, mean value (ave_val)
+                  - float, standard deviation (std_val)
+                  - float, skewness (skew_val)
+                  - float, kurtosis (kurt_val)
+        Features: Returns the basic/advanced statistics for an array of values
+        """
+        # Make sure my_array is a numpy array:
+        if not isinstance(my_array, numpy.ndarray):
+            my_array = numpy.array(my_array)
+        #
+        # Initialize return array:
+        my_stats = numpy.array(tuple([-9999., -9999., -9999., 
+                                      -9999., -9999., -9999.]),
+                               dtype={'names' : ('max', 'min', 'ave', 
+                                                 'std', 'skw', 'krt'),
+                                      'formats' : ('f4', 'f4', 'f4', 
+                                                   'f4', 'f4', 'f4')},
+                               ndmin=1)
+        #
+        # Make sure my_array is not empty or crashes on skew/kurt:
+        if my_array.any() and len(my_array) > 1:
+            # Max, min, mean, st dev, skew, kurtosis (offset from normal)
+            max_val = my_array.max()
+            min_val = my_array.min()
+            ave_val = my_array.mean()
+            std_val = my_array.std()
+            #
+            # Address divide by zero issues:
+            if std_val == 0:
+                std_val = 1e-4
+            #
+            skew_val = (
+                sum((my_array - ave_val)**3)/
+                ((len(my_array) - 1)*std_val**3)
+                )
+            kurt_val = (
+                sum((my_array - ave_val)**4)/
+                ((len(my_array) - 1)*std_val**4) - 3
+                )
+        else:
+            # Maintain initial quantity values:
+            max_val = -9999.
+            min_val = -9999.
+            ave_val = -9999.
+            std_val = -9999.
+            skew_val = -9999.
+            kurt_val = -9999.
+            #
+        my_stats[0] = (max_val, min_val, ave_val, std_val, skew_val, kurt_val)
+        return my_stats
+    #
+    def density_h2o(self, tc, p):
+        """
+        Name:     LUE.density_h2o
+        Input:    - float, air temperature (tc), degrees C
+                  - float, atmospheric pressure (p), Pa
+        Output:   float, density of water, kg/m^3
+        Features: Calculates density of water at a given temperature and 
+                  pressure using the Tumlirz Equation
+        Ref:      F.H. Fisher and O.E Dial, Jr. (1975) Equation of state of 
+                  pure water and sea water, Tech. Rept., Marine Physical 
+                  Laboratory, San Diego, CA.
+        """
+        # Calculate lambda, (bar cm^3)/g:
+        my_lambda = 1788.316
+        my_lambda += 21.55053*tc
+        my_lambda += -0.4695911*tc*tc
+        my_lambda += (3.096363e-3)*tc*tc*tc
+        my_lambda += -(7.341182e-6)*tc*tc*tc*tc
+        #
+        # Calculate po, bar
+        po = 5918.499
+        po += 58.05267*tc
+        po += -1.1253317*tc*tc
+        po += (6.6123869e-3)*tc*tc*tc
+        po += -(1.4661625e-5)*tc*tc*tc*tc
+        #
+        # Calculate vinf, cm^3/g
+        vinf = 0.6980547
+        vinf += -(7.435626e-4)*tc
+        vinf += (3.704258e-5)*tc*tc
+        vinf += -(6.315724e-7)*tc*tc*tc
+        vinf += (9.829576e-9)*tc*tc*tc*tc
+        vinf += -(1.197269e-10)*tc*tc*tc*tc*tc
+        vinf += (1.005461e-12)*tc*tc*tc*tc*tc*tc
+        vinf += -(5.437898e-15)*tc*tc*tc*tc*tc*tc*tc
+        vinf += (1.69946e-17)*tc*tc*tc*tc*tc*tc*tc*tc
+        vinf += -(2.295063e-20)*tc*tc*tc*tc*tc*tc*tc*tc*tc
+        #
+        # Convert pressure to bars (1 bar = 100000 Pa)
+        pbar = (1e-5)*p
+        #
+        # Calculate the specific volume (cm^3 g^-1):
+        v = vinf + my_lambda/(po + pbar)
+        #
+        # Convert to density (g cm^-3) -> 1000 g/kg; 1000000 cm^3/m^3 -> kg/m^3:
+        rho = (1e3/v)
+        #
+        return rho
+    #
+    def lue_jacob(self, p, x, y):
+        """
+        Name:     LUE.lue_jacob
+        Inputs:   - float, model estimate (p)
+                  - numpy.ndarray, model predictors (x)
+                  - numpy.ndarray, model observations (y)
+        Outputs:  numpy.ndarray (jacob)
+        Features: Returns the Jacobian (first partial derivative) for the 
+                  light-use efficiency equation (w.r.t. beta)
+        Depends:  - kc
+                  - kphio
+        """
+        # Variable substitutes:
+        kc23 = self.kc**(2./3.)
+        xh = numpy.sqrt(1.6)
+        b2 = p**2
+        ced = x['ns']*x['D']
+        v1 = xh*x['Gs']*x['ns']*x['D']
+        v2 = x['ca'] - x['Gs']
+        v22 = v2**2
+        v243 = v2**(4./3.)
+        v3 = x['K'] + x['Gs']
+        bv3 = p*v3
+        v4 = ced/bv3
+        xv4 = numpy.sqrt(v4)
+        v5 = 3.*xh*x['Gs']*xv4 + 2.*x['Gs'] + x['ca']
+        v52 = v5**2
+        v53 = v5**3
+        v543 = v5**(4./3.)
+        v573 = v5**(7./3.)
+        s1 = self.kphio*x['fa']*x['Iabs']
+        f1 = v3*xv4
+        f2 = v22/v52
+        f3 = v243/v543
+        f4 = kc23*v1*v243
+        f5 = v1*v22
+        f6 = f2 - kc23*f3
+        #
+        # First partial derivative
+        n1 = 3.*f5
+        n2 = 2.*f4
+        d1 = b2*f1*v53
+        d2 = b2*f1*v573
+        d3 = 2.*numpy.sqrt(f6)
+        jacob = s1*(n1/d1 - n2/d2)
+        jacob /= d3
+        #
+        return(jacob)
+    #
+    def lue_resid(self, p, x, y):
+        """
+        Name:     LUE.lue_reside
+        Inputs:   - float, model estimate (p)
+                  - numpy.ndarray, model predictors (x)
+                  - numpy.ndarray, model observations (y)
+        Features: Returns the weighted residuals of the light-use efficiency 
+                  model for a given model estimate
+        Depends:  next_gen_lue
+        """
+        sigma = x['GPP_err']
+        y_hat = self.next_gen_lue(x, p)
+        resid = (y_hat - y)/sigma
+        return resid
+    #
+    def next_gen_lue(self, x, beta):
+        """
+        Name:     LUE.next_gen_lue
+        Input:    - numpy.ndarray, (k,M) shape of predictors (x)
+                    > 'Iabs' : mol/m2, fAPARxPPFD
+                    > 'ca' : Pa, atmospheric CO2
+                    > 'Gs' : Pa, photores. comp. point
+                    > 'D' : Pa, vapor pressure deficit
+                    > 'K' : Pa, Michaelis-Menten coeff.
+                    > 'ns' : mPa s, viscosity of water
+                    > 'fa' : unitless, function of alpha
+                  - float, beta parameter (beta)
+        Output:   numpy.ndarray (gpp)
+        Features: Returns array of GPP based on the next-generation light and
+                  water use efficiency model.
+        Depends:  - kc
+                  - kphio
+        """
+        if beta >= 0:
+            # Correct divide by zero errors:
+            if beta == 0:
+                beta += 1e-6
+            #
+            # Define variable substitutes:
+            vdg = x['ca'] - x['Gs']
+            vag = x['ca'] + 2.*x['Gs']
+            vsr = numpy.sqrt(
+                1.6*x['ns']*x['D']/(beta*(x['K'] + x['Gs']))
+            )
+            #
+            # Based on the m' formulation (see Regressing_LUE.pdf)
+            temp_part = (vdg/(vag + 3.*x['Gs']*vsr))**2 - self.kc**(2./3.)*(
+                vdg/(vag + 3.*x['Gs']*vsr))**(4./3.)
+            if (temp_part <= 0).any():
+                gpp = numpy.zeros(x.shape[0])
+            else:
+                gpp = self.kphio*x['Iabs']*x['fa']*numpy.sqrt(temp_part)
+        else:
+            gpp = numpy.zeros(x.shape[0])
+        return gpp
+    #
+    def viscosity_h2o(self, tc, p):
         """
         Name:     LUE.viscosity_h2o
-        Input:    float, air temperature, degrees C (tc)
-        Output:   float, viscosity, mPa s (n)
-        Features: Returns the temperature-dependent viscosity of water (mPa s) 
-                  based on the Vogel Equation
+        Input:    - float, ambient temperature (tc), degrees C
+                  - float, ambient pressure (p), Pa
+        Return:   float, viscosity of water (mu), Pa s
+        Features: Calculates viscosity of water at a given temperature and 
+                  pressure.
+        Depends:  density_h2o
+        Ref:      Huber, M. L., R. A. Perkins, A. Laesecke, D. G. Friend, J. V. 
+                  Sengers, M. J. Assael, ..., K. Miyagawa (2009) New 
+                  international formulation for the viscosity of H2O, J. Phys. 
+                  Chem. Ref. Data, Vol. 38(2), pp. 101-125.
         """
-        n = 2.4263e-2*numpy.exp(5.78919e2/((tc + 273.15) - 1.37546e2))
-        return n
+        # Define reference temperature, density, and pressure values:
+        tk_ast = 647.096      # Kelvin
+        rho_ast = 322.0       # kg/m^3
+        mu_ast = (1e-6)       # Pa s
+        #
+        # Get the density of water, kg/m^3
+        rho = self.density_h2o(tc, p)
+        #
+        # Calculate dimensionless parameters:
+        tbar = (tc + 273.15)/tk_ast
+        tbarx = tbar**(0.5)
+        tbar2 = tbar**2
+        tbar3 = tbar**3
+        rbar = rho/rho_ast
+        #
+        # Calculate mu0 (Eq. 11 & Table 2, Huber et al., 2009):
+        mu0 = 1.67752 
+        mu0 += 2.20462/tbar 
+        mu0 += 0.6366564/tbar2 
+        mu0 += -0.241605/tbar3
+        mu0 = 1e2*tbarx/mu0
+        #
+        # Create Table 3, Huber et al. (2009):
+        hj0 = (0.520094, 0.0850895, -1.08374, -0.289555, 0., 0.)
+        hj1 = (0.222531, 0.999115, 1.88797, 1.26613, 0., 0.120573)
+        hj2 = (-0.281378, -0.906851, -0.772479, -0.489837, -0.257040, 0.)
+        hj3 = (0.161913,  0.257399, 0., 0., 0., 0.)
+        hj4 = (-0.0325372, 0., 0., 0.0698452, 0., 0.)
+        hj5 = (0., 0., 0., 0., 0.00872102, 0.)
+        hj6 = (0., 0., 0., -0.00435673, 0., -0.000593264)
+        h = hj0 + hj1 + hj2 + hj3 + hj4 + hj5 + hj6
+        h_array = numpy.reshape(numpy.array(h), (7,6))
+        #
+        # Calculate mu1 (Eq. 12 & Table 3, Huber et al., 2009):
+        mu1 = 0.
+        ctbar = (1./tbar) - 1.
+        for i in xrange(6):
+            coef1 = numpy.power(ctbar, i)
+            coef2 = 0.
+            for j in xrange(7):
+                coef2 += h_array[j][i]*numpy.power((rbar - 1.), j)
+            mu1 += coef1*coef2
+        mu1 = numpy.exp(rbar*mu1)
+        #
+        # Calculate mu_bar (Eq. 2, Huber et al., 2009)
+        #   assumes mu2 = 1
+        mu_bar = mu0*mu1
+        #
+        # Calculate mu (Eq. 1, Huber et al., 2009)
+        mu = mu_bar*mu_ast    # Pa s
+        #
+        return mu
     #
     def write_out_val(self, station, out_file):
         """
@@ -412,212 +693,11 @@ class LUE:
                         "%f,%f,%f,%f,%f,%f,"
                         "%f,%f,%f,%f,%f,%f\n" % t)
                 f.close()
-    #
-    def calc_statistics(self, my_array):
-        """
-        Name:     LUE.calc_statistics
-        Input:    numpy.ndarray (my_array)
-        Output:   tuple, statistical quantities
-                  - float, max value (max_val)
-                  - float, min value (min_val)
-                  - float, mean value (ave_val)
-                  - float, standard deviation (std_val)
-                  - float, skewness (skew_val)
-                  - float, kurtosis (kurt_val)
-        Features: Returns the basic/advanced statistics for an array of values
-        """
-        # Make sure my_array is a numpy array:
-        if not isinstance(my_array, numpy.ndarray):
-            my_array = numpy.array(my_array)
-        #
-        # Initialize return array:
-        my_stats = numpy.array(tuple([-9999., -9999., -9999., 
-                                      -9999., -9999., -9999.]),
-                               dtype={'names' : ('max', 'min', 'ave', 
-                                                 'std', 'skw', 'krt'),
-                                      'formats' : ('f4', 'f4', 'f4', 
-                                                   'f4', 'f4', 'f4')},
-                               ndmin=1)
-        #
-        # Make sure my_array is not empty or crashes on skew/kurt:
-        if my_array.any() and len(my_array) > 1:
-            # Max, min, mean, st dev, skew, kurtosis (offset from normal)
-            max_val = my_array.max()
-            min_val = my_array.min()
-            ave_val = my_array.mean()
-            std_val = my_array.std()
-            #
-            # Address divide by zero issues:
-            if std_val == 0:
-                std_val = 1e-4
-            #
-            skew_val = (
-                sum((my_array - ave_val)**3)/
-                ((len(my_array) - 1)*std_val**3)
-                )
-            kurt_val = (
-                sum((my_array - ave_val)**4)/
-                ((len(my_array) - 1)*std_val**4) - 3
-                )
-        else:
-            # Maintain initial quantity values:
-            max_val = -9999.
-            min_val = -9999.
-            ave_val = -9999.
-            std_val = -9999.
-            skew_val = -9999.
-            kurt_val = -9999.
-            #
-        my_stats[0] = (max_val, min_val, ave_val, std_val, skew_val, kurt_val)
-        return my_stats
+    
 
 ###############################################################################
 ## FUNCTIONS:
 ###############################################################################
-def next_gen_lue(x, beta):
-    """
-    Name:     next_gen_lue
-    Input:    - numpy.ndarray, (k,M) shape of predictors (x)
-                > 'Iabs' : mol/m2, fAPARxPPFD
-                > 'ca' : Pa, atmospheric CO2
-                > 'Gs' : Pa, photores. comp. point
-                > 'D' : Pa, vapor pressure deficit
-                > 'K' : Pa, Michaelis-Menten coeff.
-                > 'ns' : mPa s, viscosity of water
-                > 'fa' : unitless, function of alpha
-              - float, beta parameter (beta)
-    Output:   numpy.ndarray (gpp)
-    Features: Returns array of GPP based on the next-generation light and
-              water use efficiency model.
-    Depends:  - kc
-              - kphio
-    """
-    #
-    if beta >= 0:
-        # Correct divide by zero errors:
-        if beta == 0:
-            beta += 1e-6
-        #
-        # Define variable substitutes:
-        vdg = x['ca'] - x['Gs']
-        vag = x['ca'] + 2.*x['Gs']
-        vsr = numpy.sqrt(
-            1.6*x['ns']*x['D']/(beta*(x['K'] + x['Gs']))
-        )
-        #
-        # Based on the m' formulation (see Regressing_LUE.pdf)
-        temp_part = (vdg/(vag + 3.*x['Gs']*vsr))**2 - kc**(2./3.)*(
-            vdg/(vag + 3.*x['Gs']*vsr))**(4./3.)
-        if (temp_part <= 0).any():
-            gpp = numpy.zeros(x.shape[0])
-        else:
-            gpp = kphio*x['Iabs']*x['fa']*numpy.sqrt(temp_part)
-    else:
-        gpp = numpy.zeros(x.shape[0])
-    return gpp
-
-def calc_lue(lue_class, station):
-    """
-    Name:     calc_lue
-    Input:    - LUE class (lue_class)
-              - string, station name (station)
-    Output:   None.
-    Features: Fits the next generation LUE model to the monthly flux tower 
-              data and saves the fit to LUE class
-    Depends:  next_gen_lue
-    """
-    # Initialize fitness parameters:
-    st_rsqr = -9999.     # model coef. of determination
-    st_phio = 0.093      # intrinsic quantum efficiency parameter
-    st_beta = -9999.     # beta parameter
-    st_phio_err = 0.     # \ standard errors 
-    st_beta_err = -9999. # /  of the estimates
-    st_phio_t = 0.       # \ t-values 
-    st_beta_t = -9999.   # /  of the estimates
-    st_phio_p = 0.       # \ p-values
-    st_beta_p = -9999.   # /  of the estimates
-    #
-    temp_stats = numpy.array(tuple([-9999., -9999., -9999., 
-                                    -9999., -9999., -9999.]),
-                             dtype={'names' : ('max', 'min', 'ave', 
-                                               'std', 'skw', 'krt'),
-                                    'formats' : ('f4', 'f4', 'f4', 
-                                                 'f4', 'f4', 'f4')},
-                             ndmin=1)
-    #
-    # Initialize parameter statistics:
-    # max_val, min_val, ave_val, std_val, skew_val, kurt_val
-    gpp_stats = numpy.copy(temp_stats)
-    iabs_stats = numpy.copy(temp_stats)
-    ca_stats = numpy.copy(temp_stats)
-    gs_stats = numpy.copy(temp_stats)
-    k_stats = numpy.copy(temp_stats)
-    ns_stats = numpy.copy(temp_stats)
-    vpd_stats = numpy.copy(temp_stats)
-    fa_stats = numpy.copy(temp_stats)
-    #
-    if (station in my_lue.station_vals.keys() and 
-        station in my_lue.st_lue_vars.keys()):
-        #
-        x_data = my_lue.st_lue_vars[station]
-        y_data = my_lue.station_vals[station]['GPP']
-        #
-        # Calculate data statistics:
-        gpp_stats[0] = my_lue.calc_statistics(y_data)
-        iabs_stats[0] = my_lue.calc_statistics(x_data['Iabs'])
-        ca_stats[0] = my_lue.calc_statistics(x_data['ca'])
-        gs_stats[0] = my_lue.calc_statistics(x_data['Gs'])
-        vpd_stats[0] = my_lue.calc_statistics(x_data['D'])
-        k_stats[0] = my_lue.calc_statistics(x_data['K'])
-        ns_stats[0] = my_lue.calc_statistics(x_data['ns'])
-        fa_stats[0] = my_lue.calc_statistics(x_data['fa'])
-        #
-        # Estimate parameter starting values:
-        est_beta = predict_params(vpd_stats, ns_stats, gs_stats, k_stats)
-        #
-        # Curve fit:
-        try:
-            fit_opt, fit_cov = curve_fit(next_gen_lue, 
-                                         x_data, 
-                                         y_data, 
-                                         p0=est_beta)
-            #print 'fit_opt', fit_opt
-            #print 'fit_cov', fit_cov
-        except:
-            st_beta = -9999.
-        else:
-            st_beta = fit_opt[0]
-            #
-            fit_var = fit_cov[0][0]
-            if numpy.isfinite(fit_var) and not (fit_var < 0):
-                # Get parameter standard errors:
-                st_beta_err = numpy.sqrt(fit_var)
-                #
-                # Calculate t-values:
-                st_beta_t = st_beta/st_beta_err
-                # 
-                # Calculate p-values:
-                st_beta_p = scipy.stats.t.pdf(-abs(st_beta_t), num_rows)
-                #
-                # Calculate r-squared:
-                dum_x = next_gen_lue(x_data, st_beta)
-                dum_slope, dum_intrcp, dum_r, dum_p, dum_sterr = (
-                    scipy.stats.linregress(dum_x, y_data))
-                st_rsqr = dum_r**2
-    #
-    # Save fit to LUE class
-    params = (tuple([st_rsqr, st_phio, st_phio, est_beta, st_beta, 
-                     st_phio_err, st_beta_err, st_phio_t, st_beta_t, 
-                     st_phio_p, st_beta_p]) + 
-                     tuple(gpp_stats[0]) +
-                     tuple(iabs_stats[0]) +
-                     tuple(ca_stats[0]) +
-                     tuple(gs_stats[0]) +
-                     tuple(vpd_stats[0]) +
-                     tuple(k_stats[0]) +
-                     tuple(eta_stats[0]))
-    lue_class.station_lue[station] = params
-
 def get_lue(lue_class, station):
     """
     Name:     get_lue
@@ -672,9 +752,9 @@ def get_lue(lue_class, station):
             #
             # Calculate other necessary parameters for regression:
             st_ca = (1.e-6)*st_co2*st_patm       # Pa, atms. CO2
-            st_gs = calc_gstar(st_tair)          # Pa, photores. comp. point
-            st_k = calc_k(st_tair, st_patm)      # Pa, Michaelis-Menten coef.
-            st_eta = viscosity_h2o(st_tair)      # mPa s, water viscosity
+            st_gs = my_lue.calc_gstar(st_tair)          # Pa, photores. comp. point
+            st_k = my_lue.calc_k(st_tair, st_patm)      # Pa, Michaelis-Menten coef.
+            st_eta = my_lue.viscosity_h2o(st_tair)      # mPa s, water viscosity
             st_iabs = st_fpar*st_ppfd            # mol/m2, abs. PPFD
             st_fa = (st_cpa/1.26)**(0.25)        # unitless, func. of alpha
             #
@@ -843,70 +923,6 @@ def grad_hess(my_vars, beta):
     #
     return(grad_f, grad2_f)
 
-def func(p, x, y):
-    """
-    Name:     func
-    Inputs:   - float, model estimate (p)
-              - numpy.ndarray, model predictors (x)
-              - numpy.ndarray, model observations (y)
-    Features: Returns the weighted residuals of the light-use efficiency model
-              for a given model estimate
-    Depends:  next_gen_lue
-    """
-    sigma = x['GPP_err']
-    y_hat = next_gen_lue(x, p)
-    err = (y_hat - y)/sigma
-    return err
-
-def func_der(p, x, y):
-    """
-    Name:     func_der
-    Inputs:   - float, model estimate (p)
-              - numpy.ndarray, model predictors (x)
-              - numpy.ndarray, model observations (y)
-    Outputs:  numpy.ndarray (jacob)
-    Features: Returns the Jacobian (first partial derivative) for the light-use 
-              efficiency equation (w.r.t. beta)
-    Depends:  - kc
-              - kphio
-    """
-    # Variable substitutes:
-    kc23 = kc**(2./3.)
-    xh = numpy.sqrt(1.6)
-    b2 = p**2
-    ced = x['ns']*x['D']
-    v1 = xh*x['Gs']*x['ns']*x['D']
-    v2 = x['ca'] - x['Gs']
-    v22 = v2**2
-    v243 = v2**(4./3.)
-    v3 = x['K'] + x['Gs']
-    bv3 = p*v3
-    v4 = ced/bv3
-    xv4 = numpy.sqrt(v4)
-    v5 = 3.*xh*x['Gs']*xv4 + 2.*x['Gs'] + x['ca']
-    v52 = v5**2
-    v53 = v5**3
-    v543 = v5**(4./3.)
-    v573 = v5**(7./3.)
-    s1 = kphio*x['fa']*x['Iabs']
-    f1 = v3*xv4
-    f2 = v22/v52
-    f3 = v243/v543
-    f4 = kc23*v1*v243
-    f5 = v1*v22
-    f6 = f2 - kc23*f3
-    #
-    # First partial derivative
-    n1 = 3.*f5
-    n2 = 2.*f4
-    d1 = b2*f1*v53
-    d2 = b2*f1*v573
-    d3 = 2.*numpy.sqrt(f6)
-    jacob = s1*(n1/d1 - n2/d2)
-    jacob /= d3
-    #
-    return(jacob)
-
 ###############################################################################
 ## MAIN PROGRAM:
 ###############################################################################
@@ -952,8 +968,8 @@ my_data = numpy.loadtxt(
 # Create a LUE class as in GePiSaT model
 my_lue = LUE()
 for line in my_data:
-    (st_name, st_time, st_gpp, st_gpp_err, st_fpar, st_ppfd, st_vpd, st_cpa, 
-     st_tair, st_co2, st_patm) = line
+    (st_name, st_time, st_gpp, st_gpp_err, st_fpar, 
+     st_ppfd, st_vpd, st_cpa, st_tair, st_co2, st_patm) = line
     #
     my_lue.add_station_val(st_name, 
                            st_time, 
@@ -971,10 +987,9 @@ for line in my_data:
 all_stations = numpy.array(list(set(my_data['station'])))
 
 # Test calc_lue function:
-for station in all_stations:
-    calc_lue(my_lue, station)
-
-my_lue.write_out_lue(out_dir + "GePiSaT_nxgn.txt")
+#for station in all_stations:
+#    calc_lue(my_lue, station)
+#my_lue.write_out_lue(out_dir + "GePiSaT_nxgn.txt")
 
 
 
@@ -985,21 +1000,29 @@ my_lue.write_out_lue(out_dir + "GePiSaT_nxgn.txt")
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # BEGIN my_ls_fit FUNCTION:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-station = 'CZ-wet'
-x_data = numpy.copy(my_lue.st_lue_vars[station])
-y_data = x_data['GPP']
-
-p0 = my_lue.beta_estimate(station)
-plsq,cov,infodict,mesg,ier = leastsq(residuals, p0, args=(x_data, y_data), Dfun=jacobian, full_output=True)
-beta_fit = plsq[0][0]
-y_fit = next_gen_lue(x_data, beta_fit)
-
-# Calculate fitness:
-m = len(y_data)
-ssxx = numpy.power(y_fit, 2).sum() - m*(y_fit.mean()**2)
-ssyy = numpy.power(y_data, 2).sum() - m*(y_data.mean()**2)
-ssxy = (y_fit*y_data).sum() - m*y_fit.mean()*y_data.mean()
-rsqr = ssxy**2/(ssxx*ssyy)
+my_dict = {}
+station = 'DE-Kli'
+for station in all_stations:
+    x_data = numpy.copy(my_lue.st_lue_vars[station])
+    y_data = x_data['GPP']
+    #
+    p0 = my_lue.beta_estimate(station)
+    plsq, cov, infodict, mesg, ier = leastsq(my_lue.lue_resid, 
+                                             p0, 
+                                             args=(x_data, y_data), 
+                                             Dfun=my_lue.lue_jacob, 
+                                             full_output=True)
+    beta_fit = plsq[0]
+    y_fit = my_lue.next_gen_lue(x_data, beta_fit)
+    #
+    # Calculate fitness:
+    m = len(y_data)
+    ssxx = numpy.power(y_fit, 2).sum() - m*(y_fit.mean()**2)
+    ssyy = numpy.power(y_data, 2).sum() - m*(y_data.mean()**2)
+    ssxy = (y_fit*y_data).sum() - m*y_fit.mean()*y_data.mean()
+    rsqr = ssxy**2/(ssxx*ssyy)
+    #
+    my_dict[station] = (p0, beta_fit, rsqr)
 
 # Calc t and p-value
 # Calculate the p-value of hte estimate:
@@ -1008,20 +1031,26 @@ rsqr = ssxy**2/(ssxx*ssyy)
 #beta_p = scipy.stats.t.pdf(-abs(beta_t), m)
 
 # Plot results:
+station = 'AT-Neu'
+p0, beta_fit, rsqr = my_dict[station]
+x_data = numpy.copy(my_lue.st_lue_vars[station])
+y_data = x_data['GPP']
+
 text_str = ("$\\mathrm{%s}$\n"
             "$\\beta=%0.2f$\n$R^2=%0.3f$") % (station, beta_fit, rsqr)
 props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
 
 fig = plt.figure()
 ax1 = fig.add_subplot(111)
-ax1.plot(next_gen_lue(x_data, beta_fit), y_data, 'ro', 
-         next_gen_lue(x_data, p0), y_data, 'ko',
-         label='model')
-ax1.plot(numpy.sort(y_data), numpy.sort(y_data), '--k', 
-         label='LUE')
-ax1.set_ylabel('Observed GPP, mol CO$_2$ m$^{-2}$')
-ax1.set_xlabel('Modeled GPP, mol CO$_2$ m$^{-2}$')
-ax1.text(0.05, 0.95, text_str, transform=ax1.transAxes, fontsize=12, 
+plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=14)
+plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
+ax1.plot(y_fit, y_data, 'ro', label='Fitted') 
+ax1.plot(numpy.sort(y_data), numpy.sort(y_data), '--k', label='1:1 Line')
+ax1.set_ylabel('Observed GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
+ax1.set_xlabel('Modeled GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
+ax1.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+            ncol=3, mode="expand", borderaxespad=0., fontsize=14)
+ax1.text(0.05, 0.95, text_str, transform=ax1.transAxes, fontsize=14, 
          verticalalignment='top', bbox=props)
 plt.show()
 

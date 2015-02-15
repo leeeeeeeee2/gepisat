@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-11-18 -- created
-# 2015-02-12 -- last updated
+# 2015-02-13 -- last updated
 #
 # ~~~~~~~~~~~~
 # description:
@@ -36,11 +36,14 @@
 # 12. created func and func_der functions [15.02.07]
 # 13. moved next_gen_lue, lue_resid and lue_jacob into LUE class [15.02.12]
 # 14. changed density equation to Tumlirz (Fisher et al., 1975) [15.02.12]
+# 15. error estimate to fitted beta parameter [15.02.13]
 # 
 # ~~~~~
 # todo:
 # ~~~~~
-# 1. Re-write calc_lue based on leastsq method
+# 1. Update beta estimation method based on Wang Han equation
+# 2. Check leastsq method---it might be failing due to lack of observations
+# 3. Add another goodness of fit metric (e.g., regressed slope versus 1:1 line)
 #
 ###############################################################################
 ## IMPORT MODULES:
@@ -473,6 +476,10 @@ class LUE:
         f5 = v1*v22
         f6 = f2 - kc23*f3
         #
+        # Check for negatives in f6:
+        temp_list = [1e-6 + 0.*i if i < 0 else i for i in f6]
+        f6 = numpy.array(temp_list)
+        #
         # First partial derivative
         n1 = 3.*f5
         n2 = 2.*f4
@@ -532,6 +539,11 @@ class LUE:
             # Based on the m' formulation (see Regressing_LUE.pdf)
             temp_part = (vdg/(vag + 3.*x['Gs']*vsr))**2 - self.kc**(2./3.)*(
                 vdg/(vag + 3.*x['Gs']*vsr))**(4./3.)
+            # 
+            # Check for negatives in temp part:
+            temp_array = [1e-6 + 0.*i if i <0 else i for i in temp_part]
+            temp_part = numpy.array(temp_array)
+            #
             if (temp_part <= 0).any():
                 gpp = numpy.zeros(x.shape[0])
             else:
@@ -693,7 +705,6 @@ class LUE:
                         "%f,%f,%f,%f,%f,%f,"
                         "%f,%f,%f,%f,%f,%f\n" % t)
                 f.close()
-    
 
 ###############################################################################
 ## FUNCTIONS:
@@ -717,123 +728,37 @@ def get_lue(lue_class, station):
               - viscosity_h2o
     """
     # Initialize fitness parameters:
-    st_rsqr = -9999.     # model coef. of determination
-    st_phio = -9999.     # intrinsic quantum efficiency parameter
-    st_beta = -9999.     # beta parameter
-    st_phio_err = -9999. # \ standard errors 
-    st_beta_err = -9999. # /  of the estimates
-    st_phio_t = -9999.   # \ t-values 
-    st_beta_t = -9999.   # /  of the estimates
-    st_phio_p = -9999.   # \ p-values
-    st_beta_p = -9999.   # /  of the estimates
-    #
-    # Initialize data statistics:
-    temp_stats = numpy.array(tuple([-9999., -9999., -9999., -9999., -9999., 
-                                    -9999.]),
-                             dtype={'names' : ('max', 'min', 'ave', 'std', 
-                                               'skw', 'krt'),
-                                    'formats' : ('f4', 'f4', 'f4', 'f4', 'f4', 
-                                                 'f4')},
-                             ndmin=1)
-    #
-    gpp_stats = numpy.copy(temp_stats)
-    iabs_stats = numpy.copy(temp_stats)
-    ca_stats = numpy.copy(temp_stats)
-    gs_stats = numpy.copy(temp_stats)
-    k_stats = numpy.copy(temp_stats)
-    eta_stats = numpy.copy(temp_stats)
-    vpd_stats = numpy.copy(temp_stats)
+    st_rsqr = -9999.              # model coef. of determination
+    st_beta = -9999.              # beta parameter
+    st_phio = lue_class.kphio     # intrinsic quantum efficiency parameter
     #
     if station in lue_class.station_vals.keys():
-        num_rows = len(lue_class.station_vals[station])
-        for i in xrange(num_rows):
-            (st_time, st_gpp, st_gpp_err, st_fpar, st_ppfd, st_vpd, st_cpa, 
-            st_tair, st_co2, st_patm) = lue_class.station_vals[station][i]
-            #
-            # Calculate other necessary parameters for regression:
-            st_ca = (1.e-6)*st_co2*st_patm       # Pa, atms. CO2
-            st_gs = my_lue.calc_gstar(st_tair)          # Pa, photores. comp. point
-            st_k = my_lue.calc_k(st_tair, st_patm)      # Pa, Michaelis-Menten coef.
-            st_eta = my_lue.viscosity_h2o(st_tair)      # mPa s, water viscosity
-            st_iabs = st_fpar*st_ppfd            # mol/m2, abs. PPFD
-            st_fa = (st_cpa/1.26)**(0.25)        # unitless, func. of alpha
-            #
-            # Filter variables out of range:
-            if st_vpd < 0:
-                st_vpd = numpy.nan
-            #
-            if i == 0:
-                x_data = numpy.array(
-                    tuple([st_iabs, st_ca, st_gs, st_vpd, st_k, st_eta, st_fa]),
-                    dtype={'names' : ('Iabs', 'ca', 'Gs', 'D', 'K', 'eta', 'fa'),
-                        'formats' : ('f4', 'f4', 'f4', 'f4', 'f4', 'f4', 'f4')},
-                    ndmin=1
-                )
-                y_data = numpy.array([st_gpp,])
-            else:
-                x_temp = numpy.array(
-                    tuple([st_iabs, st_ca, st_gs, st_vpd, st_k, st_eta, st_fa]),
-                    dtype={'names' : ('Iabs', 'ca', 'Gs', 'D', 'K', 'eta', 'fa'),
-                        'formats' : ('f4', 'f4', 'f4', 'f4', 'f4', 'f4', 'f4')},
-                    ndmin=1
-                )
-                x_data = numpy.append(x_data, x_temp, axis=0)
-                y_data = numpy.append(y_data, [st_gpp,])
+        # Get predictors and observations:
+        x_data = numpy.copy(lue_class.st_lue_vars[station])
+        y_data = x_data['GPP']
         #
-        # Remove nans from data sets:
-        st_idx = numpy.where(~numpy.isnan(x_data['D']))[0]
-        x_data = x_data[st_idx,]
-        y_data = y_data[st_idx]
-        num_rows = len(st_idx)
+        # Estimate beta:
+        est_beta = lue_class.beta_estimate(station)
         #
-        # Calculate predictor statistics:
-        gpp_stats[0] = lue_class.calc_statistics(y_data)
-        iabs_stats[0] = lue_class.calc_statistics(x_data['Iabs'])
-        ca_stats[0] = lue_class.calc_statistics(x_data['ca'])
-        gs_stats[0] = lue_class.calc_statistics(x_data['Gs'])
-        vpd_stats[0] = lue_class.calc_statistics(x_data['D'])
-        k_stats[0] = lue_class.calc_statistics(x_data['K'])
-        eta_stats[0] = lue_class.calc_statistics(x_data['eta'])
-        #
-        est_phio, est_beta = predict_params(ca_stats, vpd_stats, eta_stats, 
-                                            gpp_stats, gs_stats, iabs_stats, 
-                                            k_stats)
         # Curve fit:
-        try:
-            fit_opt, fit_cov = curve_fit(next_gen_lue, 
-                                        x_data, 
-                                        y_data, 
-                                        p0=[est_phio, est_beta])
-        except:
-            st_phio = -9999.
-            st_beta = -9999.
-        else:
-            st_phio, st_beta = fit_opt
-            #
-            try:
-                fit_var = numpy.diag(fit_cov)
-            except ValueError:
-                fit_var = [0.0, 0.0]
-            else:
-                if numpy.isfinite(fit_var).all() and not (fit_var < 0).any():
-                    # Get parameter standard errors:
-                    (st_phio_err, st_beta_err) = numpy.sqrt(fit_var)
-                    #
-                    # Calculate t-values:
-                    st_phio_t = st_phio/st_phio_err
-                    st_beta_t = st_beta/st_beta_err
-                    # 
-                    # Calculate p-values:
-                    st_phio_p, st_beta_p = scipy.stats.t.pdf(
-                        -abs(numpy.array([st_phio_t, st_beta_t])),
-                        num_rows
-                    )
-                    #
-                    # Calculate r-squared:
-                    dum_x = next_gen_lue(x_data, st_phio, st_beta)
-                    dum_slope, dum_intrcp, dum_r, dum_p, dum_sterr = (
-                        scipy.stats.linregress(dum_x, y_data))
-                    st_rsqr = dum_r**2
+        plsq, cov, infodict, mesg, ier = leastsq(lue_class.lue_resid, 
+                                                 est_beta,
+                                                 args=(x_data, y_data), 
+                                                 Dfun=lue_class.lue_jacob, 
+                                                 full_output=True)
+        #
+        beta_fit = plsq[0]
+        y_fit = lue_class.next_gen_lue(x_data, beta_fit)
+        #
+        # Calculate fitness:
+        m = len(y_data)
+        ssxx = numpy.power(y_fit, 2).sum() - m*(y_fit.mean()**2)
+        ssyy = numpy.power(y_data, 2).sum() - m*(y_data.mean()**2)
+        ssxy = (y_fit*y_data).sum() - m*y_fit.mean()*y_data.mean()
+        rsqr = ssxy**2/(ssxx*ssyy)
+        #
+        st_beta = beta_fit
+        st_rsqr = rsqr
     #
     return (x_data, y_data, st_phio, st_beta, st_rsqr)
 
@@ -923,6 +848,24 @@ def grad_hess(my_vars, beta):
     #
     return(grad_f, grad2_f)
 
+def make_plot(my_fit, my_obs, my_text):
+    """
+    """
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=14)
+    plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
+    ax1.plot(my_fit, my_obs, 'ro', label='Fitted') 
+    ax1.plot(numpy.sort(my_obs), numpy.sort(my_obs), '--k', label='1:1 Line')
+    ax1.set_ylabel('Observed GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
+    ax1.set_xlabel('Modeled GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
+    ax1.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+                ncol=3, mode="expand", borderaxespad=0., fontsize=14)
+    ax1.text(0.05, 0.95, my_text, transform=ax1.transAxes, fontsize=14, 
+            verticalalignment='top', bbox=props)
+    plt.show()
+
 ###############################################################################
 ## MAIN PROGRAM:
 ###############################################################################
@@ -984,7 +927,7 @@ for line in my_data:
                            st_patm)
 
 # List of each station:
-all_stations = numpy.array(list(set(my_data['station'])))
+all_stations = numpy.sort(numpy.array(list(set(my_data['station']))))
 
 # Test calc_lue function:
 #for station in all_stations:
@@ -998,37 +941,103 @@ all_stations = numpy.array(list(set(my_data['station'])))
 #x_data, y_data, st_phio, st_beta, st_rsqr = get_lue(my_lue, 'ES-ES1')
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# BEGIN my_ls_fit FUNCTION:
+# BEGIN NEW calc_lue FUNCTION:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# What's wrong with: 
+#   AU-Tum  <--- fixed with divide by zero clause in jacobian calculation
+#   BW-Ghg  * bad fit
+#   IT-Col  <--- fixed with divide by zero clause in next_gen_lue function
+#   SK-Tat  * bad fit
+#   UK-Her  * bad fit
+#   US-Aud  * too few data points
+#   US-Blo  <--- fixed with divide by zero clause in next_gen_lue function
+#   US-Wi2  * too few data points
+#
+# Initialize multi-page PDF:
+fig_file = out_dir + 'GePiSaT_LUE_beta_fitted.pdf'
+pp = PdfPages(fig_file)
+
 my_dict = {}
-station = 'DE-Kli'
+#station = 'DE-Tha'
 for station in all_stations:
     x_data = numpy.copy(my_lue.st_lue_vars[station])
     y_data = x_data['GPP']
     #
-    p0 = my_lue.beta_estimate(station)
-    plsq, cov, infodict, mesg, ier = leastsq(my_lue.lue_resid, 
-                                             p0, 
-                                             args=(x_data, y_data), 
-                                             Dfun=my_lue.lue_jacob, 
-                                             full_output=True)
-    beta_fit = plsq[0]
-    y_fit = my_lue.next_gen_lue(x_data, beta_fit)
+    if y_data.shape[0] > 4:
+        p0 = my_lue.beta_estimate(station)
+        plsq, cov, infodict, mesg, ier = leastsq(my_lue.lue_resid, 
+                                                p0, 
+                                                args=(x_data, y_data), 
+                                                Dfun=my_lue.lue_jacob, 
+                                                full_output=True)
+        beta_fit = plsq[0]
+        y_fit = my_lue.next_gen_lue(x_data, beta_fit)
+        #
+        #slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(y_data,
+        #                                                                     y_fit)
+        # Calculate fitness:
+        m = len(y_data)
+        ssxx = numpy.power(y_fit, 2).sum() - m*(y_fit.mean()**2)
+        ssyy = numpy.power(y_data, 2).sum() - m*(y_data.mean()**2)
+        ssxy = (y_fit*y_data).sum() - m*y_fit.mean()*y_data.mean()
+        rsqr = ssxy**2/(ssxx*ssyy)
+        #
+        # Get error associated with fitted parameter
+        #   cov is the fractional covariance matrix
+        #   multiply by the residual variance (reduced chi squared)
+        if cov is not None:
+            chisq, pval = scipy.stats.chisquare(y_data, y_fit, ddof=1)
+            rchisq = chisq/(m - 1. - 1.)
+            pcov = cov*rchisq
+            beta_err = numpy.sqrt(pcov[0][0])
+            #
+            if not numpy.isfinite(beta_err):
+                beta_err = numpy.nan
+            #
+            # Calc t and p-value
+            beta_t = beta_fit/beta_err
+            beta_p = scipy.stats.t.pdf(-abs(beta_t), m)
+        else:
+            beta_err = numpy.nan
+        #
+        # FOR PLOTTING
+        if not numpy.isfinite(beta_err):
+            if beta_fit > 9999:
+                text_str = ("$\\mathrm{%s}$\n"
+                            "$\\beta=%0.2e\\pm nan$\n"
+                            "$R^2=%0.3f$") % (station, beta_fit, rsqr)
+            else:
+                text_str = ("$\\mathrm{%s}$\n"
+                            "$\\beta=%0.2f\\pm nan$\n"
+                            "$R^2=%0.3f$") % (station, beta_fit, rsqr)
+        elif beta_fit > 9999:
+            text_str = ("$\\mathrm{%s}$\n"
+                        "$\\beta=%0.2e\\pm%0.2e$\n"
+                        "$R^2=%0.3f$") % (station, beta_fit, beta_err, rsqr)
+        else:
+            text_str = ("$\\mathrm{%s}$\n"
+                        "$\\beta=%0.2f\\pm%0.2f$\n"
+                        "$R^2=%0.3f$") % (station, beta_fit, beta_err, rsqr)
+        #
+        make_plot(y_fit, y_data, text_str)
+        pp.savefig()
+        plt.close()
+    else:
+        beta_fit = numpy.nan
+        beta_err = numpy.nan
+        rsqr = numpy.nan
     #
-    # Calculate fitness:
-    m = len(y_data)
-    ssxx = numpy.power(y_fit, 2).sum() - m*(y_fit.mean()**2)
-    ssyy = numpy.power(y_data, 2).sum() - m*(y_data.mean()**2)
-    ssxy = (y_fit*y_data).sum() - m*y_fit.mean()*y_data.mean()
-    rsqr = ssxy**2/(ssxx*ssyy)
-    #
-    my_dict[station] = (p0, beta_fit, rsqr)
+    my_dict[station] = (p0, beta_fit, beta_err, rsqr)
 
-# Calc t and p-value
-# Calculate the p-value of hte estimate:
-#beta_err = numpy.sqrt(dlam)
-#beta_t = est_beta/beta_err
-#beta_p = scipy.stats.t.pdf(-abs(beta_t), m)
+# Close PDF file
+d = pp.infodict()
+d['Title'] = 'GePiSaT LUE Plots with fitted beta'
+d['Author'] = 'Tyler W. Davis'
+pp.close()
+
+
+
 
 # Plot results:
 station = 'AT-Neu'

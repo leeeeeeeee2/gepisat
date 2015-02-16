@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-11-18 -- created
-# 2015-02-13 -- last updated
+# 2015-02-16 -- last updated
 #
 # ~~~~~~~~~~~~
 # description:
@@ -37,13 +37,16 @@
 # 13. moved next_gen_lue, lue_resid and lue_jacob into LUE class [15.02.12]
 # 14. changed density equation to Tumlirz (Fisher et al., 1975) [15.02.12]
 # 15. error estimate to fitted beta parameter [15.02.13]
+# 16. added checks for negatives in next_gen_lue and lue_der funcs [15.02.15]
+# 17. created get_elv function [15.02.16]
+# 18. created wang_han_eq function [15.02.16]
+# 19. added elevation to LUE class variable inputs [15.02.16]
+# 20. updated beta_estimate function & added it to st_lue_vars [15.02.16]
 # 
 # ~~~~~
 # todo:
 # ~~~~~
-# 1. Update beta estimation method based on Wang Han equation
-# 2. Check leastsq method---it might be failing due to lack of observations
-# 3. Add another goodness of fit metric (e.g., regressed slope versus 1:1 line)
+# 1. Add Willmott's index of agreement (Willmott et al. 2012)
 #
 ###############################################################################
 ## IMPORT MODULES:
@@ -94,11 +97,12 @@ class LUE:
                               'CPA' : 'NA', 
                               'Tair' : 'degC', 
                               'CO2' : 'ppm', 
-                              'Patm' : 'Pa'}
+                              'Patm' : 'Pa',
+                              'elv' : 'm'}
         #
         # Define station value header line:
         header_vals = ['Timestamp', 'GPP', 'GPP_err', 'fPAR', 'PPFD',  
-                       'VPD', 'CPA', 'Tair', 'CO2', 'Patm']
+                       'VPD', 'CPA', 'Tair', 'CO2', 'Patm', 'elv']
         header = ''
         for k in header_vals:
             header += k
@@ -144,7 +148,7 @@ class LUE:
     # Class Function Definitions
     # ////////////////////////////////////////////////////////////////////////
     def add_station_val(self, station, month, gpp, gpp_err, 
-                        fpar, ppfd, vpd, alpha, tair, co2, patm):
+                        fpar, ppfd, vpd, alpha, tair, co2, patm, elv):
         """
         Name:     LUE.add_station_val
         Input:    - string, station name (station)
@@ -158,6 +162,7 @@ class LUE:
                   - float, monthly air temp, degC (tmp)
                   - float, annual atm. CO2, ppm (co2)
                   - float, monthly atm. pressure, Pa (patm)
+                  - float, elevation, m (elv)
         Output:   None.
         Features: Appends a set of monthly values to the value dictionary
         Depends:  - calc_gstar
@@ -171,7 +176,7 @@ class LUE:
         #
         # Place value parameters into a tuple:
         val_params = (month, gpp, gpp_err, fpar, ppfd, vpd, alpha, tair, co2, 
-                      patm)
+                      patm, elv)
         #
         # Calculate lue variables & place into tuple:
         iabs = fpar*ppfd                    # mol/m2, abs. PPFD
@@ -182,7 +187,8 @@ class LUE:
         ns = self.viscosity_h2o(tair, patm) # Pa s, viscosity
         ns /= self.n25                      # unitless, water viscosity
         fa = (alpha/1.26)**(0.25)           # unitless, func. of alpha
-        var_params = (gpp, gpp_err, iabs, ca, gs, d, k, ns, fa)
+        beta1, beta2 = self.beta_estimate(ca, d, k, gs, ns, tair, elv)
+        var_params = (gpp, gpp_err, iabs, ca, gs, d, k, ns, fa, beta1, beta2)
         #
         # ~~~~~~~~~~~~~~~~~~~~~~~
         # Meteorological Values
@@ -192,9 +198,9 @@ class LUE:
             self.station_vals[station] = numpy.array(
                 val_params,
                 dtype={'names' : ('Timestamp', 'GPP', 'GPP_err', 'fPAR', 'PPFD', 
-                                  'VPD', 'CPA', 'Tair', 'CO2', 'Patm'),
+                                  'VPD', 'CPA', 'Tair', 'CO2', 'Patm', 'elv'),
                        'formats' : ('O', 'f4', 'f4', 'f4', 'f4', 
-                                    'f4', 'f4', 'f4', 'f4', 'f4')},
+                                    'f4', 'f4', 'f4', 'f4', 'f4', 'f4')},
                         ndmin=1
                 )
         else:
@@ -202,9 +208,9 @@ class LUE:
             temp_array = numpy.array(
                 val_params,
                 dtype={'names' : ('Timestamp', 'GPP', 'GPP_err', 'fPAR', 'PPFD', 
-                                  'VPD', 'CPA', 'Tair', 'CO2', 'Patm'),
+                                  'VPD', 'CPA', 'Tair', 'CO2', 'Patm', 'elv'),
                        'formats' : ('O', 'f4', 'f4', 'f4', 'f4', 
-                                    'f4', 'f4', 'f4', 'f4', 'f4')},
+                                    'f4', 'f4', 'f4', 'f4', 'f4', 'f4')},
                         ndmin=1
                 )
             self.station_vals[station] = numpy.append(
@@ -225,10 +231,12 @@ class LUE:
                     dtype={
                         'names' : ('GPP', 'GPP_err', 'Iabs', 
                                    'ca', 'Gs', 'D', 
-                                   'K', 'ns', 'fa'),
+                                   'K', 'ns', 'fa', 
+                                   'beta1', 'beta2'),
                         'formats' : ('f4', 'f4', 'f4', 
                                      'f4', 'f4', 'f4', 
-                                     'f4', 'f4', 'f4')
+                                     'f4', 'f4', 'f4',
+                                     'f4', 'f4')
                         },
                     ndmin=1
                     )
@@ -238,10 +246,12 @@ class LUE:
                     dtype={
                         'names' : ('GPP', 'GPP_err', 'Iabs', 
                                    'ca', 'Gs', 'D', 
-                                   'K', 'ns', 'fa'),
+                                   'K', 'ns', 'fa',
+                                   'beta1', 'beta2'),
                         'formats' : ('f4', 'f4', 'f4', 
                                      'f4', 'f4', 'f4', 
-                                     'f4', 'f4', 'f4')
+                                     'f4', 'f4', 'f4',
+                                     'f4', 'f4')
                         },
                     ndmin=1
                     )
@@ -251,39 +261,43 @@ class LUE:
                     axis=0
                     )
     #
-    def beta_estimate(self, station):
+    def beta_estimate(self, my_ca, my_d, my_k, my_gs, my_ns, my_t, my_z):
         """
         Name:     LUE.beta_estimate
-        Input:    str, station name (station)
-        Output:   float
-        Features: Returns an estimate for beta based on Colin's method
-        Depends:  calc_statistics
+        Input:    - float, atmospheric CO2 concentration, Pa (my_ca)
+                  - float, vapor pressure deficit, Pa (my_d)
+                  - float, Michaelis-Menten coeff, Pa (my_k)
+                  - float, photorespiratory comp point, Pa (my_gs)
+                  - float, viscosity, unitless (my_ns)
+                  - float, air temperature, deg C (my_t)
+                  - float, elevation, m (my_z)
+        Output:   tuple 
+                  - float, predicted beta from simple expression (beta_p1)
+                  - float, predicted beta from 
+        Features: Returns an estimate for beta based on the Wang Han equation
         """
-        if station in self.st_lue_vars.keys():
-            x_data = self.st_lue_vars[station]
-            #
-            d_stats = self.calc_statistics(x_data['D'])
-            my_d = 0.5*(d_stats['max'][0] + d_stats['min'][0])
-            #
-            n_stats = self.calc_statistics(x_data['ns'])
-            my_n = 0.5*(n_stats['max'][0] + n_stats['min'][0])
-            #
-            g_stats = self.calc_statistics(x_data['Gs'])
-            my_g = 0.5*(g_stats['max'][0] + g_stats['min'][0])
-            #
-            t_data = self.station_vals[station]['Tair']
-            t_stats = self.calc_statistics(t_data)
-            my_t = 0.5*(t_stats['max'][0] + t_stats['min'][0])
-            #
-            my_k = self.calc_statistics(x_data['K'])['ave'][0]
-            #
-            chi = 0.5 - (0.5 - 0.9)*(2.5e3 - my_d)/(2.5e3)
-            beta_p = 1.6*my_d/(my_k + my_g)
-            beta_p *= ((chi - my_g)/(1.0 - chi))**2
-            beta_p *= my_n
-            beta_p *= 0.0017154
-            #
-            return beta_p
+        if not numpy.isfinite(my_z):
+            my_z = 0.
+        #
+        whe = numpy.exp(
+            1.19 
+            + 0.0545*(my_t - 25.)        # T in deg C
+            - 0.5*numpy.log(1e-3*my_d)   # D in kPa
+            - 0.0815*(1e-3*my_z)         # z in km
+        )
+        chi = whe/(1. + whe)
+        #
+        beta_p1 = 1.6*my_ns*my_d*(chi**2)
+        beta_p1 /= (1. - chi)**2
+        beta_p1 /= my_k
+        #
+        beta_p2 = 1.6*my_ns*my_d
+        beta_p2 /= (my_k + my_gs)
+        beta_p2 *= (chi*my_ca - my_gs)**2
+        beta_p2 /= (my_ca**2)
+        beta_p2 /= (chi - 1.)**2
+        #
+        return (beta_p1, beta_p2)
     #
     def calc_gstar(self, tc):
         """
@@ -648,7 +662,7 @@ class LUE:
                 else:
                     f.write(
                         ("%s,%0.4f,%0.4f,%0.4f,%0.4f,"
-                        "%0.4f,%0.3f,%0.2f,%0.2f,%0.2f\n") % t)
+                        "%0.4f,%0.3f,%0.2f,%0.2f,%0.2f,%0.3f\n") % t)
                     f.close()
     #
     def write_out_lue(self, out_file):
@@ -850,6 +864,12 @@ def grad_hess(my_vars, beta):
 
 def make_plot(my_fit, my_obs, my_text):
     """
+    Name:     make_plot
+    Input:    - numpy.ndarray, modelled GPP (my_fit)
+              - numpy.ndarray, observed GPP (my_obs)
+              - str, plot text (my_text)
+    Output:   None
+    Features: Creates a plot of observed versus modelled GPP
     """
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
     fig = plt.figure()
@@ -866,15 +886,103 @@ def make_plot(my_fit, my_obs, my_text):
             verticalalignment='top', bbox=props)
     plt.show()
 
+def get_elv(meta_dir, st_name):
+    """
+    Name:     get_elv
+    Input:    - str, metadata file w/ path (meta_dir)
+              - str, station name (st_name)
+    Output:   float, elevation, m (my_elv)
+    Features: Returns the station elevation from GePiSaT database metadata file
+    """
+    my_files = glob.glob(meta_dir + '*Met-Data*')
+    if my_files:
+        my_file = my_files[0]
+        my_data = numpy.loadtxt(fname=my_file,
+                                dtype={'names' : ('stationid', 'ele'),
+                                       'formats' : ('S6', 'f4')},
+                                delimiter=',',
+                                skiprows=1,
+                                usecols=(4,8),
+                                converters={4 : numpy.str,
+                                            8 : numpy.float})
+        my_idx = numpy.where(my_data['stationid'] == st_name)[0]
+        if my_idx:
+            my_elv = my_data['ele'][my_idx[0]]
+            if my_elv == -9999:
+                my_elv = numpy.nan
+        else:
+            my_elv = numpy.nan
+    else:
+        my_elv = numpy.nan
+    #
+    return my_elv
+
+def wang_han_eq(my_d, my_k, my_n, my_t, my_z, my_gs, my_ca):
+    """
+    Name:     wang_han_eq
+    Inputs:   - float, vapor pressure deficit, Pa (my_d)
+              - float, Michaelis-Menten coef, Pa (my_k)
+              - float, viscosity, unitless (my_n)
+              - float, air temperature, deg C (my_t)
+              - float, elevation, m (my_z)
+              - float, photorespiratory comp. point, Pa (my_gs)
+              - float, atmospheric CO2 concentration, Pa (my_ca)
+    Output:   tuple
+              - float, predicted chi from VPD (chi2)
+              - float, predicted chi from Wang Han (chi1)
+              - float, predicted beta fro. simple expression (beta_p1)
+              - float, predicted beta from precise equation (beta_p2)
+    Features: Returns the estimate for beta based on the Wang Han equation
+    """
+    # Wang Han's equation (new method):
+    whe = numpy.exp(
+        1.19 
+        + 0.0545*(my_t - 25.)         # T in deg C
+        - 0.5*numpy.log(1e-3*my_d)    # D in kPa
+        - 0.0815*(1e-3*my_z)          # z in km
+    )
+    chi1 = whe/(1. + whe)
+    chi2 = 0.5 - (0.5 - 0.9)*(2.5e3 - my_d)/(2.5e3)
+    #
+    beta_p1 = 1.6*my_n*my_d*(chi1**2)
+    beta_p1 /= (1. - chi1)**2
+    beta_p1 /= my_k
+    #
+    beta_p2 = 1.6*my_n*my_d
+    beta_p2 /= (my_k + my_gs)
+    beta_p2 *= (chi1*my_ca - my_gs)**2
+    beta_p2 /= (my_ca**2)
+    beta_p2 /= (chi1 - 1.)**2
+    #
+    return (chi2, chi1, beta_p1, beta_p2)
+
+def writeout(f, d):
+    """
+    Name:     writeout
+    Input:    - string, file name with path (t)
+              - string, data to be written to file (d)
+    Output:   None
+    Features: Writes new/overwrites existing file with data string
+    """
+    try:
+        OUT = open(f, 'w')
+        OUT.write(d)
+    except IOError:
+        print "Error: cannot write to file: ", f
+    else:
+        OUT.close()
+
 ###############################################################################
 ## MAIN PROGRAM:
 ###############################################################################
 mac = 0
 if mac:
     my_dir = '/Users/twdavis/Dropbox/Work/Imperial/flux/results/2002-06/lue/'
+    met_dir = '/Users/twdavis/Dropbox/Work/Imperial/flux/data/psql-data/flux/'
     out_dir = '/Users/twdavis/Desktop/'
 else:
     my_dir = '/home/user/Dropbox/Work/Imperial/flux/results/2002-06/lue/'
+    met_dir = '/home/user/Dropbox/Work/Imperial/flux/data/psql-data/flux/'
     out_dir = '/home/user/Desktop/'
 
 my_files = glob.glob(my_dir + 'GePiSaT_All_Data-26*')
@@ -908,11 +1016,13 @@ my_data = numpy.loadtxt(
     }
 )
 
+
 # Create a LUE class as in GePiSaT model
 my_lue = LUE()
 for line in my_data:
     (st_name, st_time, st_gpp, st_gpp_err, st_fpar, 
      st_ppfd, st_vpd, st_cpa, st_tair, st_co2, st_patm) = line
+    st_elv = get_elv(met_dir, st_name)
     #
     my_lue.add_station_val(st_name, 
                            st_time, 
@@ -924,10 +1034,85 @@ for line in my_data:
                            st_cpa,
                            st_tair,
                            st_co2,
-                           st_patm)
+                           st_patm,
+                           st_elv)
+
 
 # List of each station:
 all_stations = numpy.sort(numpy.array(list(set(my_data['station']))))
+
+
+# Estimate beta from Wang Han equation:
+out_file = out_dir + 'Wang_Han_beta_estimates.txt'
+header = ('Timestamp,station,Tair_degC,D_kPa,K_Pa,'
+          'ns,elv_km,Gs_Pa,ca_Pa,chi2,chi1,beta1,beta2\n')
+writeout(out_file, header)
+for station in all_stations:
+    z_data = numpy.copy(my_lue.station_vals[station])
+    m = z_data.shape[0]
+    for i in xrange(m):
+        elv = z_data['elv'][i]                  # m
+        tair = z_data['Tair'][i]                # deg C
+        patm = z_data['Patm'][i]                # Pa
+        d = 1e3*z_data['VPD'][i]                # Pa
+        k = my_lue.calc_k(tair, patm)           # Pa
+        ns = my_lue.viscosity_h2o(tair, patm)   # Pa s
+        ns /= my_lue.n25                        # unitless
+        gs = my_lue.calc_gstar(tair)            # Pa
+        ca = z_data['CO2'][i]                   # ppm
+        ca *= (1.e-6)*patm                      # Pa
+        #
+        cest2, cest1, best1, best2 = wang_han_eq(d, k, ns, tair, elv, gs, ca)
+        #
+        if numpy.isfinite(best1) and numpy.isfinite(best2):
+            out_line = '%s,%s,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n' % (
+                z_data['Timestamp'][i].date(), station, tair, d, k, ns, 
+                elv, gs, ca, cest2, cest1, best1, best2)
+            #
+            try:
+                OUT = open(out_file, 'a')
+                OUT.write(out_line)
+            except IOError:
+                print "Error: cannot write to file: ", out_file
+            else:
+                OUT.close()
+
+# Read estimates:
+# Note: 0.5 < chi < 1.0
+est_data = numpy.loadtxt(
+    fname=out_file,
+    dtype={
+        'names': (
+            'timestamp', 'station', 'tair', 'D', 'K',
+            'ns', 'elv', 'Gs', 'ca', 'chi2', 'chi1', 'beta1', 'beta2'
+        ),
+        'formats' : (
+            'O', 'S6', 'f4', 'f4', 'f4', 'f4', 'f4',
+            'f4', 'f4', 'f4', 'f4', 'f4', 'f4'
+        )
+    },
+    delimiter=',',
+    skiprows=1,
+    converters={
+        0 : lambda x: datetime.datetime.strptime(x, '%Y-%m-%d'),
+        1 : numpy.str,
+        2 : numpy.float,                       # deg C
+        3 : numpy.float,                       # kPa
+        4 : numpy.float,                       # Pa
+        5 : numpy.float,                       # unitless
+        6 : numpy.float,                       # km
+        7 : numpy.float,                       # Pa
+        8 : numpy.float,                       # Pa
+        9 : numpy.float,                       # unitless
+        10 : numpy.float,                      # unitless
+        11 : numpy.float,                      # unitless
+        12 : numpy.float                       # unitless
+    }
+)
+
+
+                         
+
 
 # Test calc_lue function:
 #for station in all_stations:

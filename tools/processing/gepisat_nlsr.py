@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-11-18 -- created
-# 2015-02-16 -- last updated
+# 2015-02-17 -- last updated
 #
 # ~~~~~~~~~~~~
 # description:
@@ -928,7 +928,7 @@ def wang_han_eq(my_d, my_k, my_n, my_t, my_z, my_gs, my_ca):
               - float, photorespiratory comp. point, Pa (my_gs)
               - float, atmospheric CO2 concentration, Pa (my_ca)
     Output:   tuple
-              - float, predicted chi from VPD (chi2)
+              - float, predicted chi from Wang Han w/o z (chi2)
               - float, predicted chi from Wang Han (chi1)
               - float, predicted beta fro. simple expression (beta_p1)
               - float, predicted beta from precise equation (beta_p2)
@@ -942,12 +942,23 @@ def wang_han_eq(my_d, my_k, my_n, my_t, my_z, my_gs, my_ca):
         - 0.0815*(1e-3*my_z)          # z in km
     )
     chi1 = whe/(1. + whe)
-    chi2 = 0.5 - (0.5 - 0.9)*(2.5e3 - my_d)/(2.5e3)
     #
+    whe2 = numpy.exp(
+        1.19 
+        + 0.0545*(my_t - 25.)         # T in deg C
+        - 0.5*numpy.log(1e-3*my_d)    # D in kPa
+    )
+    chi2 = whe2/(1. + whe2)
+    #
+    # VPD-based chi estimate (old method):
+    #chi2 = 0.5 - (0.5 - 0.9)*(2.5e3 - my_d)/(2.5e3)
+    #
+    # Simple beta estimate:
     beta_p1 = 1.6*my_n*my_d*(chi1**2)
     beta_p1 /= (1. - chi1)**2
     beta_p1 /= my_k
     #
+    # Precise beta estimate:
     beta_p2 = 1.6*my_n*my_d
     beta_p2 /= (my_k + my_gs)
     beta_p2 *= (chi1*my_ca - my_gs)**2
@@ -971,6 +982,32 @@ def writeout(f, d):
         print "Error: cannot write to file: ", f
     else:
         OUT.close()
+
+def make_bplot(my_data, my_names, y_lab):
+    """
+    Name:     make_bplot
+    Input:    - list (my_data)
+              - str, xtick label names (my_names)
+              - str, y axis label (y_lab)
+    Features: Boxplot of data
+    """
+    fig, ax1 = plt.subplots(figsize=(10,6))
+    fig.canvas.set_window_title('A Boxplot Example')
+    plt.subplots_adjust(left=0.075, right=0.95, top=0.9, bottom=0.25)
+    #
+    bp = plt.boxplot(my_data, notch=0, sym='+', vert=1, whis=1.5)
+    plt.setp(bp['boxes'], color='black')
+    plt.setp(bp['whiskers'], color='black')
+    plt.setp(bp['fliers'], color='red', marker='+')
+    #
+    ax1.yaxis.grid(True, linestyle='-', which='major', color='lightgrey',
+                alpha=0.5)
+    ax1.set_axisbelow(True)
+    ax1.set_ylabel(y_lab, fontsize=16)
+    xtickNames = plt.setp(ax1, xticklabels=my_names)
+    plt.setp(xtickNames, rotation=90, fontsize=14) # was fontsize=8
+    plt.show()
+
 
 ###############################################################################
 ## MAIN PROGRAM:
@@ -1047,6 +1084,10 @@ out_file = out_dir + 'Wang_Han_beta_estimates.txt'
 header = ('Timestamp,station,Tair_degC,D_kPa,K_Pa,'
           'ns,elv_km,Gs_Pa,ca_Pa,chi2,chi1,beta1,beta2\n')
 writeout(out_file, header)
+beta1_dict = {}
+beta2_dict = {}
+chi_dict = {}
+monthly_dict = {}
 for station in all_stations:
     z_data = numpy.copy(my_lue.station_vals[station])
     m = z_data.shape[0]
@@ -1065,6 +1106,28 @@ for station in all_stations:
         cest2, cest1, best1, best2 = wang_han_eq(d, k, ns, tair, elv, gs, ca)
         #
         if numpy.isfinite(best1) and numpy.isfinite(best2):
+            my_time = z_data['Timestamp'][i]
+            my_month = my_time.month
+            if my_month in monthly_dict.keys():
+                monthly_dict[my_month] += (best2,)
+            else:
+                monthly_dict[my_month] = (best2,)
+            #
+            if station in chi_dict.keys():
+                chi_dict[station] += (cest1,)
+            else:
+                chi_dict[station] = (cest1,)
+            #
+            if station in beta1_dict.keys():
+                beta1_dict[station] += (best1,)
+            else:
+                beta1_dict[station] = (best1,)
+            #
+            if station in beta2_dict.keys():
+                beta2_dict[station] += (best2,)
+            else:
+                beta2_dict[station] = (best2,)
+            #
             out_line = '%s,%s,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f\n' % (
                 z_data['Timestamp'][i].date(), station, tair, d, k, ns, 
                 elv, gs, ca, cest2, cest1, best1, best2)
@@ -1111,8 +1174,48 @@ est_data = numpy.loadtxt(
 )
 
 
-                         
 
+fig = plt.figure()
+ax1 = fig.add_subplot(111)
+plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=14)
+plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
+ax1.plot(est_data['chi1'], est_data['chi2'], 'ko') 
+ax1.set_ylabel('$\\chi_o$ without elevation', fontsize=16)
+ax1.set_xlabel('$\\chi_o$ full equation', fontsize=16)
+plt.show()
+
+
+monthly_names = numpy.sort(monthly_dict.keys())
+monthly_chi = []
+monthly_best1 = []
+monthly_best2 = []
+for name in monthly_names:
+    monthly_best2.append(monthly_dict[name])
+
+month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+make_bplot(monthly_chi, month_names, '$\\chi_o$')
+make_bplot(monthly_best1, month_names, 'Simple $\\beta$')
+make_bplot(monthly_best2, month_names, 'Precise $\\beta$')
+
+beta1_names = numpy.sort(beta1_dict.keys())
+beta1_data = []
+for name in beta1_names:
+    beta1_data.append(beta1_dict[name])
+
+beta2_names = numpy.sort(beta2_dict.keys())
+beta2_data = []
+for name in beta2_names:
+    beta2_data.append(beta2_dict[name])
+
+chi_names = numpy.sort(chi_dict.keys())
+chi_data = []
+for name in chi_names:
+    chi_data.append(chi_dict[name])
+
+make_bplot(beta1_data, beta1_names, 'Simple $\\beta$')
+make_bplot(beta2_data, beta2_names, 'Precise $\\beta$')
+make_bplot(chi_data, chi_names, '$\\chi_o$')
 
 # Test calc_lue function:
 #for station in all_stations:

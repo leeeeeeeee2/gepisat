@@ -1,13 +1,13 @@
 #!/usr/bin/python
 #
 # model.py 
-# __version__ 2.0.0
+# __version__ 2.1.0
 #
 # written by Tyler W. Davis
 # Imperial College London
 #
 # 2013-07-05 -- created
-# 2015-01-31 -- last updated
+# 2015-02-20 -- last updated
 #
 # ------------
 # description:
@@ -344,7 +344,19 @@
 #  - updated the order of functions [15.01.30]
 #    --> base and dependant function sections
 #    --> otherwise alphabetized 
-#
+# VERSION 2.1.0
+#  - updated LUE class [15.02.20]
+#    --> removed basic_lue() function
+#    --> moved calc_gstar function to LUE class
+#    --> moved calc_k function to LUE class
+#    --> moved next_gen_lue function to LUE class
+#    --> moved predict_params to LUE class & renamed beta_estimate
+#    --> moved viscosity_h2o to LUE class & updated with Huber method
+#    --> removed calc_lue function (GPP estimates now made in LUE class)
+#  - updated get_pressure function to also return elevation [15.02.20]
+#  - fixed time issue in gapfill_ppfd [15.02.20]
+#  - created calc_daily_gpp function [15.02.20]
+# 
 # -----
 # todo:
 # -----
@@ -367,7 +379,7 @@
 #        normality on model residuals
 #     --> scipy.stats.shapiro(my_resids)
 #         * returns test statistic and p-value
-#         * Note: p-value indicates signifantly different from normal
+#         * Note: p-value indicates significantly different from normal
 #     --> scipy.stats.anderson(my_resids, 'norm')
 #         * returns test statistic, array of critical values, and sig values
 #         * if test statistic is larger than the critical value at the 
@@ -1964,11 +1976,10 @@ class LUE:
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Variable Definitions
     # ////////////////////////////////////////////////////////////////////////
-    # Dictionary of station's monthly GPP, PPFD, fAPAR vals:
-    station_vals = {}
-    #
-    # Dictionary of station's LUE:
-    station_lue = {}
+    kc = 0.41          # Jmax cost coefficient
+    kphio = 0.093      # (Long et al., 1993)
+    kPo = 101325.      # standard atmosphere, Pa (Allen, 1973)
+    kTo = 25.          # base temperature, deg C (Prentice, unpublished)
     #
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -1976,46 +1987,458 @@ class LUE:
     def __init__(self):
         """
         Name:     LUE.__init__
-        Input:    None.
-        Features: Initializes empty dictionaries for LUE
+        Features: Initializes dictionaries for the light-use efficiency model
         """
+        # Dictionary of stations' monthly values & their units:
+        # * this is for printing to file
         self.station_vals = {}
+        self.station_units = {'Timestamp' : 'NA', 
+                              'GPP' : 'mol_m2', 
+                              'GPP_err' : 'mol_m2', 
+                              'fPAR' : 'NA', 
+                              'PPFD' : 'mol_m2', 
+                              'VPD' : 'kPa', 
+                              'CPA' : 'NA', 
+                              'Tair' : 'degC', 
+                              'CO2' : 'ppm', 
+                              'Patm' : 'Pa',
+                              'elv' : 'm',
+                              'Iabs' : 'mol_m2', 
+                              'ca' : 'Pa',
+                              'Gs' : 'Pa', 
+                              'D' : 'Pa', 
+                              'K' : 'Pa', 
+                              'ns' : 'NA', 
+                              'fa' : 'NA',
+                              'beta1' : 'NA',
+                              'beta2' : 'NA',
+                              'GPP_hat1' : 'mol_m2',
+                              'GPP_hat2' : 'mol_m2'}
+        #
+        # Define station value header line:
+        header_vals = ['Timestamp', 'GPP', 'GPP_err', 'fPAR', 'PPFD',  
+                       'VPD', 'CPA', 'Tair', 'CO2', 'Patm', 'elv', 'Iabs', 
+                       'ca', 'Gs', 'D', 'K', 'ns', 'fa', 'beta1', 'beta2',
+                       'GPP_hat1', 'GPP_hat2']
+        header = ''
+        for k in header_vals:
+            header += k
+            v = self.station_units[k]
+            if v == 'NA':
+                header += ','
+            else:
+                header += '.'
+                header += v
+                header += ','
+        header = header.strip(',')
+        header += '\n'
+        self.value_header = header
+        #
+        # Dictionary of stations' light-use efficiency model variables
+        # * this is for modeling
+        self.st_lue_vars = {}
+        self.lue_var_units = {'GPP' : 'mol_m2',
+                              'GPP_err' : 'mol_m2',
+                              'Iabs' : 'mol_m2', 
+                              'ca' : 'Pa',
+                              'Gs' : 'Pa', 
+                              'D' : 'Pa', 
+                              'K' : 'Pa', 
+                              'ns' : 'NA', 
+                              'fa' : 'NA',
+                              'beta1' : 'NA',
+                              'beta2' : 'NA'}
+        #
+        # Dictionary of stations' light-use efficiency model fit/fitness:
+        # * this is for model results
         self.station_lue = {}
+        #
+        # Define standard viscosity of water, Pa s
+        self.n25 = self.viscosity_h2o(self.kTo, self.kPo)
     #
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
     # ////////////////////////////////////////////////////////////////////////
     def add_station_val(self, station, month, gpp, gpp_err, 
-                        fpar, ppfd, vpd, alpha, tmp, co2, patm):
+                        fpar, ppfd, vpd, alpha, tair, co2, patm, elv):
         """
         Name:     LUE.add_station_val
         Input:    - string, station name (station)
                   - datetime.date, current month (month)
-                  - float, monthly GPP (gpp)
-                  - float, associated GPP error (gpp_err)
+                  - float, monthly GPP, mol/m2 (gpp)
+                  - float, associated GPP error, mol/m2 (gpp_err)
                   - float, monthly FAPAR (fpar)
-                  - float, monthly PPFD (ppfd)
-                  - float, monthly VPD (vpd)
+                  - float, monthly PPFD, mol/m2 (ppfd)
+                  - float, monthly VPD, kPa (vpd)
                   - float, monthly CPA (alpha)
-                  - float, monthly air temp (tmp)
-                  - float, annual atm. CO2 (co2)
-                  - float, monthly atm. pressure (patm)
+                  - float, monthly air temp, degC (tmp)
+                  - float, annual atm. CO2, ppm (co2)
+                  - float, monthly atm. pressure, Pa (patm)
+                  - float, elevation, m (elv)
         Output:   None.
         Features: Appends a set of monthly values to the value dictionary
+        Depends:  - calc_gstar
+                  - calc_k
+                  - nxgn
+                  - viscosity_h2o
+                  - kPo
         """
         # Check for missing alpha (due to new STASH code):
         if alpha is None:
             alpha = -9999.0
         #
-        # Place parameters into a tuple:
-        params = (month, gpp, gpp_err, fpar, ppfd, vpd, alpha, tmp, co2, patm)
+        # Calculate lue variables & place into tuple:
+        iabs = fpar*ppfd                    # mol/m2, abs. PPFD
+        ca = (1.e-6)*co2*patm               # Pa, atms. CO2
+        gs = self.calc_gstar(tair)          # Pa, photores. comp. point
+        d = (1e3)*vpd                       # Pa, vapor pressure deficit
+        k = self.calc_k(tair, patm)         # Pa, Michaelis-Menten coef.
+        ns = self.viscosity_h2o(tair, patm) # Pa s, viscosity
+        ns /= self.n25                      # unitless, water viscosity
+        fa = (alpha/1.26)**(0.25)           # unitless, func. of alpha
+        beta1, beta2 = self.beta_estimate(ca, d, k, gs, ns, tair, elv)
+        yhat1 = self.nxtgn(iabs, ca, gs, d, k, ns, fa, beta1)
+        yhat2 = self.nxtgn(iabs, ca, gs, d, k, ns, fa, beta2)
         #
+        # Place value parameters into tuples:
+        val_params = (month, gpp, gpp_err, fpar, ppfd, vpd, alpha, tair, co2, 
+                      patm, elv, iabs, ca, gs, d, k, ns, fa, beta1, beta2,
+                      yhat1, yhat2)
+        var_params = (gpp, gpp_err, iabs, ca, gs, d, k, ns, fa, beta1, beta2)
+        #
+        # ~~~~~~~~~~~~~~~~~~~~~~~
+        # Station Values
+        # ~~~~~~~~~~~~~~~~~~~~~~~
         # Initialize list if station key doesn't exist:
         if station not in self.station_vals.keys():
-            self.station_vals[station] = []
+            self.station_vals[station] = numpy.array(
+                val_params,
+                dtype={'names' : ('Timestamp', 'GPP', 'GPP_err', 
+                                  'fPAR', 'PPFD', 'VPD', 
+                                  'CPA', 'Tair', 'CO2', 
+                                  'Patm', 'elv', 'Iabs', 
+                                  'ca', 'Gs', 'D', 
+                                  'K', 'ns', 'fa', 
+                                  'beta1', 'beta2',
+                                  'GPP_hat1', 'GPP_hat2'),
+                       'formats' : ('O', 'f4', 'f4', 
+                                    'f4', 'f4', 'f4', 
+                                    'f4', 'f4', 'f4', 
+                                    'f4', 'f4', 'f4',
+                                    'f4', 'f4', 'f4',
+                                    'f4', 'f4', 'f4',
+                                    'f4', 'f4',
+                                    'f4', 'f4')},
+                        ndmin=1
+                )
+        else:
+            # Add new parameters to list:
+            temp_array = numpy.array(
+                val_params,
+                dtype={'names' : ('Timestamp', 'GPP', 'GPP_err', 
+                                  'fPAR', 'PPFD', 'VPD', 
+                                  'CPA', 'Tair', 'CO2', 
+                                  'Patm', 'elv', 'Iabs', 
+                                  'ca', 'Gs', 'D', 
+                                  'K', 'ns', 'fa', 
+                                  'beta1', 'beta2',
+                                  'GPP_hat1', 'GPP_hat2'),
+                       'formats' : ('O', 'f4', 'f4', 
+                                    'f4', 'f4', 'f4', 
+                                    'f4', 'f4', 'f4', 
+                                    'f4', 'f4', 'f4',
+                                    'f4', 'f4', 'f4',
+                                    'f4', 'f4', 'f4',
+                                    'f4', 'f4',
+                                    'f4', 'f4')},
+                        ndmin=1
+                )
+            self.station_vals[station] = numpy.append(
+                self.station_vals[station], 
+                temp_array, 
+                axis=0
+                )
         #
-        # Add new parameters to list:
-        self.station_vals[station].append(params)
+        # ~~~~~~~~~~~~~~~~~~~~~~~
+        # Station Variables
+        # ~~~~~~~~~~~~~~~~~~~~~~~
+        # Eliminate data points where VPD or air temperature are negative:
+        if d > 0 and tair > 0:
+            # Initialize array if station key doesn't exist:
+            if station not in self.st_lue_vars.keys():
+                self.st_lue_vars[station] = numpy.array(
+                    var_params,
+                    dtype={
+                        'names' : ('GPP', 'GPP_err', 'Iabs', 
+                                   'ca', 'Gs', 'D', 
+                                   'K', 'ns', 'fa', 
+                                   'beta1', 'beta2'),
+                        'formats' : ('f4', 'f4', 'f4', 
+                                     'f4', 'f4', 'f4', 
+                                     'f4', 'f4', 'f4',
+                                     'f4', 'f4')
+                        },
+                    ndmin=1
+                    )
+            else:
+                temp_array = numpy.array(
+                    var_params,
+                    dtype={
+                        'names' : ('GPP', 'GPP_err', 'Iabs', 
+                                   'ca', 'Gs', 'D', 
+                                   'K', 'ns', 'fa',
+                                   'beta1', 'beta2'),
+                        'formats' : ('f4', 'f4', 'f4', 
+                                     'f4', 'f4', 'f4', 
+                                     'f4', 'f4', 'f4',
+                                     'f4', 'f4')
+                        },
+                    ndmin=1
+                    )
+                self.st_lue_vars[station] = numpy.append(
+                    self.st_lue_vars[station], 
+                    temp_array, 
+                    axis=0
+                    )
+    #
+    def beta_estimate(self, my_ca, my_d, my_k, my_gs, my_ns, my_t, my_z):
+        """
+        Name:     LUE.beta_estimate
+        Input:    - float, atmospheric CO2 concentration, Pa (my_ca)
+                  - float, vapor pressure deficit, Pa (my_d)
+                  - float, Michaelis-Menten coeff, Pa (my_k)
+                  - float, photorespiratory comp point, Pa (my_gs)
+                  - float, viscosity, unitless (my_ns)
+                  - float, air temperature, deg C (my_t)
+                  - float, elevation, m (my_z)
+        Output:   tuple 
+                  - float, predicted beta from simple expression (beta_p1)
+                  - float, predicted beta from 
+        Features: Returns an estimate for beta based on the Wang Han equation
+        """
+        if not numpy.isfinite(my_z):
+            my_z = 0.
+        #
+        whe = numpy.exp(
+            1.19 
+            + 0.0545*(my_t - 25.)        # T in deg C
+            - 0.5*numpy.log(1e-3*my_d)   # D in kPa
+            - 0.0815*(1e-3*my_z)         # z in km
+        )
+        chi = whe/(1. + whe)
+        #
+        beta_p1 = 1.6*my_ns*my_d*(chi**2)
+        beta_p1 /= (1. - chi)**2
+        beta_p1 /= my_k
+        #
+        beta_p2 = 1.6*my_ns*my_d
+        beta_p2 /= (my_k + my_gs)
+        beta_p2 *= (chi*my_ca - my_gs)**2
+        beta_p2 /= (my_ca**2)
+        beta_p2 /= (chi - 1.)**2
+        #
+        return (beta_p1, beta_p2)
+    #
+    def calc_gstar(self, tc):
+        """
+        Name:     LUE.calc_gstar
+        Input:    float, air temperature, degrees C (tc)
+        Output:   float, gamma-star, Pa (gs)
+        Features: Returns the temperature-dependent photorespiratory 
+                  compensation point, Gamma star (Pascals), based on constants 
+                  derived from Bernacchi et al. (2001) study.
+        Ref:      Bernacchi et al. (2001), Improved temperature response 
+                  functions for models of Rubisco-limited photosynthesis, 
+                  Plant, Cell and Environment, 24, 253--259.
+        """
+        # Define constants
+        gs25 = 4.220  # Pa, assuming 25 deg C & 98.716 kPa)
+        dha = 37830   # J/mol
+        kR = 8.3145   # J/mol/K
+        #
+        gs = gs25*numpy.exp(dha*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
+        return gs
+    #
+    def calc_k(self, tc, patm):
+        """
+        Name:     LUE.calc_k
+        Input:    - float, air temperature, degrees C (tc)
+                  - float, atmospheric pressure, Pa (patm)
+        Output:   float (mmk)
+        Features: Returns the temperature & pressure dependent Michaelis-Menten
+                  coefficient, K (Pascals).
+        Ref:      Bernacchi et al. (2001), Improved temperature response 
+                  functions for models of Rubisco-limited photosynthesis, 
+                  Plant, Cell and Environment, 24, 253--259.
+        """
+        # Define constants
+        kc25 = 39.97     # Pa, assuming 25 deg C & 98.716 kPa
+        ko25 = (2.748e4) # Pa, assuming 25 deg C & 98.716 kPa
+        dhac = 79430     # J/mol
+        dhao = 36380     # J/mol
+        kR = 8.3145      # J/mol/K
+        kco = 2.09476e5  # ppm, US Standard Atmosphere
+        #
+        vc = kc25*numpy.exp(dhac*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
+        vo = ko25*numpy.exp(dhao*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
+        k = vc*(1 + kco*(1e-6)*patm/vo)
+        return k
+    #
+    def density_h2o(self, tc, p):
+        """
+        Name:     LUE.density_h2o
+        Input:    - float, air temperature (tc), degrees C
+                  - float, atmospheric pressure (p), Pa
+        Output:   float, density of water, kg/m^3
+        Features: Calculates density of water at a given temperature and 
+                  pressure using the Tumlirz Equation
+        Ref:      F.H. Fisher and O.E Dial, Jr. (1975) Equation of state of 
+                  pure water and sea water, Tech. Rept., Marine Physical 
+                  Laboratory, San Diego, CA.
+        """
+        # Calculate lambda, (bar cm^3)/g:
+        my_lambda = 1788.316
+        my_lambda += 21.55053*tc
+        my_lambda += -0.4695911*tc*tc
+        my_lambda += (3.096363e-3)*tc*tc*tc
+        my_lambda += -(7.341182e-6)*tc*tc*tc*tc
+        #
+        # Calculate po, bar
+        po = 5918.499
+        po += 58.05267*tc
+        po += -1.1253317*tc*tc
+        po += (6.6123869e-3)*tc*tc*tc
+        po += -(1.4661625e-5)*tc*tc*tc*tc
+        #
+        # Calculate vinf, cm^3/g
+        vinf = 0.6980547
+        vinf += -(7.435626e-4)*tc
+        vinf += (3.704258e-5)*tc*tc
+        vinf += -(6.315724e-7)*tc*tc*tc
+        vinf += (9.829576e-9)*tc*tc*tc*tc
+        vinf += -(1.197269e-10)*tc*tc*tc*tc*tc
+        vinf += (1.005461e-12)*tc*tc*tc*tc*tc*tc
+        vinf += -(5.437898e-15)*tc*tc*tc*tc*tc*tc*tc
+        vinf += (1.69946e-17)*tc*tc*tc*tc*tc*tc*tc*tc
+        vinf += -(2.295063e-20)*tc*tc*tc*tc*tc*tc*tc*tc*tc
+        #
+        # Convert pressure to bars (1 bar = 100000 Pa)
+        pbar = (1e-5)*p
+        #
+        # Calculate the specific volume (cm^3 g^-1):
+        v = vinf + my_lambda/(po + pbar)
+        #
+        # Convert to density (g cm^-3) -> 1000 g/kg; 1000000 cm^3/m^3 -> kg/m^3:
+        rho = (1e3/v)
+        #
+        return rho
+    #
+    def nxtgn(self, iabs, ca, gs, d, k, ns, fa, beta):
+        """
+        Name:     LUE.nxtgn
+        Input:    - float, 'Iabs' : mol/m2, fAPARxPPFD
+                  - float, 'ca' : Pa, atmospheric CO2
+                  - float, 'Gs' : Pa, photores. comp. point
+                  - float, 'D' : Pa, vapor pressure deficit
+                  - float, 'K' : Pa, Michaelis-Menten coeff.
+                  - float, 'ns' : mPa s, viscosity of water
+                  - float, 'fa' : unitless, function of alpha
+                  - float, beta parameter (beta)
+        Output:   float, estimate of GPP (gpp)
+        Features: Returns an estimate of GPP based on the next-generation light 
+                  and water use efficiency model.
+        Depends:  - kc
+                  - kphio
+        """
+        # Define default GPP return value:
+        gpp = numpy.nan
+        #
+        # Define variable substitutes:
+        vdcg = ca - gs
+        vacg = ca + 2.*gs
+        vbkg = beta*(k + gs)
+        #
+        # Check for negatives:
+        if vbkg > 0:
+            vsr = numpy.sqrt(1.6*ns*d/(vbkg))
+            #
+            # Based on the m' formulation (see Regressing_LUE.pdf)
+            m = vdcg/(vacg + 3.*gs*vsr)
+            mpi = m**2 - self.kc**(2./3.)*(m**(4./3.))
+            # 
+            # Check for negatives:
+            if mpi > 0:
+                mp = numpy.sqrt(mpi)
+                gpp = self.kphio*iabs*fa*mp
+        #
+        return gpp
+    #
+    def viscosity_h2o(self, tc, p):
+        """
+        Name:     LUE.viscosity_h2o
+        Input:    - float, ambient temperature (tc), degrees C
+                  - float, ambient pressure (p), Pa
+        Return:   float, viscosity of water (mu), Pa s
+        Features: Calculates viscosity of water at a given temperature and 
+                  pressure.
+        Depends:  density_h2o
+        Ref:      Huber, M. L., R. A. Perkins, A. Laesecke, D. G. Friend, J. V. 
+                  Sengers, M. J. Assael, ..., K. Miyagawa (2009) New 
+                  international formulation for the viscosity of H2O, J. Phys. 
+                  Chem. Ref. Data, Vol. 38(2), pp. 101-125.
+        """
+        # Define reference temperature, density, and pressure values:
+        tk_ast = 647.096      # Kelvin
+        rho_ast = 322.0       # kg/m^3
+        mu_ast = (1e-6)       # Pa s
+        #
+        # Get the density of water, kg/m^3
+        rho = self.density_h2o(tc, p)
+        #
+        # Calculate dimensionless parameters:
+        tbar = (tc + 273.15)/tk_ast
+        tbarx = tbar**(0.5)
+        tbar2 = tbar**2
+        tbar3 = tbar**3
+        rbar = rho/rho_ast
+        #
+        # Calculate mu0 (Eq. 11 & Table 2, Huber et al., 2009):
+        mu0 = 1.67752 
+        mu0 += 2.20462/tbar 
+        mu0 += 0.6366564/tbar2 
+        mu0 += -0.241605/tbar3
+        mu0 = 1e2*tbarx/mu0
+        #
+        # Create Table 3, Huber et al. (2009):
+        hj0 = (0.520094, 0.0850895, -1.08374, -0.289555, 0., 0.)
+        hj1 = (0.222531, 0.999115, 1.88797, 1.26613, 0., 0.120573)
+        hj2 = (-0.281378, -0.906851, -0.772479, -0.489837, -0.257040, 0.)
+        hj3 = (0.161913,  0.257399, 0., 0., 0., 0.)
+        hj4 = (-0.0325372, 0., 0., 0.0698452, 0., 0.)
+        hj5 = (0., 0., 0., 0., 0.00872102, 0.)
+        hj6 = (0., 0., 0., -0.00435673, 0., -0.000593264)
+        h = hj0 + hj1 + hj2 + hj3 + hj4 + hj5 + hj6
+        h_array = numpy.reshape(numpy.array(h), (7,6))
+        #
+        # Calculate mu1 (Eq. 12 & Table 3, Huber et al., 2009):
+        mu1 = 0.
+        ctbar = (1./tbar) - 1.
+        for i in xrange(6):
+            coef1 = numpy.power(ctbar, i)
+            coef2 = 0.
+            for j in xrange(7):
+                coef2 += h_array[j][i]*numpy.power((rbar - 1.), j)
+            mu1 += coef1*coef2
+        mu1 = numpy.exp(rbar*mu1)
+        #
+        # Calculate mu_bar (Eq. 2, Huber et al., 2009)
+        #   assumes mu2 = 1
+        mu_bar = mu0*mu1
+        #
+        # Calculate mu (Eq. 1, Huber et al., 2009)
+        mu = mu_bar*mu_ast    # Pa s
+        #
+        return mu
     #
     def write_out_val(self, station, out_file):
         """
@@ -2028,16 +2451,12 @@ class LUE:
         """
         # Create file if it doesn't exist:
         if not os.path.isfile(out_file):
-            lue_head = (
-                "Timestamp,GPP.mol_m2,GPP_err,fAPAR,PPFD.mol_m2,VPD.Pa,"
-                "ALPHA,Tc.deg_C,CO2.ppm,Patm.Pa\n"
-                )
             try:
                 f = open(out_file, 'w')
             except IOError:
                 print "Cannot write to file:", out_file
             else:
-                f.write(lue_head)
+                f.write(self.value_header)
                 f.close()
         #
         # Print if station has data:
@@ -2048,111 +2467,12 @@ class LUE:
                 except IOError:
                     print "Cannot append to file:", out_file
                 else:
-                    f.write(
-                        ("%s,%0.4f,%0.4f,%0.4f,%0.4f,"
-                        "%0.4f,%0.3f,%0.2f,%0.2f,%0.2f\n") % t)
+                    f.write(("%s,%f,%f,%f,%f,"
+                             "%f,%f,%f,%f,%f,"
+                             "%f,%f,%f,%f,%f,"
+                             "%f,%f,%f,%f,%f,"
+                             "%f,%f\n") % tuple(t))
                     f.close()
-    #
-    def write_out_lue(self, out_file):
-        """
-        Name:     LUE.write_out_lue
-        Input:    string, output file (out_file)
-        Output:   None.
-        Features: Writes to file the calculated light use efficiency for all 
-                  stations
-        """
-        # Create file if it doesn't exist:
-        if not os.path.isfile(out_file):
-            temp_string = '*_max,*_min,*_ave,*_std,*_skw,*_krt'
-            lue_head = ("Station,r_sq,phio_est,phio_opt,beta_est,beta_opt," +
-                        "phio_err,beta_err,phio_t,beta_t,phio_p,beta_p," +
-                        temp_string.replace('*', 'GPP') +
-                        "," +
-                        temp_string.replace('*', 'Iabs') +
-                        "," +
-                        temp_string.replace('*', 'ca') +
-                        "," +
-                        temp_string.replace('*', 'Gs') +
-                        "," +
-                        temp_string.replace('*', 'D') +
-                        "," +
-                        temp_string.replace('*', 'K') +
-                        "," +
-                        temp_string.replace('*', 'eta') +
-                        "\n")
-            try:
-                f = open(out_file, 'w')
-            except IOError:
-                print "Cannot write to file:", out_file
-            else:
-                f.write(lue_head)
-                f.close()
-        #
-        # Print each station if it has data:
-        for station in numpy.sort(self.station_lue.keys()):
-            t = (station,) + self.station_lue[station]
-            try:
-                f = open(out_file, 'a')
-            except IOError:
-                print "Cannot append to file:", out_file
-            else:
-                f.write("%s,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,"
-                        "%f,%f,%f,%f,%f,%f,"
-                        "%f,%f,%f,%f,%f,%f,"
-                        "%f,%f,%f,%f,%f,%f,"
-                        "%f,%f,%f,%f,%f,%f,"
-                        "%f,%f,%f,%f,%f,%f,"
-                        "%f,%f,%f,%f,%f,%f,"
-                        "%f,%f,%f,%f,%f,%f\n" % t)
-                f.close()
-    #
-    def calc_statistics(self, my_array):
-        """
-        Name:     LUE.calc_statistics
-        Input:    numpy.ndarray (my_array)
-        Output:   tuple, statistical quantities
-                  - float, max value (max_val)
-                  - float, min value (min_val)
-                  - float, mean value (ave_val)
-                  - float, standard deviation (std_val)
-                  - float, skewness (skew_val)
-                  - float, kurtosis (kurt_val)
-        Features: Returns the basic/advanced statistics for an array of values
-        """
-        # Make sure my_array is a numpy array:
-        if not isinstance(my_array, numpy.ndarray):
-            my_array = numpy.array(my_array)
-        #
-        # Make sure my_array is not empty or crashes on skew/kurt:
-        if my_array.any() and len(my_array) > 1:
-            # Max, min, mean, st dev, skew, kurtosis (offset from normal)
-            max_val = my_array.max()
-            min_val = my_array.min()
-            ave_val = my_array.mean()
-            std_val = my_array.std()
-            #
-            # Address divide by zero issues:
-            if std_val == 0:
-                std_val = 1e-4
-            #
-            skew_val = (
-                sum((my_array - ave_val)**3)/
-                ((len(my_array) - 1)*std_val**3)
-                )
-            kurt_val = (
-                sum((my_array - ave_val)**4)/
-                ((len(my_array) - 1)*std_val**4) - 3
-                )
-        else:
-            # Maintain initial quantity values:
-            max_val = -9999.
-            min_val = -9999.
-            ave_val = -9999.
-            std_val = -9999.
-            skew_val = -9999.
-            kurt_val = -9999.
-            #
-        return (max_val, min_val, ave_val, std_val, skew_val, kurt_val)
 
 ################################################################################
 ## FUNCTIONS 
@@ -2184,59 +2504,6 @@ def add_one_month(dt0):
     dt2 = dt1 + datetime.timedelta(days=32) 
     dt3 = dt2.replace(day=1)
     return dt3
-
-def basic_lue(x, a):
-    """
-    Name:     basic_lue
-    Input:    - numpy.ndarray (x)
-              - float, LUE parameter (a)
-    Output:   numpy.ndarray, modeled GPP
-    Features: Returns an array after applying the basic light-use efficiency 
-              model, GPP = LUE * (fPAR * PPFD)
-    """
-    return x*a
-
-def calc_gstar(tc):
-    """
-    Name:     calc_gstar
-    Input:    float, air temperature, degrees C (tc)
-    Output:   float, (gs)
-    Features: Returns the temperature-dependent photorespiratory compensation
-              point (Pascals) based on constants derived from Bernacchi et al.
-              (2001) study.
-    Ref:      Bernacchi et al. (2001)
-    """
-    # Define constants
-    gs25 = 4.220  # Pa, assuming 25 deg C & 98.716 kPa)
-    dha = 37830   # J/mol
-    kR = 8.3145   # J/mol/K
-    #
-    gs = gs25*numpy.exp(dha*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
-    return gs
-
-def calc_k(tc, patm):
-    """
-    Name:     calc_k
-    Input:    - float, air temperature, degrees C (tc)
-              - float, atmospheric pressure, Pa (patm)
-    Output:   float, Michaelis-Menton K, Pa (mmk)
-    Features: Returns the temperature and pressure dependent Michaelis-Menten
-              coefficient (Pascals) based on constants derived from Bernacchi 
-              et al. (2001) study.
-    Ref:      Bernacchi et al. (2001)
-    """
-    # Define constants
-    kc25 = 39.97     # Pa, assuming 25 deg C & 98.716 kPa
-    ko25 = (2.748e4) # Pa, assuming 25 deg C & 98.716 kPa
-    dhac = 79430     # J/mol
-    dhao = 36380     # J/mol
-    kR = 8.3145      # J/mol/K
-    kco = 2.09476e5  # ppm, US Standard Atmosphere
-    #
-    kc = kc25*numpy.exp(dhac*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
-    ko = ko25*numpy.exp(dhao*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
-    k = kc*(1 + kco*(1e-6)*patm/ko)
-    return k
 
 def connect_sql():
     """
@@ -2376,75 +2643,6 @@ def grid_centroid(my_lon, my_lat):
     # Return nearest centroid:
     return my_centroid
 
-def next_gen_lue(x, phi_o, beta):
-    """
-    Name:     next_gen_lue
-    Input:    - numpy.ndarray, (k,M) shape of predictors (x)
-                > 'Iabs' : mol/m2, fAPARxPPFD
-                > 'ca' : Pa, atmospheric CO2
-                > 'Gs' : Pa, photores. comp. point
-                > 'D' : Pa, vapor pressure deficit
-                > 'K' : Pa, Michaelis-Menten coeff.
-                > 'eta' : mPa s, viscosity of water
-                > 'fa' : unitless, function of alpha
-              - float, intrinsic quantum efficiency (phi_o)
-              - float, beta parameter (beta)
-    Output:   numpy.ndarray (gpp)
-    Features: Returns array of GPP based on the next-generation light and
-              water use efficiency model.
-    """
-    # Define constants:
-    kc = 0.41    # Jmax cost parameter
-    #
-    # Check beta parameter (divide by zero):
-    if beta == 0:
-        beta += 1e-6
-    #
-    # Define variable substitutes:
-    vdg = x['ca'] - x['Gs']
-    vag = x['ca'] + 2.0*x['Gs']
-    vsr = numpy.sqrt(1.6*x['eta']*x['D']/(beta*(x['K'] + x['Gs'])))
-    #
-    # Based on the m' formulation (see Regressing_LUE.pdf)
-    gpp = phi_o*x['Iabs']*x['fa']*numpy.sqrt(
-        (vdg/(vag + 3.*x['Gs']*vsr))**2 - 
-        kc**(2./3.)*(vdg/(vag + 3.*x['Gs']*vsr))**(4./3.)
-    )
-    return gpp
-
-def predict_params(ca, d, eta, gpp, gs, iabs, k):
-    """
-    Name:     predict_params
-    Input:    -numpy.ndarray, atmos. CO2 conc. (ca)
-              -numpy.ndarray, vap. press. deficit (d)
-              -numpy.ndarray, water visc. (eta)
-              -numpy.ndarray, GPP (gpp)
-              -numpy.ndarray, photo. resp. comp. point (gs)
-              -numpy.ndarray, abs. PAR (iabs)
-              -numpy.ndarray, Michaelis-Menten coef. (k)
-    Output:   tuple
-    Features: Returns statistically-based estimate of phio and theoretical
-              estimate of beta
-    """
-    # Predict phio (statistical relationship)
-    phio_p = ((1.761e-1)*gs['min'] + (1.702e-2)*gpp['std'] -
-              (6.894e-3)*k['min'] - (3.531e-4)*iabs['ave'])
-    #
-    # Predict beta (based on Colin's method)
-    my_d = 0.5*(d['max'] + d['min'])
-    my_k = k['ave']
-    my_g = 0.5*(gs['max'] + gs['min'])
-    my_n = 0.5*(eta['max'] + eta['min'])
-    #
-    # Estimate chi based on VPD (linear interpolation):
-    chi = 0.5 - (0.5 - 0.9)*(2.5e3 - my_d)/(2.5e3)
-    beta_p = 1.6*my_d/(my_k + my_g)
-    beta_p *= ((chi - my_g)/(1.0 - chi))**2
-    beta_p *= my_n
-    beta_p *= 0.0017154
-    #
-    return (phio_p[0], beta_p[0])
-
 def simpson(my_array, h):
     """
     Name:     simpson
@@ -2544,168 +2742,64 @@ def summary_file_init(summary_file):
         SFILE.write(summary_header)
         SFILE.close()
 
-def viscosity_h2o(tc):
-    """
-    Name:     viscosity_h2o
-    Input:    float, air temperature, degrees C (tc)
-    Output:   float, viscosity of water, mPa s (n)
-    Features: Returns the temperature-dependent viscosity of water (mPa s) 
-              based on the Vogel Equation
-    """
-    n = 2.4263e-2*numpy.exp(5.78919e2/((tc + 273.15) - 1.37546e2))
-    return n
-
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #                         Dependant Functions:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-def calc_lue(lue_class, station):
+def calc_daily_gpp(ts, gpp, gpp_err):
     """
-    Name:     calc_lue
-    Input:    - LUE class (lue_class)
-              - str, station name (station)
-    Output:   None.
-    Features: Fits the next generation LUE model to the monthly flux tower 
-              data and saves the fit to LUE class
-    Depends:  - next_gen_lue
-              - calc_gstar
-              - calc_k
-              - viscosity_h2o
-              - predict_params
+    Name:     calc_daily_gpp
+    Inputs:   - numpy.ndarray, half-hourly time stamps for a given month (ts)
+              - numpy.ndarray, half-hourly gap-filled GPP, umol/m2/s (gpp)
+              - numpy.ndarray, half-hourly GPP model errors (gpp_err)
+    Output:   numpy.ndarray, multidimensional array
+              > 'Timestamp' daily timestamps
+              > 'GPP' daily GPP, mol/m2
+              > 'GPP_err' daily GPP error, mol/m2
+    Features: Returns time stamped daily GPP and its associated errors
+    Depends:  - add_one_day
+              - simpson
     """
-    # Initialize fitness parameters:
-    st_rsqr = -9999.     # model coef. of determination
-    st_phio = -9999.     # intrinsic quantum efficiency parameter
-    st_beta = -9999.     # beta parameter
-    st_phio_err = -9999. # \ standard errors 
-    st_beta_err = -9999. # /  of the estimates
-    st_phio_t = -9999.   # \ t-values 
-    st_beta_t = -9999.   # /  of the estimates
-    st_phio_p = -9999.   # \ p-values
-    st_beta_p = -9999.   # /  of the estimates
+    # Get starting and ending dates:
+    starting_date = ts[0]
+    ending_date = ts[-1]
     #
-    # Initialize data statistics:
-    temp_stats = numpy.array(tuple([-9999., -9999., -9999., 
-                                    -9999., -9999., -9999.]),
-                             dtype={'names' : ('max', 'min', 'ave', 
-                                               'std', 'skw', 'krt'),
-                                    'formats' : ('f4', 'f4', 'f4', 
-                                                 'f4', 'f4', 'f4')},
-                             ndmin=1)
-    #
-    gpp_stats = numpy.copy(temp_stats)
-    iabs_stats = numpy.copy(temp_stats)
-    ca_stats = numpy.copy(temp_stats)
-    gs_stats = numpy.copy(temp_stats)
-    k_stats = numpy.copy(temp_stats)
-    eta_stats = numpy.copy(temp_stats)
-    vpd_stats = numpy.copy(temp_stats)
-    #
-    if station in lue_class.station_vals.keys():
-        num_rows = len(lue_class.station_vals[station])
-        for i in xrange(num_rows):
-            (st_time, st_gpp, st_gpp_err, st_fpar, st_ppfd, st_vpd, st_cpa, 
-            st_tair, st_co2, st_patm) = lue_class.station_vals[station][i]
-            #
-            # Calculate other necessary parameters for regression:
-            st_ca = (1.e-6)*st_co2*st_patm       # Pa, atms. CO2
-            st_gs = calc_gstar(st_tair)          # Pa, photores. comp. point
-            st_k = calc_k(st_tair, st_patm)      # Pa, Michaelis-Menten coef.
-            st_eta = viscosity_h2o(st_tair)      # mPa s, water viscosity
-            st_iabs = st_fpar*st_ppfd            # mol/m2, abs. PPFD
-            st_fa = (st_cpa/1.26)**(0.25)        # unitless, func. of alpha
-            #
-            # Filter variables out of range:
-            if st_vpd < 0:
-                st_vpd = numpy.nan
-            #
-            if i == 0:
-                x_data = numpy.array(
-                    tuple([st_iabs, st_ca, st_gs, st_vpd, st_k, st_eta, st_fa]),
-                    dtype={'names' : ('Iabs', 'ca', 'Gs', 'D', 'K', 'eta', 'fa'),
-                        'formats' : ('f4', 'f4', 'f4', 'f4', 'f4', 'f4', 'f4')},
-                    ndmin=1
+    # Iterate through days:
+    cur_date = starting_date
+    while (cur_date < ending_date):
+        # Find GPP values associated with current day:
+        my_idx = numpy.where((ts >= cur_date) & (ts < add_one_day(cur_date)))[0]
+        my_gpp = [gpp[i] for i in my_idx]
+        my_gpp_err = [gpp_err[i] for i in my_idx]
+        #
+        # Integrate to daily:
+        day_gpp = simpson(numpy.array(my_gpp), 1800)
+        day_gpp_err = simpson(numpy.array(my_gpp_err), 1800)
+        #
+        # Convert from umol to moles:
+        day_gpp *= 1e-6
+        day_gpp_err *= 1e-6
+        #
+        # Save results:
+        if cur_date == starting_date:
+            daily_gpp = numpy.array(
+                (cur_date.date(), day_gpp, day_gpp_err),
+                dtype={'names' : ('Timestamp', 'GPP', 'GPP_err'),
+                       'formats' : ('O', 'f4', 'f4')},
+                ndmin=1
                 )
-                y_data = numpy.array([st_gpp,])
-            else:
-                x_temp = numpy.array(
-                    tuple([st_iabs, st_ca, st_gs, st_vpd, st_k, st_eta, st_fa]),
-                    dtype={'names' : ('Iabs', 'ca', 'Gs', 'D', 'K', 'eta', 'fa'),
-                        'formats' : ('f4', 'f4', 'f4', 'f4', 'f4', 'f4', 'f4')},
-                    ndmin=1
-                )
-                x_data = numpy.append(x_data, x_temp, axis=0)
-                y_data = numpy.append(y_data, [st_gpp,])
-        #
-        print y_data
-        # Remove nans from data sets:
-        st_idx = numpy.where(~numpy.isnan(x_data['D']))[0]
-        x_data = x_data[st_idx,]
-        y_data = y_data[st_idx]
-        num_rows = len(st_idx)
-        #
-        # Calculate predictor statistics:
-        gpp_stats[0] = lue_class.calc_statistics(y_data)
-        iabs_stats[0] = lue_class.calc_statistics(x_data['Iabs'])
-        ca_stats[0] = lue_class.calc_statistics(x_data['ca'])
-        gs_stats[0] = lue_class.calc_statistics(x_data['Gs'])
-        vpd_stats[0] = lue_class.calc_statistics(x_data['D'])
-        k_stats[0] = lue_class.calc_statistics(x_data['K'])
-        eta_stats[0] = lue_class.calc_statistics(x_data['eta'])
-        #
-        est_phio, est_beta = predict_params(ca_stats, vpd_stats, eta_stats, 
-                                            gpp_stats, gs_stats, iabs_stats, 
-                                            k_stats)
-        # Curve fit:
-        try:
-            fit_opt, fit_cov = curve_fit(next_gen_lue, 
-                                         x_data, 
-                                         y_data, 
-                                         p0=[est_phio, est_beta])
-            #print "fit_opt:", fit_opt
-            #print "fit_cov:", fit_cov
-        except:
-            st_phio = -9999.
-            st_beta = -9999.
         else:
-            st_phio, st_beta = fit_opt
-            #
-            try:
-                fit_var = numpy.diag(fit_cov)
-            except ValueError:
-                fit_var = [0.0, 0.0]
-            else:
-                if numpy.isfinite(fit_var).all() and not (fit_var < 0).any():
-                    # Get parameter standard errors:
-                    (st_phio_err, st_beta_err) = numpy.sqrt(fit_var)
-                    #
-                    # Calculate t-values:
-                    st_phio_t = st_phio/st_phio_err
-                    st_beta_t = st_beta/st_beta_err
-                    # 
-                    # Calculate p-values:
-                    st_phio_p, st_beta_p = scipy.stats.t.pdf(
-                        -abs(numpy.array([st_phio_t, st_beta_t])),
-                        num_rows
-                    )
-                    #
-                    # Calculate r-squared:
-                    dum_x = next_gen_lue(x_data, st_phio, st_beta)
-                    dum_slope, dum_intrcp, dum_r, dum_p, dum_sterr = (
-                        scipy.stats.linregress(dum_x, y_data))
-                    st_rsqr = dum_r**2
+            temp_array = numpy.array(
+                (cur_date.date(), day_gpp, day_gpp_err),
+                dtype={'names' : ('Timestamp', 'GPP', 'GPP_err'),
+                       'formats' : ('O', 'f4', 'f4')},
+                ndmin=1
+                )
+            daily_gpp = numpy.append(daily_gpp, temp_array, axis=0)
+        #
+        # Increment current day:
+        cur_date = add_one_day(cur_date)
     #
-    # Save fit to LUE class
-    params = (tuple([st_rsqr, est_phio, st_phio, est_beta, st_beta, 
-                     st_phio_err, st_beta_err, st_phio_t, st_beta_t, 
-                     st_phio_p, st_beta_p]) + 
-                     tuple(gpp_stats[0]) +
-                     tuple(iabs_stats[0]) +
-                     tuple(ca_stats[0]) +
-                     tuple(gs_stats[0]) +
-                     tuple(vpd_stats[0]) +
-                     tuple(k_stats[0]) +
-                     tuple(eta_stats[0]))
-    lue_class.station_lue[station] = params
+    return daily_gpp
 
 def flux_to_grid(flux_station):
     """
@@ -2811,12 +2905,13 @@ def gapfill_ppfd(station, start_date, to_write):
         while start_time < end_time:
             my_time = "%s" % start_time.time()
             gapfill_dict[my_time] = 0.0
-            start_time = start_time + datetime.timedelta(minutes=30)
             #
             # Add datetime object to array of monthly timestamps:
             monthly_timestamp_hh = numpy.append(monthly_timestamp_hh, 
                                                 [start_time,])
             #
+            start_time = start_time + datetime.timedelta(minutes=30)
+        #
         # Get daily PPFD values (in a numpy.array) from database:
         #   NOTE: last index is start of next day
         (daily_ts, daily_ppfd) = get_daily_ppfd(station, cur_date)
@@ -3117,7 +3212,8 @@ def get_pressure(s):
     """
     Name:     get_pressure
     Input:    str, station name (s)
-    Output:   float, atmospheric pressure, Pa (patm)
+    Output:   - float, elevation, m (z)
+              - float, atmospheric pressure, Pa (patm)
     Features: Returns the atmospheric pressure based on the elevation of a 
               given station
     Depends:  - connect_sql
@@ -3164,7 +3260,7 @@ def get_pressure(s):
     z = float(station_ele)
     patm = kPo*(1.0 - kL*z/kTo)**(kG*kMa/(kR*kL))
     #
-    return patm
+    return (z, patm)
 
 def get_stations():
     """
@@ -3628,8 +3724,8 @@ for station in stations:
     tair_msvidx = get_msvidx(hdg_station, 'Tc')
     vpd_msvidx = get_msvidx(hdg_station, 'VPD')
     #
-    # Calculate station's atmospheric pressure based on elevation:
-    patm = get_pressure(station)
+    # Get station's elevation & atmospheric pressure:
+    elv, patm = get_pressure(station)
     #
     # Process each month in time:
     while sd < ed:
@@ -3648,12 +3744,13 @@ for station in stations:
                                       month=sd)
             #
             # Perform half-hourly PPFD gapfilling (umol m-2 s-1):
-            (gf_time, gf_ppfd) = gapfill_ppfd(station, sd, to_write=1)
+            (gf_time, gf_ppfd) = gapfill_ppfd(station, sd, to_write=0)
             #
             # Calculate half-hourly GPP (umol m-2 s-1)
             gf_gpp, gf_gpp_err = monthly_parti.calc_gpp(gf_ppfd)
             #
-            # @TODO: daily GPP calculation & writeout
+            # Calculate daily GPP (mol/m2):
+            gpp_daily = calc_daily_gpp(gf_time, gf_gpp, gf_gpp_err)
             #
             # Continue processing if partitioning was successful:
             if monthly_parti.mod_select > 0:
@@ -3670,9 +3767,9 @@ for station in stations:
                 gpp_month_err = simpson(gf_gpp_err, 1800)
                 #
                 # Convert units from [umol m-2] to [mol m-2]:
-                ppfd_month = (1e-6)*ppfd_month
-                gpp_month = (1e-6)*gpp_month
-                gpp_month_err = (1e-6)*gpp_month_err
+                ppfd_month *= (1e-6)
+                gpp_month *= (1e-6)
+                gpp_month_err *= (1e-6)
                 #
                 # Retrieve annual CO2:
                 annual_sd = sd.replace(month=1)
@@ -3695,7 +3792,8 @@ for station in stations:
                                        cpa_month,                  # unitless
                                        tair_month,                 # degC
                                        co2_annual,                 # ppm
-                                       patm)                       # Pa
+                                       patm,                       # Pa
+                                       elv)                        # m
             #
         else:
             # Create an 'empty' class:
@@ -3711,9 +3809,3 @@ for station in stations:
     #
     # Write monthly LUE parameters to file:
     my_lue.write_out_val(station, lue_file)
-    #
-    # Calculate LUE for station:
-    calc_lue(my_lue, station)
-
-# Write station LUE to file
-my_lue.write_out_lue(lue_out_file)

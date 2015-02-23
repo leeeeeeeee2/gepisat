@@ -1,13 +1,13 @@
 #!/usr/bin/python
 #
 # model.py 
-# __version__ 2.1.0
+# __version__ 2.1.1
 #
 # written by Tyler W. Davis
 # Imperial College London
 #
 # 2013-07-05 -- created
-# 2015-02-20 -- last updated
+# 2015-02-23 -- last updated
 #
 # ------------
 # description:
@@ -356,38 +356,49 @@
 #  - updated get_pressure function to also return elevation [15.02.20]
 #  - fixed time issue in gapfill_ppfd [15.02.20]
 #  - created calc_daily_gpp function [15.02.20]
+# VERSION 2.1.1
+#  - created gapfill_ppfd_day [15.02.23]
+#  - renamed gapfill_ppfd to gapfill_ppfd_month [15.02.23]
+#    --> moved daily processing & file writing to gapfill_ppfd_day
+#  - updated SOLAR class with local_time class variable [15.02.23]
+#  - created daily_gpp function [15.02.23]
 # 
 # -----
 # todo:
 # -----
-# xx. gapfill_ppfd
-#     a. what to do with sfactor when ppfd_integral = 0?
-#     --> currently sfactor set to 1.0 (arbitrarily)
-#     --> DOESN'T MATTER, POLAR NIGHT, ppfd_hh WILL BE ARRAY OF ZEROS 
+# xx gapfill_ppfd
+#    x what to do with sfactor when ppfd_integral = 0?
+#    --> currently sfactor set to 1.0 (arbitrarily)
+#    --> DOESN'T MATTER, POLAR NIGHT, ppfd_hh WILL BE ARRAY OF ZEROS 
 #
-# 01. FLUX_PARTI class
-#     a. Why not use the optimized obs parameters as the guess for ro?
-#        * if optim fails---you'll have crumby initial guesses
-#     b. add variance of residuals to summary statistics (4 fields)
-#        * goodness_of_fit() function
+# xx Implement specific model runs, e.g.:
+#    x calculate daily GPP for a given day and station
+#    x create gapfill_ppfd_day & gapfill_ppfd_month
 #
-# 02. partition()
-#     a. check data validity after outliers are removed before reprocessing
+# 1. FLUX_PARTI class
+#    a. Why not use the optimized obs parameters as the guess for ro?
+#       * if optim fails---you'll have crumby initial guesses
+#    b. add variance of residuals to summary statistics (4 fields)
+#       * goodness_of_fit() function
 #
-# 03. model_select()
-#     a. Consider implementing either Shapiro-Wilks or Anderson test of 
-#        normality on model residuals
-#     --> scipy.stats.shapiro(my_resids)
-#         * returns test statistic and p-value
-#         * Note: p-value indicates significantly different from normal
-#     --> scipy.stats.anderson(my_resids, 'norm')
-#         * returns test statistic, array of critical values, and sig values
-#         * if test statistic is larger than the critical value at the 
-#           significance value you are interested in, then the null can be
-#           rejected, i.e., not normal
+# 2. partition()
+#    a. check data validity after outliers are removed before reprocessing
 #
-# 04. Check for system closure (each station, each month?)
-#     --> short equation: Rn + G + LE + H = 0
+# 3. model_select()
+#    a. Consider implementing either Shapiro-Wilks or Anderson test of 
+#       normality on model residuals
+#    --> scipy.stats.shapiro(my_resids)
+#        * returns test statistic and p-value
+#        * Note: p-value indicates significantly different from normal
+#    --> scipy.stats.anderson(my_resids, 'norm')
+#        * returns test statistic, array of critical values, and sig values
+#        * if test statistic is larger than the critical value at the 
+#          significance value you are interested in, then the null can be
+#          rejected, i.e., not normal
+#    b. Or use Willmott's revised index of agreement
+#
+# 4. Check for system closure (each station, each month?)
+#    --> short equation: Rn + G + LE + H = 0
 #
 ################################################################################
 ## IMPORT MODULES 
@@ -1719,7 +1730,10 @@ class SOLAR:
                   - int, year (y)
         """
         # Error handle and assign required public variables:
-        self.year = y
+        if y == 0:
+            self.year = 2001
+        else:
+            self.year = y
         if lat > 90.0 or lat < -90.0:
             print "Latitude outside range of validity (-90 to 90)!"
             exit(1)
@@ -1740,7 +1754,11 @@ class SOLAR:
         # 0. Create local time series, hours
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         local_hh = numpy.array([0.5*i for i in xrange(48)])
-        #self.local_hh = local_hh
+        self.local_time = numpy.array([
+            datetime.datetime(self.year, 1 ,1 ,0, 0, 0) + 
+            datetime.timedelta(days=(n-1)) + 
+            datetime.timedelta(hours=i) for i in local_hh
+        ])
         #
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 1. Calculate number of days in year (kN), days
@@ -1773,8 +1791,9 @@ class SOLAR:
         # 4. Calculate declination angle (delta), degrees
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Woolf (1968)
+        pir = (numpy.pi/180.0)
         delta = numpy.arcsin(self.dsin(my_lambda)*self.dsin(self.keps))
-        delta = delta*(180.0/numpy.pi)
+        delta /= pir
         #self.delta_deg = delta
         #
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1822,14 +1841,17 @@ class SOLAR:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 11. Calculate the sunset hour angle (hs), degrees
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # Note: ru/rv == tan(delta)*tan(lat)
         # Eq. 3.22, Stine & Geyer (2001)
         if (ru/rv) >= 1.0:
-            hs = 180.0   # Polar day (no sunset)
+            # Polar day (no sunset)
+            hs = 180.0
         elif (ru/rv) <= -1.0:
-            hs = 0.0     # Polar night (no sunrise)
+            # Polar night (no sunrise)
+            hs = 0.0
         else:
-            hs = (180.0/numpy.pi)*numpy.arccos(-1.0*ru/rv)
+            hs = -1.0*ru/rv
+            hs = numpy.arccos(hs)
+            hs /= pir
         #self.hs_deg = hs
         #
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1848,10 +1870,10 @@ class SOLAR:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 14. Calculate the daily solar irradiation, J/m^2
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        ho = (86400.0/numpy.pi)*self.kGsc*dr*(
-            ru*(numpy.pi/180.0)*hs + rv*self.dsin(hs)
-        )
+        # Eq. 1.10.3, Duffy & Beckman (1993)
+        ho = (86400.0/numpy.pi)*self.kGsc*dr*(ru*pir*hs + rv*self.dsin(hs))
         self.ho_jm2 = ho
+    #
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
     # ////////////////////////////////////////////////////////////////////////
@@ -1875,27 +1897,28 @@ class SOLAR:
         xee = self.ke**2 
         xec = self.ke**3
         xse = numpy.sqrt(1.0 - xee)
+        pir = numpy.pi/180.0
         #
         # Mean longitude for vernal equinox:
-        xlam = (
-            (self.ke/2.0 + xec/8.0)*(1.0 + xse)*self.dsin(self.komega) - 
-            xee/4.0*(0.5 + xse)*self.dsin(2.0*self.komega) + 
-            xec/8.0*(1.0/3.0 + xse)*self.dsin(3.0*self.komega)
-            )
-        xlam = numpy.degrees(2.0*xlam)
+        xlam = (self.ke/2.0 + xec/8.0)*(1.0 + xse)*self.dsin(self.komega)
+        xlam -= xee/4.0*(0.5 + xse)*self.dsin(2.0*self.komega)
+        xlam += xec/8.0*(1.0/3.0 + xse)*self.dsin(3.0*self.komega)
+        xlam *= 2.0
+        xlam /= pir
         #
         # Mean longitude for day of year:
         dlamm = xlam + (n - 80.0)*(360.0/self.kN)
         #
         # Mean anomaly:
-        anm = dlamm - self.komega
-        ranm = numpy.radians(anm)
+        anm = (dlamm - self.komega)
+        ranm = (anm*pir)
         #
         # True anomaly:
-        ranv = (ranm + (2.0*self.ke - xec/4.0)*numpy.sin(ranm) + 
-            5.0/4.0*xee*numpy.sin(2.0*ranm) + 
-            13.0/12.0*xec*numpy.sin(3.0*ranm))
-        anv = numpy.degrees(ranv)
+        ranv = ranm
+        ranv += (2.0*self.ke - xec/4.0)*numpy.sin(ranm)
+        ranv += 5.0/4.0*xee*numpy.sin(2.0*ranm)
+        ranv += 13.0/12.0*xec*numpy.sin(3.0*ranm)
+        anv = (ranv/pir)
         #
         # True longitude:
         my_tls = anv + self.komega
@@ -1961,10 +1984,12 @@ class SOLAR:
                   position of the sun, Search, 2 (5), p. 172. 
         """
         B = 2.0*numpy.pi*(n - 1.0)/self.kN
-        my_eot = 12.0/(numpy.pi)*(
-            (7.5e-6) + (1.868e-3)*self.dcos(B) - (3.2077e-2)*self.dsin(B) - 
-            (1.4615e-2)*self.dcos(2.0*B) - (4.0849e-2)*self.dsin(2.0*B)
-        )
+        my_eot = (7.5e-6)
+        my_eot += (1.868e-3)*self.dcos(B)
+        my_eot -= (3.2077e-2)*self.dsin(B)
+        my_eot -= (1.4615e-2)*self.dcos(2.0*B)
+        my_eot -= (4.0849e-2)*self.dsin(2.0*B)
+        my_eot *= (12.0/numpy.pi)
         return(my_eot)
 #
 class LUE:
@@ -1977,7 +2002,7 @@ class LUE:
     # Class Variable Definitions
     # ////////////////////////////////////////////////////////////////////////
     kc = 0.41          # Jmax cost coefficient
-    kphio = 0.093      # (Long et al., 1993)
+    kphio = 0.093      # quantum efficiency (Long et al., 1993)
     kPo = 101325.      # standard atmosphere, Pa (Allen, 1973)
     kTo = 25.          # base temperature, deg C (Prentice, unpublished)
     #
@@ -2758,6 +2783,8 @@ def calc_daily_gpp(ts, gpp, gpp_err):
     Features: Returns time stamped daily GPP and its associated errors
     Depends:  - add_one_day
               - simpson
+    
+    @TODO: write to file option?
     """
     # Get starting and ending dates:
     starting_date = ts[0]
@@ -2772,6 +2799,7 @@ def calc_daily_gpp(ts, gpp, gpp_err):
         my_gpp_err = [gpp_err[i] for i in my_idx]
         #
         # Integrate to daily:
+        # @TODO: should this be clipped to a min of zero?
         day_gpp = simpson(numpy.array(my_gpp), 1800)
         day_gpp_err = simpson(numpy.array(my_gpp_err), 1800)
         #
@@ -2781,7 +2809,7 @@ def calc_daily_gpp(ts, gpp, gpp_err):
         #
         # Save results:
         if cur_date == starting_date:
-            daily_gpp = numpy.array(
+            gpp_daily = numpy.array(
                 (cur_date.date(), day_gpp, day_gpp_err),
                 dtype={'names' : ('Timestamp', 'GPP', 'GPP_err'),
                        'formats' : ('O', 'f4', 'f4')},
@@ -2794,12 +2822,61 @@ def calc_daily_gpp(ts, gpp, gpp_err):
                        'formats' : ('O', 'f4', 'f4')},
                 ndmin=1
                 )
-            daily_gpp = numpy.append(daily_gpp, temp_array, axis=0)
+            gpp_daily = numpy.append(gpp_daily, temp_array, axis=0)
         #
         # Increment current day:
         cur_date = add_one_day(cur_date)
     #
-    return daily_gpp
+    return gpp_daily
+
+def daily_gpp(station, cur_date):
+    """
+    Name:     daily_gpp
+    Inputs:   - str, flux station name (station)
+              - datetime.date, current date (cur_date)
+    Output:   float, daily GPP, mol/m^2
+              > 'nan' for months without observations (i.e., no partitioning) 
+    Features: Calculates the GPP and associated error for a given day and 
+              station
+    Depends:  - monthly_ppfd_nee
+              - partition
+              - gapfill_ppfd_day
+              - calc_daily_gpp
+    """
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Get the monthly partitioning parameters
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # Set datetime to start of the month:
+    month_date = cur_date.replace(day=1)
+    #
+    # Get monthly NEE and PPFD observations from database:
+    mo_nee, mo_ppfd = monthly_ppfd_nee(station, month_date)
+    #
+    # Calculate partitioning parameters:
+    if mo_nee and mo_ppfd:
+        mo_parti = partition(mo_nee, mo_ppfd, to_write=False, rm_out=True, 
+                             tower=station, month=month_date)
+        #
+        # ~~~~~~~~~~~~~~~~~~~
+        # Calculate daily GPP
+        # ~~~~~~~~~~~~~~~~~~~
+        # Get gapfilled PPFD [umol m^-2 m^-1]:
+        (hh_ts, hh_ppfd) = gapfill_ppfd_day(station=station, 
+                                            cur_date=cur_date, 
+                                            to_write=False, 
+                                            out_file='/dev/null')
+        #
+        # Convert PPFD to GPP [umol m^-2 s^-1]:
+        hh_gpp, hh_gpp_err = mo_parti.calc_gpp(hh_ppfd)
+        #
+        # Calculate daily GPP (mol/m2):
+        day_ts, day_gpp, day_gpp_err = calc_daily_gpp(hh_ts, hh_gpp, 
+                                                      hh_gpp_err)[0]
+    else:
+        day_gpp = numpy.nan
+        day_gpp_err = numpy.nan
+    #
+    return (day_gpp, day_gpp_err)
 
 def flux_to_grid(flux_station):
     """
@@ -2838,9 +2915,156 @@ def flux_to_grid(flux_station):
     con.close()
     return grid_station
 
-def gapfill_ppfd(station, start_date, to_write):
+def gapfill_ppfd_day(station, cur_date, to_write, out_file):
     """
-    Name:     gapfill_ppfd
+    Name:     gapfill_ppfd_day
+    Input:    - str, station name (station)
+              - datetime.date (cur_date)
+              - int, boolean for writing to file (to_write)
+              - str, output file name (out_file)
+    Output:   - numpy.ndarray of datetime objects (monthly_timestamp_hh)
+              - numpy.ndarray of gapfilled PPFD (monthly_ppfd_gapless)
+    Features: Returns array of half-hourly gapless PPFD (umol m-2 s-1) for a 
+              given station and day and associated timestamps; prints 
+              observations and gapfilled PPFD to file
+    Depends:  - flux_to_grid
+              - get_daily_ppfd
+              - get_data_point
+              - get_lon_lat
+              - get_msvidx
+              - SOLAR
+    """
+    # Check if output file exists:
+    if to_write:
+        if not os.path.isfile(out_file):
+            header = "Timestamp,PPFDobs,PPFDgf\n"
+            try:
+                f = open(out_file, "w")
+            except IOError:
+                print "Cannot write to file:", out_file
+            else:
+                f.write(header)
+                f.close()
+    #
+    # Initialize monthly gapless PPFD array & associated timestamps:
+    daily_ppfd_gapless = numpy.array([])
+    daily_timestamp_hh = numpy.array([])
+    #
+    # Get daily PPFD values (in a numpy.array) from database:
+    (daily_ts, daily_ppfd) = get_daily_ppfd(station, cur_date)
+    #
+    # Check to see if any gaps are present in current day's observations:
+    number_obs = len(daily_ppfd)
+    if number_obs < 49:
+        # Gaps are present:
+        gapfill_dict = {}
+        #
+        # Create start and end datetime objects for this day:
+        start_time = datetime.datetime(cur_date.year, 
+                                       cur_date.month, 
+                                       cur_date.day, 
+                                       0, 0, 0)
+        #
+        end_time = datetime.datetime(cur_date.year, 
+                                     cur_date.month, 
+                                     cur_date.day, 
+                                     23, 59, 59)
+        #
+        # Initialize dictionary values with half-hourly timestamp keys:
+        cur_time = start_time
+        while cur_time < end_time:
+            my_time = "%s" % cur_time.time()
+            gapfill_dict[my_time] = 0.0
+            #
+            # Add datetime object to array of monthly timestamps:
+            daily_timestamp_hh = numpy.append(daily_timestamp_hh, [cur_time,])
+            #
+            cur_time = cur_time + datetime.timedelta(minutes=30)
+        #
+        # Convert date to Julian day:
+        jday = cur_date.timetuple().tm_yday
+        #
+        # Calculate daily ET solar radiation curve:
+        (flux_lon, flux_lat) = get_lon_lat(station)
+        et_solar = SOLAR(flux_lon, flux_lat, jday, cur_date.year)
+        #
+        # Get satellite measurement of solar rad (SWdown) [W m-2]:
+        grid_station = flux_to_grid(station)
+        grid_msvidx = get_msvidx(grid_station, 'SWdown')
+        grid_srad = get_data_point(grid_msvidx, cur_date)
+        #
+        # Convert to daily shortwave radiation [J m-2]:
+        # NOTE: if None, then gridded data not available, set equal to modeled
+        if grid_srad is not None:
+            grid_srad *= (86400.0)
+        else:
+            grid_srad = et_solar.ho_jm2
+        #
+        # Calculate scaling factor (i.e., observed/modeled):
+        if et_solar.ho_jm2 != 0:
+            sfactor = grid_srad/et_solar.ho_jm2
+        else:
+            sfactor = 1.0
+        #
+        # Add scaled half-hourly PPFD to dictionary [umol m-2 s-1]:
+        for i in xrange(48):
+            val = et_solar.ppfd_hh[i]
+            my_time = "%s" % et_solar.local_time[i].time()
+            gapfill_dict[my_time] = sfactor*val
+        #
+        # Add observations to gapfill dictionary & save observations for output:
+        ppfd_obs = {}
+        for i in xrange(number_obs):
+            my_time = "%s" % daily_ts[i].time()
+            gapfill_dict[my_time] = daily_ppfd[i]
+            ppfd_obs[my_time] = daily_ppfd[i]
+        #
+        # Save to PPFD time series:
+        daily_ppfd_gapless = numpy.append(
+            daily_ppfd_gapless, 
+            [gapfill_dict[x] for x in sorted(gapfill_dict.keys())]
+        )
+        #
+        # Write to file:
+        if to_write:
+            for t in sorted(gapfill_dict.keys()):
+                if t in ppfd_obs.keys():
+                    obs = ppfd_obs[t]
+                else:
+                    obs = -9999.0
+                gfv = gapfill_dict[t]
+                dt = "%s %s" % (cur_date, t)
+                try:
+                    f = open(out_file, 'a')
+                except IOError:
+                    print "Cannot append to file:", out_file
+                else:
+                    f.write("%s,%f,%f\n" % (dt, obs, gfv))
+                    f.close()
+    else:
+        # No gaps; append daily series
+        #   NOTE: drop last entry from daily_ppfd (midnight next day)
+        daily_ppfd_gapless = daily_ppfd[0:-1]
+        daily_timestamp_hh = daily_ts[0:-1]
+        # 
+        # Write to file:
+        if to_write:
+            for i in xrange(len(daily_ts) - 1):
+                dt = "%s" % daily_ts[i]
+                obs = daily_ppfd[i]
+                try:
+                    f = open(out_file, 'a')
+                except IOError:
+                    print "Cannot append to file:", out_file
+                else:
+                    f.write("%s,%0.3f,%0.3f\n" % (dt, obs, obs))
+                    f.close()
+    #
+    return (daily_timestamp_hh, daily_ppfd_gapless)
+
+def gapfill_ppfd_month(station, start_date, to_write):
+    """
+    Name:     gapfill_ppfd_month
     Input:    - str, station name (station)
               - datetime.date (start_date)
               - int, write to file boolean (to_write)
@@ -2851,150 +3075,29 @@ def gapfill_ppfd(station, start_date, to_write):
               gap-filled PPFD to file
     Depends:  - add_one_day
               - add_one_month
-              - flux_to_grid
-              - get_daily_ppfd
-              - get_data_point
-              - get_lon_lat
-              - get_msvidx
-              - SOLAR
+              - gapfill_ppfd_day
     """
     # Initialize monthly gapless PPFD array & associated timestamps:
     monthly_ppfd_gapless = numpy.array([])
     monthly_timestamp_hh = numpy.array([])
-    #
-    # Get flux station lon/lat coordinates:
-    (flux_lon, flux_lat) = get_lon_lat(station)
-    #
-    # Get grid station ID, lon/lat coordinates, and msvidx for 'SWdown':
-    grid_station = flux_to_grid(station)
-    (grid_lon, grid_lat) = get_lon_lat(grid_station)
-    grid_msvidx = get_msvidx(grid_station, 'SWdown')
     #
     # Calculate the end date:
     end_date = add_one_month(start_date)
     #
     # Create output file (if to_write):
     out_file = "out/%s-GF_%s.txt" % (station, start_date)
-    if to_write:
-        header = "Timestamp, PPFDobs, PPFDgf\n"
-        try:
-            f = open(out_file, "w")
-        except IOError:
-            print "Cannot write to file:", out_file
-        else:
-            f.write(header)
-            f.close()
     #
     # Iterate through each day of the month:
     cur_date = start_date
     while cur_date < end_date:
-        # Reset dictionary for gap-filled time series:
-        gapfill_dict = {}
-        #
-        # Create start and end datetime objects for this day:
-        start_time = datetime.datetime(cur_date.year, 
-                                       cur_date.month, 
-                                       cur_date.day, 
-                                       0, 0, 0)
-        end_time = datetime.datetime(cur_date.year, 
-                                     cur_date.month, 
-                                     cur_date.day, 
-                                     23, 59, 59)
-        #
-        # Initialize dictionary values with half-hourly timestamp keys:
-        while start_time < end_time:
-            my_time = "%s" % start_time.time()
-            gapfill_dict[my_time] = 0.0
-            #
-            # Add datetime object to array of monthly timestamps:
-            monthly_timestamp_hh = numpy.append(monthly_timestamp_hh, 
-                                                [start_time,])
-            #
-            start_time = start_time + datetime.timedelta(minutes=30)
-        #
-        # Get daily PPFD values (in a numpy.array) from database:
-        #   NOTE: last index is start of next day
-        (daily_ts, daily_ppfd) = get_daily_ppfd(station, cur_date)
-        #
-        # Check to see if any gaps are present in current day's observations:
-        number_obs = len(daily_ppfd)
-        if number_obs < 49:
-            # Gaps are present:
-            #
-            # Convert date to Julian day:
-            jday = cur_date.timetuple().tm_yday
-            #
-            # Calculate daily ET solar radiation curve:
-            et_solar = SOLAR(flux_lon, flux_lat, jday, cur_date.year)
-            #
-            # Get satellite measurement of solar rad (SWdown) [W m-2]:
-            grid_srad = get_data_point(grid_msvidx, cur_date)
-            #
-            # Convert to daily shortwave radiation [J m-2]:
-            grid_srad_d = (86400.0)*grid_srad
-            #
-            # Calculate scaling factor (i.e., observed/modeled):
-            if et_solar.ho_jm2 != 0:
-                sfactor = grid_srad_d/et_solar.ho_jm2
-            else:
-                sfactor = 1.0
-            #
-            # Add scaled half-hourly PPFD to dictionary [umol m-2 s-1]:
-            start_time = datetime.datetime(2000, 1, 1, 0, 0, 0)
-            for val in et_solar.ppfd_hh:
-                my_time = "%s" % start_time.time()
-                gapfill_dict[my_time] = (val*sfactor)
-                start_time = start_time + datetime.timedelta(minutes=30)
-            #
-            # Add observations to dictionary:
-            ppfd_obs = {}
-            for i in xrange(len(daily_ts)):
-                my_time = "%s" % daily_ts[i].time()
-                gapfill_dict[my_time] = daily_ppfd[i]
-                ppfd_obs[my_time] = daily_ppfd[i]
-            #
-            # Save to monthly PPFD time series:
-            monthly_ppfd_gapless = numpy.append(
-                monthly_ppfd_gapless, 
-                [gapfill_dict[x] for x in sorted(gapfill_dict.keys())]
-            )
-            #
-            # Write to file:
-            if to_write:
-                for t in sorted(gapfill_dict.keys()):
-                    if t in ppfd_obs.keys():
-                        obs = ppfd_obs[t]
-                    else:
-                        obs = -9999.0
-                    gfv = gapfill_dict[t]
-                    dt = "%s %s" % (cur_date, t)
-                    try:
-                        f = open(out_file, 'a')
-                    except IOError:
-                        print "Cannot append to file:", out_file
-                    else:
-                        f.write("%s,%0.3f,%0.3f\n" % (dt, obs, gfv))
-                        f.close()
-        else:
-            # No gaps; append daily series to monthly
-            #   NOTE: drop last entry from daily_ppfd (midnight next day)
-            monthly_ppfd_gapless = numpy.append(
-                monthly_ppfd_gapless, 
-                daily_ppfd[0:-1]
-                )
-            #
-            # Write to file:
-            if to_write:
-                for i in xrange(len(daily_ts) - 1):
-                    dt = "%s" % daily_ts[i]
-                    obs = daily_ppfd[i]
-                    try:
-                        f = open(out_file, 'a')
-                    except IOError:
-                        print "Cannot append to file:", out_file
-                    else:
-                        f.write("%s,%0.3f,%0.3f\n" % (dt, obs, obs))
-                        f.close()
+        # Gapfill daily PPFD
+        (gf_daily_time, gf_daily_ppfd) = gapfill_ppfd_day(station=station,
+                                                          cur_date=cur_date,
+                                                          to_write=to_write,
+                                                          out_file=out_file)
+        # Append data to monthly arrays:
+        monthly_timestamp_hh = numpy.append(monthly_timestamp_hh, gf_daily_time)
+        monthly_ppfd_gapless = numpy.append(monthly_ppfd_gapless, gf_daily_ppfd)
         #
         # Increment day
         cur_date = add_one_day(cur_date)
@@ -3487,7 +3590,7 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
         my_class.calc_model_l()
         #
     ## ~~~~~~~~~~ WRITE OBSERVATION RESULTS ~~~~~~~~~~ ##
-    if to_write == 1:
+    if to_write:
         output_file = "out/%s_%s.txt" % (tower, month)
         header0 = "MH_guess,%f,%f,%f\n" % (
             my_class.hm_estimates[1], 
@@ -3525,7 +3628,7 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
             OUTFILE.write(outline)
         OUTFILE.close()
     ## ~~~~~~~~~~ REMOVE OUTLIERS AND RE-ANALYZE ~~~~~~~~~~ ##
-    if rm_out == 1:
+    if rm_out:
         # ---------------------
         # Model H optimization: 
         # ---------------------
@@ -3640,7 +3743,7 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
             my_class.calc_model_l_ro()
             #
         ## ~~~~~~~~~~ WRITE OUTLIER-FREE RESULTS ~~~~~~~~~~ ##
-        if to_write == 1:
+        if to_write:
             output_file = "out/%s_%s_ro.txt" % (tower, month)
             header0 = "MH_guess,%0.5f,%0.2f,%0.2f\n" % (
                 my_class.hm_estimates[1], 
@@ -3738,19 +3841,19 @@ for station in stations:
             # Perform GPP partitioning (returns FLUX_PARTI class object):
             monthly_parti = partition(monthly_nee, 
                                       monthly_ppfd, 
-                                      to_write=0, 
-                                      rm_out=1,
+                                      to_write=False, 
+                                      rm_out=True,
                                       tower=station,
                                       month=sd)
             #
             # Perform half-hourly PPFD gapfilling (umol m-2 s-1):
-            (gf_time, gf_ppfd) = gapfill_ppfd(station, sd, to_write=0)
+            (gf_time, gf_ppfd) = gapfill_ppfd_month(station, sd, to_write=False)
             #
             # Calculate half-hourly GPP (umol m-2 s-1)
             gf_gpp, gf_gpp_err = monthly_parti.calc_gpp(gf_ppfd)
             #
-            # Calculate daily GPP (mol/m2):
-            gpp_daily = calc_daily_gpp(gf_time, gf_gpp, gf_gpp_err)
+            # Calculate daily GPP (mol m-2):
+            #gpp_daily = calc_daily_gpp(gf_time, gf_gpp, gf_gpp_err)
             #
             # Continue processing if partitioning was successful:
             if monthly_parti.mod_select > 0:

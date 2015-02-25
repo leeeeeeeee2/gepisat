@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2015-02-24 -- created
-# 2015-02-24 -- last updated
+# 2015-02-25 -- last updated
 #
 # ------------
 # description:
@@ -66,8 +66,9 @@ def calc_gstar(tair_file, my_month):
     Input:    - str, CRU air temperature file (tair_file)
               - datetime.date, month of interest (my_month)
     Output:   numpy.ndarray, gamma-star, Pa
-    Features: Returns the 360x720 temperature-dependent photorespiratory 
-              compensation point
+    Features: Returns the 360x720 gridded temperature-dependent 
+              photorespiratory compensation point
+              NODATA: -9999.0
     Depends:  get_monthly_cru
     Ref:      Bernacchi et al. (2001), Improved temperature response 
               functions for models of Rubisco-limited photosynthesis, 
@@ -135,9 +136,10 @@ def calc_k(elv_file, tair_file, my_month):
     Input:    - str, CRU elevation file (elv_file)
               - str, CRU air temperature file (tair_file)
               - datetime.date, month of interest (my_month)
-    Output:   numpy.ndarray, Michaelis-Menten coefficient
-    Features: Returns the temperature & pressure dependent Michaelis-Menten
-              coefficient, K (Pascals).
+    Output:   numpy.ndarray, K, Pa
+    Features: Returns the 360x720 gridded temperature & pressure dependent 
+              Michaelis-Menten coefficient
+              NODATA: -9999.0
     Depends:  - get_monthly_cru
               - elv_to_patm
     Ref:      Bernacchi et al. (2001), Improved temperature response 
@@ -193,7 +195,7 @@ def calc_vpd(tair_file, vap_file, my_month):
               - str, CRU vapor pressure file (vap_file)
               - datetime.date, month of interest (my_month)
     Output:   numpy.ndarray, VPD, kPa
-    Features: Returns 360x720 monthly CRU-based vapor pressure deficit
+    Features: Returns 360x720 gridded monthly CRU-based vapor pressure deficit
               NODATA: -9999.0
     Depends:  get_monthly_cru
     Ref:      Abtew, W. and A. Melesse (2013), Vapor Pressure Calculation 
@@ -229,7 +231,9 @@ def elv_to_patm(elv):
     Name:     elv_to_patm
     Input:    numpy.ndarray, elevation, m (elv)
     Output:   numpy.ndarray, atmospheric pressure, Pa (patm)
-    Features: Returns the atmospheric pressure based on the barometric formula
+    Features: Returns the 360x720 gridded atmospheric pressure based on the 
+              barometric formula
+              NODATA: -9999.0
     Ref:      Allen et al. (1998), Crop evapotranspiration - Guidelines for 
               computing crop water requirements - FAO irrigation and drainage
               paper 56.
@@ -455,12 +459,12 @@ def get_monthly_cru(my_file, m, v):
     f_var = f.variables[v]
     f_noval = f_var.missing_value
     f_temp = f_var.data[ti]
-    noval_idx = numpy.where(f_temp == f_noval)
-    #
     f_data = numpy.copy(f_temp)
-    f_data[noval_idx] = ERROR_VAL + 0.0*f_data[noval_idx]
-    #
     f.close()
+    #
+    noval_idx = numpy.where(f_data == f_noval)
+    f_data[noval_idx] *= 0.0
+    f_data[noval_idx] += ERROR_VAL
     #
     return f_data
 
@@ -643,8 +647,9 @@ def upscale_evi(d):
     """
     Name:     upscale_evi
     Input:    numpy.ndarray, 0.05 deg MODIS EVI (d)
-    Output:   numpy.ndarray (hdf_evi)
-    Features: Returns an array of resampled 0.05 deg EVI to 0.5 deg resolution
+    Output:   numpy.ndarray (hdg_evi)
+    Features: Returns 360x720 gridded EVI resampled from 0.05 deg MODIS EVI
+              NODATA: -9999.0
     Depends:  - get_lon_lat
               - get_foh_evi
     """
@@ -652,7 +657,7 @@ def upscale_evi(d):
     ERROR_VAL = -9999.0
     #
     # Initialize data array of floating points values:
-    hdf_evi = numpy.zeros(shape=(360,720))
+    hdg_evi = numpy.zeros(shape=(360,720))
     #
     # Iterate through 0.5 deg lat-lon pairs:
     for y in xrange(360):
@@ -661,11 +666,12 @@ def upscale_evi(d):
             #
             # Get 0.05 EVI values within this 0.5 cell:
             my_evi_data = get_foh_evi(lon, lat, d)
+            good_idx = numpy.where(~numpy.isnan(my_evi_data))[0]
             #
             # Check that there's data in the array:
-            if len(my_evi_data[~numpy.isnan(my_evi_data)]) > 0:
+            if good_idx:
                 # Calculate the average EVI for 0.5 pixel:
-                ave_evi = my_evi_data[~numpy.isnan(my_evi_data)].mean()
+                ave_evi = my_evi_data[good_idx].mean()
                 #
                 # Adjust points outside threshold:
                 if ave_evi < 0.0:
@@ -677,18 +683,26 @@ def upscale_evi(d):
                 # Assign global error value
                 ave_evi = ERROR_VAL
                 #
-            hdf_evi[y,x] = ave_evi
+            hdg_evi[y,x] = ave_evi
     #
-    return hdf_evi
+    return hdg_evi
 
 ###############################################################################
 ## MAIN PROGRAM
 ###############################################################################
 # Define the directory paths to input datasets:
-cru_paths = ['/usr/local/share/database/cru/',]
-modis_paths = ['/usr/local/share/database/modis/evi/aqua/',
-               '/usr/local/share/database/modis/evi/terra/']
-watch_paths = ['/usr/local/share/database/watch/netcdf/swdown/',]
+mac = False
+if mac:
+    cru_paths = ['/Users/twdavis/Projects/data/cru/cru_ts_3_22/',
+                 '/Users/twdavis/Projects/data/cru/cru_ts_3_00/']
+    modis_paths = ['/Users/twdavis/Projects/data/modis/vi_cgm_monthly/aqua/',
+                   '/Users/twdavis/Projects/data/modis/vi_cgm_monthly/terra/']
+    watch_paths = ['/Users/twdavis/Projects/data/watch/SWdown_daily_WFDEI/',]
+else:
+    cru_paths = ['/usr/local/share/database/cru/',]
+    modis_paths = ['/usr/local/share/database/modis/evi/aqua/',
+                   '/usr/local/share/database/modis/evi/terra/']
+    watch_paths = ['/usr/local/share/database/watch/netcdf/swdown/',]
 
 # Initialize month
 my_month = datetime.date(2002, 7, 1)
@@ -699,6 +713,9 @@ tair_file = get_cru_file(cru_paths, 'tmp')
 vap_file = get_cru_file(cru_paths, 'vap')
 evi_file = get_modis_file(modis_paths, my_month)
 swd_file = get_watch_file(watch_paths, my_month)
+#
+# CHECK TO MAKE SURE YOU HAVE THE RIGHT FILE FOR EACH VARIABLE!
+#
 
 # Extract raw observation data:
 elv_data = get_elv(elv_file)

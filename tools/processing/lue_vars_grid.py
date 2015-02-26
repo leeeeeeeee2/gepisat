@@ -460,6 +460,7 @@ def get_monthly_cru(my_file, m, v):
     f_noval = f_var.missing_value
     f_temp = f_var.data[ti]
     f_data = numpy.copy(f_temp)
+    f_var = None
     f.close()
     #
     noval_idx = numpy.where(f_data == f_noval)

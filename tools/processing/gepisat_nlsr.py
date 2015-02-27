@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-11-18 -- created
-# 2015-02-19 -- last updated
+# 2015-02-27 -- last updated
 #
 # ~~~~~~~~~~~~
 # description:
@@ -46,6 +46,10 @@
 # 22. created model_fitness function w/ R2 and Willmott IA [15.02.19]
 # 23. updated write_out_val [15.02.20]
 # 24. added LUE variables & GPP estimates to station_vals  [15.02.19]
+# 25. added calc_mgs_beta to LUE class [15.02.27]
+# 26. overhaul on model_fitness function [15.02.27]
+#     --> definitions/distinctions between R-squared, r, and IOA
+# 27. new plots for seasonal, MGS beta estimates + basic v nxtgn [15.02.27]
 # 
 # ~~~~~
 # todo:
@@ -311,7 +315,7 @@ class LUE:
                   - float, elevation, m (my_z)
         Output:   tuple 
                   - float, predicted beta from simple expression (beta_p1)
-                  - float, predicted beta from 
+                  - float, predicted beta from precise expression (beta_p2)
         Features: Returns an estimate for beta based on the Wang Han equation
         """
         if not numpy.isfinite(my_z):
@@ -382,6 +386,43 @@ class LUE:
         k = vc*(1 + kco*(1e-6)*patm/vo)
         return k
     #
+    def calc_mgs_beta(self, station):
+        """
+        Name:     LUE.calc_mgs_beta
+        Input:    str, station name (station)
+        Ouput:    float, beta
+        Features: Returns an estimate for the mean-growing season beta (i.e.,
+                  above freezing temperatures)
+        """
+        # NOTE: vars in st_lue_vars are above freezing (i.e., growing season)
+        if station in self.st_lue_vars.keys():
+            # Extract vectors of data:
+            v_tair = self.station_vals[station]['Tair']    # deg C
+            v_vpd = self.station_vals[station]['D']        # Pa
+            v_ca = self.station_vals[station]['ca']        # Pa
+            v_patm = self.station_vals[station]['Patm']    # Pa
+            v_elv = self.station_vals[station]['elv']      # m
+            #
+            # Calculate individual values:
+            my_elv = v_elv[0]
+            my_patm = v_patm[0]
+            #
+            mgs_idx = numpy.where(v_tair > 0)
+            mgs_tair = v_tair[mgs_idx].mean()
+            mgs_vpd = v_vpd[mgs_idx].mean()
+            mgs_ca = v_ca[mgs_idx].mean()
+            #
+            mgs_gs = self.calc_gstar(mgs_tair)
+            mgs_k = self.calc_k(mgs_tair, my_patm)
+            mgs_ns = self.viscosity_h2o(mgs_tair, my_patm)
+            mgs_ns /= self.n25
+            #
+            # Estimate MGS beta:
+            mgs_beta = self.beta_estimate(mgs_ca, mgs_vpd, mgs_k, mgs_gs, 
+                                          mgs_ns, mgs_tair, my_elv)
+        else:
+            mgs_beta = numpy.nan
+        return mgs_beta
     #
     def calc_statistics(self, my_array):
         """
@@ -581,6 +622,8 @@ class LUE:
                   water use efficiency model.
         Depends:  - kc
                   - kphio
+                  
+        @TODO: eliminate bad points instead of fixing them
         """
         # Define variable substitutes:
         vdcg = x['ca'] - x['Gs']
@@ -999,6 +1042,35 @@ def get_elv(meta_dir, st_name):
     #
     return my_elv
 
+def get_veg_type(meta_dir, st_name):
+    """
+    Name:     get_veg_type
+    Inputs:   - str, meta data file w/ path (meta_dir)
+              - str, station name (st_name)
+    Output:   str, vegation type, short name 
+    Features: Returns the vegation type for a given station
+    """
+    my_files = glob.glob(meta_dir + '*Met-Data*')
+    if my_files:
+        my_file = my_files[0]
+        my_data = numpy.loadtxt(fname=my_file,
+                                dtype={'names' : ('stationid', 'classid'),
+                                       'formats' : ('S6', 'S3')},
+                                delimiter=',',
+                                skiprows=1,
+                                usecols=(4,9),
+                                converters={4 : numpy.str,
+                                            9 : numpy.str})
+        my_idx = numpy.where(my_data['stationid'] == st_name)
+        try:
+            my_veg = my_data['classid'][my_idx][0]
+        except:
+            my_veg = ''
+    else:
+        my_veg = ''
+    #
+    return my_veg
+
 def wang_han_eq(my_d, my_k, my_n, my_t, my_z, my_gs, my_ca):
     """
     Name:     wang_han_eq
@@ -1098,15 +1170,27 @@ def model_fitness(fit, obs):
     Input:    - numpy.ndarray, fitted data (fit)
               - numpy.ndarray, observed data (obs)
     Output:   - float, coefficient of determination, (rsqr)
+              - float, correlation coefficient (r)
               - float, index of agreement (ioa)
-    Features: Returns model fitness parameters
+    Features: Returns model fitness parameters (rsqr, r, ioa)
     """
     # 1. Calculate the R-square
-    n = len(fit)
-    ssxx = numpy.power(fit, 2).sum() - n*numpy.power(fit.mean(), 2)
-    ssyy = numpy.power(obs, 2).sum() - n*numpy.power(obs.mean(), 2)
-    ssxy = (fit*obs).sum() - n*fit.mean()*obs.mean()
-    rsqr = numpy.power(ssxy, 2)/(ssxx*ssyy)
+    # VERSION 1: ratio of regression sum of squares (SSR) to total sum of 
+    #            squares (SST), where SSR = SST - SSE (error sum of squares):
+    sst = obs - obs.mean()
+    sst = numpy.power(sst, 2.0)
+    sst = sst.sum()
+    sse = obs - fit
+    sse = numpy.power(sse, 2.0)
+    sse = sse.sum()
+    rsqr = (sst - sse)/sst
+    #
+    # VERSION 2: correlation coefficient, r
+    n = float(len(obs))
+    ssxy = (obs*fit).sum() - obs.sum()*fit.sum()/n
+    ssx = numpy.power(fit, 2.0).sum() - numpy.power(fit.sum(), 2.0)/n
+    sst = numpy.power(obs, 2.0).sum() - numpy.power(obs.sum(), 2.0)/n
+    r = ssxy/numpy.power(ssx*sst, 0.5)
     #
     # 2. Calculate the index of agreement
     mae = numpy.abs(fit - obs)
@@ -1120,9 +1204,37 @@ def model_fitness(fit, obs):
     else:
         ioa = tsmo/smae - 1.0
     #
-    return (rsqr, ioa)
+    return (rsqr, r, ioa)
 
-def make_two_plots(my_obs, my_fit1, my_fit2, my_txt1, my_txt2):
+def make_one_plot(my_obs, my_fit, my_txt):
+    """
+    Name:     make_one_plot
+    Input:    - numpy.ndarray, observed GPP (my_obs)
+              - numpy.ndarray, modelled GPP (my_fit)
+              - str, plot text for model (my_txt)
+    Output:   None
+    Features: Creates a plot of predicted versus observed GPP
+    """
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    plot_max = numpy.concatenate((my_fit, my_obs)).max()
+    #
+    fig = plt.figure(figsize=(8,8), dpi=180)
+    #
+    ax1 = fig.add_subplot(111)
+    plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=14)
+    plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
+    ax1.plot(my_obs, my_fit, 'ro', label='Basic LUE formula') 
+    ax1.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
+    ax1.set_ylabel('Modeled GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
+    ax1.set_xlabel('Observed GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
+    ax1.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+               ncol=2, mode="expand", borderaxespad=0., fontsize=14)
+    ax1.text(0.05, 0.95, my_txt, transform=ax1.transAxes, fontsize=14, 
+             verticalalignment='top', bbox=props)
+    #
+    plt.show()
+
+def make_two_plots(my_obs, my_fit1, my_fit2, my_txt1, my_txt2, v=1):
     """
     Name:     make_two_plots
     Input:    - numpy.ndarray, observed GPP (my_obs)
@@ -1130,6 +1242,7 @@ def make_two_plots(my_obs, my_fit1, my_fit2, my_txt1, my_txt2):
               - numpy.ndarray, modelled 2 GPP (my_fit2)
               - str, plot text for model 1 (my_txt1)
               - str, plot text for model 2 (my_txt2)
+              - int, version number
     Output:   None
     Features: Creates two plots of predicted versus observed GPP
     """
@@ -1141,7 +1254,10 @@ def make_two_plots(my_obs, my_fit1, my_fit2, my_txt1, my_txt2):
     ax1 = fig.add_subplot(121)
     plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=14)
     plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
-    ax1.plot(my_obs, my_fit1, 'ro', label='Simple $\\beta$ formula') 
+    if v == 1:
+        ax1.plot(my_obs, my_fit1, 'ro', label='Simple $\\beta$ formula') 
+    else:
+        ax1.plot(my_obs, my_fit1, 'ro', label='Basic LUE model') 
     ax1.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
     ax1.set_ylabel('Modeled GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
     ax1.set_xlabel('Observed GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
@@ -1153,7 +1269,10 @@ def make_two_plots(my_obs, my_fit1, my_fit2, my_txt1, my_txt2):
     ax2 = fig.add_subplot(122)
     plt.setp(ax2.get_xticklabels(), rotation=0, fontsize=14)
     plt.setp(ax2.get_yticklabels(), rotation=0, fontsize=14)
-    ax2.plot(my_obs, my_fit2, 'ro', label='Precise $\\beta$ formula') 
+    if v == 1:
+        ax2.plot(my_obs, my_fit2, 'ro', label='Precise $\\beta$ formula') 
+    else:
+        ax2.plot(my_obs, my_fit2, 'ro', label='Next-Gen LUE model') 
     ax2.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
     ax2.set_ylabel('Modeled GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
     ax2.set_xlabel('Observed GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
@@ -1163,7 +1282,7 @@ def make_two_plots(my_obs, my_fit1, my_fit2, my_txt1, my_txt2):
              verticalalignment='top', bbox=props)
     #
     plt.show()
-
+ 
 ###############################################################################
 ## MAIN PROGRAM:
 ###############################################################################
@@ -1232,6 +1351,10 @@ for line in my_data:
 # List of each station:
 all_stations = numpy.sort(numpy.array(list(set(my_data['station']))))
 
+# Test calc_mgs_beta function:
+# @TODO: get mean growing season values & calc site-specific beta
+station = all_stations[0]
+my_lue.calc_mgs_beta(station)
 
 # Test write_out_val function:
 station = 'AT-Neu'
@@ -1239,6 +1362,11 @@ out_file = out_dir + station + "_lue_vals.txt"
 my_lue.write_out_val(station, out_file)
 
 
+##############################################################################
+#                                                                            #
+#                                WORKSPACE                                   #
+#                                                                            #
+##############################################################################
 # Estimate beta from Wang Han equation:
 out_file = out_dir + 'Wang_Han_beta_estimates.txt'
 header = ('Timestamp,station,Tair_degC,D_kPa,K_Pa,'
@@ -1385,7 +1513,49 @@ make_bplot(chi_data, chi_names, '$\\chi_o$')
 
 
 ##
+## PLOT GPP BASED ON MEAN-GROWING SEASON BETA ESTIMATES FOR EACH SITE
+##    depends: (1) model_fitness, (2) get_veg_type, (3) make_two_plots
+##
+fig_file = out_dir + 'GePiSaT_LUE_beta_mgs.pdf'
+pp = PdfPages(fig_file)
+
+for station in all_stations:
+    x_data = numpy.copy(my_lue.st_lue_vars[station])
+    y_data = x_data['GPP']
+    #
+    b_est1, b_est2 = my_lue.calc_mgs_beta(station)
+    y_fit1 = my_lue.next_gen_lue(x_data, b_est1)
+    y_fit2 = my_lue.next_gen_lue(x_data, b_est2)
+    #
+    my_rsq1a, my_rsq1b, my_ioa1 = model_fitness(y_fit1, y_data)
+    my_rsq2a, my_rsq2b, my_ioa2 = model_fitness(y_fit2, y_data)
+    #
+    # @TODO: get vegetation type for station & add to plot
+    my_veg_type = get_veg_type(met_dir, station)
+    my_txt1 = ("$\\mathrm{%s}$ ($\\mathrm{%s}$)\n$\\beta=%0.2f$\n"
+               "$R^2=%0.3f$\n$r=%0.3f$\n"
+               "$IA=%0.3f$") % (station, my_veg_type, b_est1, my_rsq1a,
+                                my_rsq1b, my_ioa1)
+    my_txt2 = ("$\\mathrm{%s}$ ($\\mathrm{%s}$)\n$\\beta=%0.2f$\n"
+               "$R^2=%0.3f$\n$r=%0.3f$\n"
+               "$IA=%0.3f$") % (station, my_veg_type, b_est2, my_rsq2a,
+                                my_rsq2b, my_ioa2)
+    #
+    if len(y_data) > 2:
+        make_two_plots(y_data, y_fit1, y_fit2, my_txt1, my_txt2)
+        pp.savefig()
+        plt.close()
+
+d = pp.infodict()
+d['Title'] = 'GePiSaT GPP Plots with mean-growing season estimates of beta'
+d['Author'] = 'Tyler W. Davis'
+pp.close()
+
+
+  
+##
 ## PLOT GPP BASED ON SEASONAL BETA ESTIMATES FOR EACH SITE
+##   depends: (1) get_veg_type, (2) model_fitness, (3) make_two_plots
 ##
 fig_file = out_dir + 'GePiSaT_LUE_beta_seasonal.pdf'
 pp = PdfPages(fig_file)
@@ -1394,19 +1564,29 @@ for station in all_stations:
     x_data = numpy.copy(my_lue.st_lue_vars[station])
     y_data = x_data['GPP']
     #
+    my_veg_type = get_veg_type(met_dir, station)
+    #
     b_est1 = x_data['beta1']
+    b_ave1 = b_est1.mean()
+    b_std1 = b_est1.std()
     y_fit1 = my_lue.next_gen_lue(x_data, b_est1)
-    my_rsq1, my_ioa1 = model_fitness(y_fit1, y_data)
-    my_txt1 = ("$\\mathrm{%s}$\n"
-              "$R^2=%0.3f$\n"
-              "$IA=%0.3f$") % (station, my_rsq1, my_ioa1)
+    my_rsq1a, my_rsq1b, my_ioa1 = model_fitness(y_fit1, y_data)
+    my_txt1 = ("$\\mathrm{%s}$ ($\\mathrm{%s}$)\n"
+              "$\\beta=%0.2f\\pm %0.2f$\n"
+              "$R^2=%0.3f$\n$r=%0.3f$\n"
+              "$IA=%0.3f$") % (station, my_veg_type, b_ave1, b_std1, my_rsq1a, 
+                               my_rsq1b, my_ioa1)
     #
     b_est2 = x_data['beta2']
+    b_ave2 = b_est2.mean()
+    b_std2 = b_est2.std()
     y_fit2 = my_lue.next_gen_lue(x_data, b_est2)
-    my_rsq2, my_ioa2 = model_fitness(y_fit2, y_data)
-    my_txt2 = ("$\\mathrm{%s}$\n"
-              "$R^2=%0.3f$\n"
-              "$IA=%0.3f$") % (station, my_rsq2, my_ioa2)
+    my_rsq2a, my_rsq2b, my_ioa2 = model_fitness(y_fit2, y_data)
+    my_txt2 = ("$\\mathrm{%s}$ ($\\mathrm{%s}$)\n"
+              "$\\beta=%0.2f\\pm %0.2f$\n"
+              "$R^2=%0.3f$\n$r=%0.3f$\n"
+              "$IA=%0.3f$") % (station, my_veg_type, b_ave2, b_std2, my_rsq2a, 
+                               my_rsq2b, my_ioa2)
     #
     if len(y_data) > 2:
         make_two_plots(y_data, y_fit1, y_fit2, my_txt1, my_txt2)
@@ -1414,304 +1594,57 @@ for station in all_stations:
         plt.close()
 
 d = pp.infodict()
-d['Title'] = 'GePiSaT LUE Plots with seasonal estimates of beta'
+d['Title'] = 'GePiSaT GPP Plots with seasonal estimates of beta'
 d['Author'] = 'Tyler W. Davis'
 pp.close()
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# BEGIN NEW calc_lue FUNCTION:
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#
-# What's wrong with: 
-#   AU-Tum  <--- fixed with divide by zero clause in jacobian calculation
-#   BW-Ghg  * bad fit
-#   IT-Col  <--- fixed with divide by zero clause in next_gen_lue function
-#   SK-Tat  * bad fit
-#   UK-Her  * bad fit
-#   US-Aud  * too few data points
-#   US-Blo  <--- fixed with divide by zero clause in next_gen_lue function
-#   US-Wi2  * too few data points
-#
-# Initialize multi-page PDF:
-fig_file = out_dir + 'GePiSaT_LUE_beta_fitted.pdf'
+
+##
+## PLOT GPP BASED ON BASIC V. NEXT-GEN LUE FORMULA
+##   depends: (1) get_veg_type, (2) model_fitness, (3) make_two_plots
+##
+fig_file = out_dir + 'GePiSaT_LUE_basic_v_nextgen.pdf'
 pp = PdfPages(fig_file)
 
-my_dict = {}
-#station = 'DE-Tha'
 for station in all_stations:
-    x_data = numpy.copy(my_lue.st_lue_vars[station])
-    y_data = x_data['GPP']
-    b_est = x_data['beta1']
+    lue_data = numpy.copy(my_lue.st_lue_vars[station])
+    x_data = lue_data['Iabs']
+    x_data = numpy.vstack([x_data, numpy.zeros(len(x_data))]).T
+    y_data = lue_data['GPP']
     #
-    if y_data.shape[0] > 4:
-        p0 = my_lue.beta_estimate(station)
-        plsq, cov, infodict, mesg, ier = leastsq(my_lue.lue_resid, 
-                                                p0, 
-                                                args=(x_data, y_data), 
-                                                Dfun=my_lue.lue_jacob, 
-                                                full_output=True)
-        beta_fit = plsq[0]
-        y_fit = my_lue.next_gen_lue(x_data, beta_fit)
-        #
-        #slope, intercept, r_value, p_value, std_err = scipy.stats.linregress(y_data,
-        #                                                                     y_fit)
-        # Calculate fitness:
-        m = len(y_data)
-        ssxx = numpy.power(y_fit, 2).sum() - m*(y_fit.mean()**2)
-        ssyy = numpy.power(y_data, 2).sum() - m*(y_data.mean()**2)
-        ssxy = (y_fit*y_data).sum() - m*y_fit.mean()*y_data.mean()
-        rsqr = ssxy**2/(ssxx*ssyy)
-        #
-        # Get error associated with fitted parameter
-        #   cov is the fractional covariance matrix
-        #   multiply by the residual variance (reduced chi squared)
-        if cov is not None:
-            chisq, pval = scipy.stats.chisquare(y_data, y_fit, ddof=1)
-            rchisq = chisq/(m - 1. - 1.)
-            pcov = cov*rchisq
-            beta_err = numpy.sqrt(pcov[0][0])
-            #
-            if not numpy.isfinite(beta_err):
-                beta_err = numpy.nan
-            #
-            # Calc t and p-value
-            beta_t = beta_fit/beta_err
-            beta_p = scipy.stats.t.pdf(-abs(beta_t), m)
-        else:
-            beta_err = numpy.nan
-        #
-        # FOR PLOTTING
-        if not numpy.isfinite(beta_err):
-            if beta_fit > 9999:
-                text_str = ("$\\mathrm{%s}$\n"
-                            "$\\beta=%0.2e\\pm nan$\n"
-                            "$R^2=%0.3f$") % (station, beta_fit, rsqr)
-            else:
-                text_str = ("$\\mathrm{%s}$\n"
-                            "$\\beta=%0.2f\\pm nan$\n"
-                            "$R^2=%0.3f$") % (station, beta_fit, rsqr)
-        elif beta_fit > 9999:
-            text_str = ("$\\mathrm{%s}$\n"
-                        "$\\beta=%0.2e\\pm%0.2e$\n"
-                        "$R^2=%0.3f$") % (station, beta_fit, beta_err, rsqr)
-        else:
-            text_str = ("$\\mathrm{%s}$\n"
-                        "$\\beta=%0.2f\\pm%0.2f$\n"
-                        "$R^2=%0.3f$") % (station, beta_fit, beta_err, rsqr)
-        #
-        make_plot(y_fit, y_data, text_str)
+    my_veg_type = get_veg_type(met_dir, station)
+    #
+    # Basic LUE:
+    try:
+        lue_est = numpy.linalg.lstsq(x_data, y_data)[0][0]
+        #slope, intrcp, r, p, sterr = scipy.stats.linregress(x_data, y_data)
+    except:
+        lue_est = numpy.nan
+    #
+    y_fit1 = lue_est*lue_data['Iabs']
+    my_rsq1a, my_rsq1b, my_ioa1 = model_fitness(y_fit1, y_data)
+    my_txt1 = ("$\\mathrm{%s}$ ($\\mathrm{%s}$)\n"
+              "$\\phi=%0.4f$\n"
+              "$R^2=%0.3f$\n$r=%0.3f$\n"
+              "$IA=%0.3f$") % (station, my_veg_type, lue_est, my_rsq1a, 
+                               my_rsq1b, my_ioa1)
+    
+    #
+    # Next-Gen LUE:
+    b_est1, b_est2 = my_lue.calc_mgs_beta(station)
+    y_fit2 = my_lue.next_gen_lue(lue_data, b_est2)
+    my_rsq2a, my_rsq2b, my_ioa2 = model_fitness(y_fit2, y_data)
+    my_txt2 = ("$\\mathrm{%s}$ ($\\mathrm{%s}$)\n$\\beta=%0.2f$\n"
+               "$R^2=%0.3f$\n$r=%0.3f$\n"
+               "$IA=%0.3f$") % (station, my_veg_type, b_est2, 
+                                my_rsq2a, my_rsq2b, my_ioa2)
+    #
+    if len(y_data) > 2:
+        make_two_plots(y_data, y_fit1, y_fit2, my_txt1, my_txt2, v=2)
         pp.savefig()
         plt.close()
-    else:
-        beta_fit = numpy.nan
-        beta_err = numpy.nan
-        rsqr = numpy.nan
-    #
-    my_dict[station] = (p0, beta_fit, beta_err, rsqr)
 
-# Close PDF file
 d = pp.infodict()
-d['Title'] = 'GePiSaT LUE Plots with fitted beta'
+d['Title'] = 'GePiSaT Basic v. Next-Gen LUE Plots'
 d['Author'] = 'Tyler W. Davis'
 pp.close()
-
-
-
-
-# Plot results:
-station = 'AT-Neu'
-p0, beta_fit, rsqr = my_dict[station]
-x_data = numpy.copy(my_lue.st_lue_vars[station])
-y_data = x_data['GPP']
-
-text_str = ("$\\mathrm{%s}$\n"
-            "$\\beta=%0.2f$\n$R^2=%0.3f$") % (station, beta_fit, rsqr)
-props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-
-fig = plt.figure()
-ax1 = fig.add_subplot(111)
-plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=14)
-plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
-ax1.plot(y_fit, y_data, 'ro', label='Fitted') 
-ax1.plot(numpy.sort(y_data), numpy.sort(y_data), '--k', label='1:1 Line')
-ax1.set_ylabel('Observed GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
-ax1.set_xlabel('Modeled GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
-ax1.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
-            ncol=3, mode="expand", borderaxespad=0., fontsize=14)
-ax1.text(0.05, 0.95, text_str, transform=ax1.transAxes, fontsize=14, 
-         verticalalignment='top', bbox=props)
-plt.show()
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# BEGIN calc_lue FUNCTION:
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-if 0:
-    # Initialize multi-page PDF:
-    fig_file = out_dir + 'GePiSaT_nxtgn_figs.pdf'
-    pp = PdfPages(fig_file)
-    
-    temp_stats = numpy.array(tuple([-9999., -9999., -9999., 
-                                    -9999., -9999., -9999.]),
-                            dtype={'names' : ('max', 'min', 'ave', 
-                                            'std', 'skw', 'krt'),
-                                    'formats' : ('f4', 'f4', 'f4', 
-                                                'f4', 'f4', 'f4')},
-                            ndmin=1)
-    #
-    #station = 'ES-ES1'
-    for station in numpy.sort(all_stations):
-        # Initialize return values:
-        st_rsqr = -9999.     # model coef. of determination
-        st_phio = 0.093      # intrinsic quantum efficiency parameter
-        st_beta = -9999.     # beta parameter
-        st_phio_err = 0.     # \ standard errors 
-        st_beta_err = -9999. # /  of the estimates
-        st_phio_t = 0.       # \ t-values 
-        st_beta_t = -9999.   # /  of the estimates
-        st_phio_p = 0.       # \ p-values
-        st_beta_p = -9999.   # /  of the estimates
-        #
-        # Initialize parameter statistics:
-        # max_val, min_val, ave_val, std_val, skew_val, kurt_val
-        gpp_stats = numpy.copy(temp_stats)
-        iabs_stats = numpy.copy(temp_stats)
-        ca_stats = numpy.copy(temp_stats)
-        gs_stats = numpy.copy(temp_stats)
-        k_stats = numpy.copy(temp_stats)
-        eta_stats = numpy.copy(temp_stats)
-        vpd_stats = numpy.copy(temp_stats)
-        #cpa_stats = numpy.copy(temp_stats) #?
-        #
-        if station in my_lue.station_vals.keys():
-            num_rows = len(my_lue.station_vals[station])
-            for i in xrange(num_rows):
-                (st_time, st_gpp, st_gpp_err, st_fpar, st_ppfd, st_vpd, st_cpa, 
-                st_tair, st_co2, st_patm) = my_lue.station_vals[station][i]
-                #
-                # Calculate other necessary parameters for regression:
-                st_ca = (1.e-6)*st_co2*st_patm       # Pa, atms. CO2
-                st_gs = calc_gstar(st_tair)          # Pa, photores. comp. point
-                st_k = calc_k(st_tair, st_patm)      # Pa, Michaelis-Menten coef.
-                st_eta = viscosity_h2o(st_tair)      # mPa s, water viscosity
-                st_iabs = st_fpar*st_ppfd            # mol/m2, abs. PPFD
-                st_fa = (st_cpa/1.26)**(0.25)        # unitless, func. of alpha
-                #
-                # Filter variables out of range:
-                if st_vpd < 0:
-                    st_vpd = numpy.nan
-                #
-                if i == 0:
-                    x_data = numpy.array(
-                        tuple([st_iabs, st_ca, st_gs, st_vpd, st_k, st_eta, st_fa]),
-                        dtype={'names' : ('Iabs', 'ca', 'Gs', 'D', 'K', 'eta', 'fa'),
-                            'formats' : ('f4', 'f4', 'f4', 'f4', 'f4', 'f4', 'f4')},
-                        ndmin=1
-                    )
-                    y_data = numpy.array([st_gpp,])
-                else:
-                    x_temp = numpy.array(
-                        tuple([st_iabs, st_ca, st_gs, st_vpd, st_k, st_eta, st_fa]),
-                        dtype={'names' : ('Iabs', 'ca', 'Gs', 'D', 'K', 'eta', 'fa'),
-                            'formats' : ('f4', 'f4', 'f4', 'f4', 'f4', 'f4', 'f4')},
-                        ndmin=1
-                    )
-                    x_data = numpy.append(x_data, x_temp, axis=0)
-                    y_data = numpy.append(y_data, [st_gpp,])
-            #
-            # Remove nans from data sets:
-            st_idx = numpy.where(~numpy.isnan(x_data['D']))[0]
-            x_data = x_data[st_idx,]
-            y_data = y_data[st_idx]
-            num_rows = len(st_idx)
-            #
-            # Calculate data statistics:
-            gpp_stats[0] = my_lue.calc_statistics(y_data)
-            iabs_stats[0] = my_lue.calc_statistics(x_data['Iabs'])
-            ca_stats[0] = my_lue.calc_statistics(x_data['ca'])
-            gs_stats[0] = my_lue.calc_statistics(x_data['Gs'])
-            vpd_stats[0] = my_lue.calc_statistics(x_data['D'])
-            k_stats[0] = my_lue.calc_statistics(x_data['K'])
-            eta_stats[0] = my_lue.calc_statistics(x_data['eta'])
-            #
-            # Estimate parameter starting values:
-            est_beta = predict_params(vpd_stats, eta_stats, gs_stats, k_stats)
-            #
-            # Curve fit:
-            try:
-                fit_opt, fit_cov = curve_fit(next_gen_lue, 
-                                            x_data, 
-                                            y_data, 
-                                            p0=est_beta)
-            except:
-                st_beta = -9999.
-            else:
-                st_beta = fit_opt[0]
-                #
-                fit_var = fit_cov[0][0]
-                if numpy.isfinite(fit_var) and not (fit_var < 0):
-                    # Get parameter standard errors:
-                    st_beta_err = numpy.sqrt(fit_var)
-                    #
-                    # Calculate t-values:
-                    st_beta_t = st_beta/st_beta_err
-                    # 
-                    # Calculate p-values:
-                    st_beta_p = scipy.stats.t.pdf(-abs(st_beta_t), num_rows)
-                    #
-                    # Calculate r-squared:
-                    dum_x = next_gen_lue(x_data, st_beta)
-                    dum_slope, dum_intrcp, dum_r, dum_p, dum_sterr = (
-                        scipy.stats.linregress(dum_x, y_data))
-                    st_rsqr = dum_r**2
-                #
-                # Plot fit:
-                text_str = ("$\\mathrm{%s}$, $\\mathrm{w/}$ $f_\\alpha$\n"
-                            "$\\phi_o=%0.4f\\pm%0.4f$\n"
-                            "$\\beta=%0.2f\pm%0.2f$\n$R^2=%0.3f$") % (station, 
-                            st_phio, st_phio_err, st_beta, st_beta_err, st_rsqr)
-                fig = plt.figure();
-                ax1 = fig.add_subplot(111)
-                ax1.plot(next_gen_lue(x_data, st_phio, st_beta), y_data, 'ro', 
-                        numpy.sort(y_data), numpy.sort(y_data), '--k', label='LUE')
-                props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-                ax1.text(0.05, 0.95, text_str, transform=ax1.transAxes, fontsize=12, 
-                        verticalalignment='top', bbox=props)
-                ax1.set_ylabel('Observed GPP, mol CO$_2$ m$^{-2}$')
-                ax1.set_xlabel('Modeled GPP, mol CO$_2$ m$^{-2}$')
-                pp.savefig()
-                plt.close()
-                #
-    # Close PDF file
-    d = pp.infodict()
-    d['Title'] = 'GePiSaT Next-Gen LUE Plots with alpha'
-    d['Author'] = 'Tyler W. Davis'
-    pp.close()
-    #
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # END CALC_LUE
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    
-    # PLOT
-    fig_file = out_dir + 'GePiSaT_nxtgn_figs.pdf'
-    pp = PdfPages(fig_file)
-    
-    text_str = ("$\\mathrm{%s}$\n$\\phi_o=%0.4f\\pm%0.4f$\n"
-                "$\\beta=%0.2f\pm%0.2f$\n$R^2=%0.3f$") % (
-                station, st_phio, st_phio_err, st_beta, st_beta_err, st_rsqr
-    )
-    fig = plt.figure()
-    ax1 = fig.add_subplot(111)
-    ax1.plot(next_gen_lue(x_data, st_phio, st_beta), y_data, 'ro', 
-            numpy.sort(y_data), numpy.sort(y_data), '--k', label='LUE')
-    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-    ax1.text(0.05, 0.95, text_str, transform=ax1.transAxes, fontsize=12, 
-            verticalalignment='top', bbox=props)
-    ax1.set_ylabel('Observed GPP, mol CO$_2$ m$^{-2}$')
-    ax1.set_xlabel('Modeled GPP, mol CO$_2$ m$^{-2}$')
-    #ax1.set_title(station)
-    plt.show()
-    
-    pp.savefig()
-    
-    pp.close()
-    

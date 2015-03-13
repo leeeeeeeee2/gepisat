@@ -1282,7 +1282,44 @@ def make_two_plots(my_obs, my_fit1, my_fit2, my_txt1, my_txt2, v=1):
              verticalalignment='top', bbox=props)
     #
     plt.show()
- 
+
+def elv2pres(z):
+    """
+    Name:     EVAP.elv2pres
+    Input:    float, elevation above sea level (z), m
+    Output:   float, atmospheric pressure, Pa
+    Features: Calculates atm. pressure for a given elevation
+    Ref:      Allen et al. (1998)
+    """
+    # Def constants:
+    kPo = 101325   # standard atmosphere, Pa (Allen, 1973)
+    kL = 0.0065    # temperature lapse rate, K/m (Allen, 1973)
+    kTo = 298.15   # base temperature, K (Prentice, unpublished)
+    kG = 9.80665   # gravitational acceleration, m/s^2 (Allen, 1973)
+    kMa = 0.028963 # molecular weight of dry air, kg/mol (Tsilingiris, 2008)
+    kR = 8.3143    # universal gas constant, J/mol/K (Allen, 1973)
+    #
+    p = kPo*(1.0 - kL*z/kTo)**(kG*kMa/(kR*kL))
+    return p
+
+def calculate_vpd(tmp, vap):
+    """
+    Name:     calculate_vpd
+    Input:    - float, mean monthly daily air temp, deg C (tmp)
+              - float, mean monthly vapor pressure, hPa (vap)
+    Output:   float, mean monthly vapor pressure deficit, kPa (vpd)
+    Features: Returns mean monthly vapor pressure deficit
+    Ref:      Eq. 5.1, Abtew and Meleese (2013), Ch. 5 Vapor Pressure 
+              Calculation Methods, in Evaporation and Evapotranspiration: 
+              Measurements and Estimations, Springer, London.
+                vpd = 0.611*exp[ (17.27 tc)/(tc + 237.3) ] - ea
+                where:
+                    tc = average daily air temperature, deg C
+                    ea = actual vapor pressure, kPa
+    """
+    vpd = (0.611*numpy.exp((17.27*tmp)/(tmp + 237.3)) - 0.10*vap)
+    return vpd
+
 ###############################################################################
 ## MAIN PROGRAM:
 ###############################################################################
@@ -1367,6 +1404,91 @@ my_lue.write_out_val(station, out_file)
 #                                WORKSPACE                                   #
 #                                                                            #
 ##############################################################################
+# Beni's data:
+# fAPAR = 1.0 for all months
+# alpha = 1.26 for all months
+# co2 = 376 ppm for all months
+# elv = 450 m
+my_dir = '/Users/twdavis/Dropbox/Work/Imperial/collaborations/stocker/p-model_intercomparison/'
+my_files = glob.glob(my_dir + '*2002*.txt')
+my_mo_ppfd = numpy.loadtxt(
+    fname = my_files[1],
+    dtype={'names': ('month', 'ppfd'),
+           'formats' : ('i4', 'f4')},
+    delimiter=',',
+    skiprows=1,
+    converters={0 : numpy.int, 
+                1 : numpy.float}
+)
+my_mo_tc = numpy.loadtxt(
+    fname = my_files[3],
+    dtype={'names': ('month', 'tc'),
+           'formats' : ('i4', 'f4')},
+    delimiter=',',
+    skiprows=1,
+    converters={0 : numpy.int, 
+                1 : numpy.float}
+)
+my_mo_vap = numpy.loadtxt(
+    fname = my_files[4],
+    dtype={'names': ('month', 'vap'),
+           'formats' : ('i4', 'f4')},
+    delimiter=',',
+    skiprows=1,
+    converters={0 : numpy.int, 
+                1 : numpy.float}
+)
+
+my_lue = LUE()
+st_name = 'CH-Oe1'
+st_gpp = 0.0
+st_gpp_err = 0.0
+st_fpar = 1.0
+st_cpa = 1.26
+st_co2 = 376.
+st_elv = 450.
+st_patm = elv2pres(st_elv)
+for i in xrange(12):
+    st_time = datetime.date(2002, (i + 1), 1)
+    st_tair = my_mo_tc['tc'][i]
+    st_vpd = calculate_vpd(st_tair, my_mo_vap['vap'][i])
+    st_ppfd = my_mo_ppfd['ppfd'][i]
+    #
+    my_lue.add_station_val(st_name, 
+                           st_time, 
+                           st_gpp,
+                           st_gpp_err, 
+                           st_fpar, 
+                           st_ppfd,
+                           st_vpd,
+                           st_cpa,
+                           st_tair,
+                           st_co2,
+                           st_patm,
+                           st_elv)
+
+my_x = my_lue.st_lue_vars[st_name]
+my_y = my_lue.next_gen_lue(my_x, 244.033)
+
+fig = plt.figure()
+ax1 = fig.add_subplot(111)
+plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=14)
+plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
+ax1.plot(numpy.array([i for i in xrange(12)]), my_y, 'k-o') 
+ax1.set_ylabel('GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+ax1.set_xlabel('Month', fontsize=16)
+plt.show()
+
+fig = plt.figure()
+ax1 = fig.add_subplot(111)
+plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=14)
+plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
+ax1.plot(numpy.array([i for i in xrange(12)]), my_x['D'], 'k-o') 
+ax1.set_ylabel('', fontsize=16)
+ax1.set_xlabel('Month', fontsize=16)
+plt.show()
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 # Estimate beta from Wang Han equation:
 out_file = out_dir + 'Wang_Han_beta_estimates.txt'
 header = ('Timestamp,station,Tair_degC,D_kPa,K_Pa,'

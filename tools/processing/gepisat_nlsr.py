@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-11-18 -- created
-# 2015-02-27 -- last updated
+# 2015-03-17 -- last updated
 #
 # ~~~~~~~~~~~~
 # description:
@@ -50,6 +50,10 @@
 # 26. overhaul on model_fitness function [15.02.27]
 #     --> definitions/distinctions between R-squared, r, and IOA
 # 27. new plots for seasonal, MGS beta estimates + basic v nxtgn [15.02.27]
+# 28. added ground-state simple-formula global beta [15.03.17]
+# 29. changed calc_mgs_beta to calc_mgs_params [15.03.17]
+# 30. deleted calc_hessian function [15.03.17]
+# 31. started on crop plots (C4 + irrigation) [15.03.17]
 # 
 # ~~~~~
 # todo:
@@ -63,7 +67,6 @@ import glob
 import numpy
 import os.path
 from scipy.optimize import leastsq
-import scipy.stats
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 
@@ -80,7 +83,8 @@ class LUE:
     # Class Variable Definitions
     # ////////////////////////////////////////////////////////////////////////
     kc = 0.41          # Jmax cost coefficient
-    kphio = 0.093      # (Long et al., 1993)
+    kphio = 0.093      # intrinsic quantum efficiency (Long et al., 1993)
+    kbeta = 244.033    # ground-state simple-formula global beta
     kPo = 101325.      # standard atmosphere, Pa (Allen, 1973)
     kTo = 25.          # base temperature, deg C (Prentice, unpublished)
     #
@@ -113,16 +117,12 @@ class LUE:
                               'K' : 'Pa', 
                               'ns' : 'NA', 
                               'fa' : 'NA',
-                              'beta1' : 'NA',
-                              'beta2' : 'NA',
-                              'GPP_hat1' : 'mol_m2',
-                              'GPP_hat2' : 'mol_m2'}
+                              'GPP_hat' : 'mol_m2'}
         #
         # Define station value header line:
         header_vals = ['Timestamp', 'GPP', 'GPP_err', 'fPAR', 'PPFD',  
                        'VPD', 'CPA', 'Tair', 'CO2', 'Patm', 'elv', 'Iabs', 
-                       'ca', 'Gs', 'D', 'K', 'ns', 'fa', 'beta1', 'beta2',
-                       'GPP_hat1', 'GPP_hat2']
+                       'ca', 'Gs', 'D', 'K', 'ns', 'fa', 'GPP_hat']
         header = ''
         for k in header_vals:
             header += k
@@ -148,9 +148,7 @@ class LUE:
                               'D' : 'Pa', 
                               'K' : 'Pa', 
                               'ns' : 'NA', 
-                              'fa' : 'NA',
-                              'beta1' : 'NA',
-                              'beta2' : 'NA'}
+                              'fa' : 'NA'}
         #
         # Dictionary of stations' light-use efficiency model fit/fitness:
         # * this is for model results
@@ -198,15 +196,12 @@ class LUE:
         ns = self.viscosity_h2o(tair, patm) # Pa s, viscosity
         ns /= self.n25                      # unitless, water viscosity
         fa = (alpha/1.26)**(0.25)           # unitless, func. of alpha
-        beta1, beta2 = self.beta_estimate(ca, d, k, gs, ns, tair, elv)
-        yhat1 = self.nxtgn(iabs, ca, gs, d, k, ns, fa, beta1)
-        yhat2 = self.nxtgn(iabs, ca, gs, d, k, ns, fa, beta2)
+        yhat = self.nxtgn(iabs, ca, gs, d, k, ns, fa)
         #
         # Place value parameters into tuples:
         val_params = (month, gpp, gpp_err, fpar, ppfd, vpd, alpha, tair, co2, 
-                      patm, elv, iabs, ca, gs, d, k, ns, fa, beta1, beta2,
-                      yhat1, yhat2)
-        var_params = (gpp, gpp_err, iabs, ca, gs, d, k, ns, fa, beta1, beta2)
+                      patm, elv, iabs, ca, gs, d, k, ns, fa, yhat)
+        var_params = (gpp, gpp_err, iabs, ca, gs, d, k, ns, fa)
         #
         # ~~~~~~~~~~~~~~~~~~~~~~~
         # Station Values
@@ -221,17 +216,15 @@ class LUE:
                                   'Patm', 'elv', 'Iabs', 
                                   'ca', 'Gs', 'D', 
                                   'K', 'ns', 'fa', 
-                                  'beta1', 'beta2',
-                                  'GPP_hat1', 'GPP_hat2'),
+                                  'GPP_hat'),
                        'formats' : ('O', 'f4', 'f4', 
                                     'f4', 'f4', 'f4', 
                                     'f4', 'f4', 'f4', 
                                     'f4', 'f4', 'f4',
                                     'f4', 'f4', 'f4',
                                     'f4', 'f4', 'f4',
-                                    'f4', 'f4',
-                                    'f4', 'f4')},
-                        ndmin=1
+                                    'f4')},
+                ndmin=1
                 )
         else:
             # Add new parameters to list:
@@ -243,17 +236,15 @@ class LUE:
                                   'Patm', 'elv', 'Iabs', 
                                   'ca', 'Gs', 'D', 
                                   'K', 'ns', 'fa', 
-                                  'beta1', 'beta2',
-                                  'GPP_hat1', 'GPP_hat2'),
+                                  'GPP_hat'),
                        'formats' : ('O', 'f4', 'f4', 
                                     'f4', 'f4', 'f4', 
                                     'f4', 'f4', 'f4', 
                                     'f4', 'f4', 'f4',
                                     'f4', 'f4', 'f4',
                                     'f4', 'f4', 'f4',
-                                    'f4', 'f4',
-                                    'f4', 'f4')},
-                        ndmin=1
+                                    'f4')},
+                ndmin=1
                 )
             self.station_vals[station] = numpy.append(
                 self.station_vals[station], 
@@ -273,12 +264,10 @@ class LUE:
                     dtype={
                         'names' : ('GPP', 'GPP_err', 'Iabs', 
                                    'ca', 'Gs', 'D', 
-                                   'K', 'ns', 'fa', 
-                                   'beta1', 'beta2'),
+                                   'K', 'ns', 'fa'),
                         'formats' : ('f4', 'f4', 'f4', 
                                      'f4', 'f4', 'f4', 
-                                     'f4', 'f4', 'f4',
-                                     'f4', 'f4')
+                                     'f4', 'f4', 'f4')
                         },
                     ndmin=1
                     )
@@ -288,12 +277,10 @@ class LUE:
                     dtype={
                         'names' : ('GPP', 'GPP_err', 'Iabs', 
                                    'ca', 'Gs', 'D', 
-                                   'K', 'ns', 'fa',
-                                   'beta1', 'beta2'),
+                                   'K', 'ns', 'fa'),
                         'formats' : ('f4', 'f4', 'f4', 
                                      'f4', 'f4', 'f4', 
-                                     'f4', 'f4', 'f4',
-                                     'f4', 'f4')
+                                     'f4', 'f4', 'f4')
                         },
                     ndmin=1
                     )
@@ -302,44 +289,6 @@ class LUE:
                     temp_array, 
                     axis=0
                     )
-    #
-    def beta_estimate(self, my_ca, my_d, my_k, my_gs, my_ns, my_t, my_z):
-        """
-        Name:     LUE.beta_estimate
-        Input:    - float, atmospheric CO2 concentration, Pa (my_ca)
-                  - float, vapor pressure deficit, Pa (my_d)
-                  - float, Michaelis-Menten coeff, Pa (my_k)
-                  - float, photorespiratory comp point, Pa (my_gs)
-                  - float, viscosity, unitless (my_ns)
-                  - float, air temperature, deg C (my_t)
-                  - float, elevation, m (my_z)
-        Output:   tuple 
-                  - float, predicted beta from simple expression (beta_p1)
-                  - float, predicted beta from precise expression (beta_p2)
-        Features: Returns an estimate for beta based on the Wang Han equation
-        """
-        if not numpy.isfinite(my_z):
-            my_z = 0.
-        #
-        whe = numpy.exp(
-            1.19 
-            + 0.0545*(my_t - 25.)        # T in deg C
-            - 0.5*numpy.log(1e-3*my_d)   # D in kPa
-            - 0.0815*(1e-3*my_z)         # z in km
-        )
-        chi = whe/(1. + whe)
-        #
-        beta_p1 = 1.6*my_ns*my_d*(chi**2)
-        beta_p1 /= (1. - chi)**2
-        beta_p1 /= my_k
-        #
-        beta_p2 = 1.6*my_ns*my_d
-        beta_p2 /= (my_k + my_gs)
-        beta_p2 *= (chi*my_ca - my_gs)**2
-        beta_p2 /= (my_ca**2)
-        beta_p2 /= (chi - 1.)**2
-        #
-        return (beta_p1, beta_p2)
     #
     def calc_gstar(self, tc):
         """
@@ -386,103 +335,59 @@ class LUE:
         k = vc*(1 + kco*(1e-6)*patm/vo)
         return k
     #
-    def calc_mgs_beta(self, station):
+    def calc_mgs_params(self, station):
         """
-        Name:     LUE.calc_mgs_beta
+        Name:     LUE.calc_mgs_params
         Input:    str, station name (station)
-        Ouput:    float, beta
-        Features: Returns an estimate for the mean-growing season beta (i.e.,
-                  above freezing temperatures)
+        Ouput:    numpy.ndarray
+        Features: Returns the mean-growing season parameters (i.e., ca, d, k,
+                  gs, ns, fa, and tair)
         """
         # NOTE: vars in st_lue_vars are above freezing (i.e., growing season)
         if station in self.st_lue_vars.keys():
             # Extract vectors of data:
             v_tair = self.station_vals[station]['Tair']    # deg C
-            v_vpd = self.station_vals[station]['D']        # Pa
+            v_d = self.station_vals[station]['D']          # Pa
             v_ca = self.station_vals[station]['ca']        # Pa
             v_patm = self.station_vals[station]['Patm']    # Pa
-            v_elv = self.station_vals[station]['elv']      # m
+            v_fa = self.station_vals[station]['fa']        # unitless
             #
-            # Calculate individual values:
-            my_elv = v_elv[0]
+            # Extract constants:
             my_patm = v_patm[0]
             #
+            # Find indexes where non-freezing:
             mgs_idx = numpy.where(v_tair > 0)
+            #
+            # Calculate mean-growing season values:
             mgs_tair = v_tair[mgs_idx].mean()
-            mgs_vpd = v_vpd[mgs_idx].mean()
+            mgs_d = v_d[mgs_idx].mean()
             mgs_ca = v_ca[mgs_idx].mean()
+            mgs_fa = v_fa[mgs_idx].mean()
             #
             mgs_gs = self.calc_gstar(mgs_tair)
             mgs_k = self.calc_k(mgs_tair, my_patm)
             mgs_ns = self.viscosity_h2o(mgs_tair, my_patm)
             mgs_ns /= self.n25
             #
-            # Estimate MGS beta:
-            mgs_beta = self.beta_estimate(mgs_ca, mgs_vpd, mgs_k, mgs_gs, 
-                                          mgs_ns, mgs_tair, my_elv)
+            mgs_params = (station,
+                          mgs_ca, mgs_d, mgs_k, 
+                          mgs_gs, mgs_ns, mgs_fa, mgs_tair)
         else:
-            mgs_beta = numpy.nan
-        return mgs_beta
-    #
-    def calc_statistics(self, my_array):
-        """
-        Name:     LUE.calc_statistics
-        Input:    numpy.ndarray (my_array)
-        Output:   tuple, statistical quantities
-                  - float, max value (max_val)
-                  - float, min value (min_val)
-                  - float, mean value (ave_val)
-                  - float, standard deviation (std_val)
-                  - float, skewness (skew_val)
-                  - float, kurtosis (kurt_val)
-        Features: Returns the basic/advanced statistics for an array of values
-        
-        @TODO: is this function still necessary?
-        """
-        # Make sure my_array is a numpy array:
-        if not isinstance(my_array, numpy.ndarray):
-            my_array = numpy.array(my_array)
+            mgs_params = (station,
+                          numpy.nan, numpy.nan, numpy.nan, 
+                          numpy.nan, numpy.nan, numpy.nan, numpy.nan)
         #
-        # Initialize return array:
-        my_stats = numpy.array(tuple([-9999., -9999., -9999., 
-                                      -9999., -9999., -9999.]),
-                               dtype={'names' : ('max', 'min', 'ave', 
-                                                 'std', 'skw', 'krt'),
-                                      'formats' : ('f4', 'f4', 'f4', 
-                                                   'f4', 'f4', 'f4')},
-                               ndmin=1)
-        #
-        # Make sure my_array is not empty or crashes on skew/kurt:
-        if my_array.any() and len(my_array) > 1:
-            # Max, min, mean, st dev, skew, kurtosis (offset from normal)
-            max_val = my_array.max()
-            min_val = my_array.min()
-            ave_val = my_array.mean()
-            std_val = my_array.std()
-            #
-            # Address divide by zero issues:
-            if std_val == 0:
-                std_val = 1e-4
-            #
-            skew_val = (
-                sum((my_array - ave_val)**3)/
-                ((len(my_array) - 1)*std_val**3)
-                )
-            kurt_val = (
-                sum((my_array - ave_val)**4)/
-                ((len(my_array) - 1)*std_val**4) - 3
-                )
-        else:
-            # Maintain initial quantity values:
-            max_val = -9999.
-            min_val = -9999.
-            ave_val = -9999.
-            std_val = -9999.
-            skew_val = -9999.
-            kurt_val = -9999.
-            #
-        my_stats[0] = (max_val, min_val, ave_val, std_val, skew_val, kurt_val)
-        return my_stats
+        mgs_return = numpy.array(
+            mgs_params,
+            dtype={'names' : ('station',
+                              'mgs_ca', 'mgs_d', 'mgs_k', 
+                              'mgs_gs', 'mgs_ns', 'mgs_fa', 'mgs_tair'),
+                   'formats' : ('S6',
+                                'f4', 'f4', 'f4', 
+                                'f4', 'f4', 'f4', 'f4')},
+            ndmin=1
+            )
+        return mgs_return
     #
     def density_h2o(self, tc, p):
         """
@@ -533,78 +438,6 @@ class LUE:
         #
         return rho
     #
-    def lue_jacob(self, p, x, y):
-        """
-        Name:     LUE.lue_jacob
-        Inputs:   - float, model estimate (p)
-                  - numpy.ndarray, model predictors (x)
-                  - numpy.ndarray, model observations (y)
-        Outputs:  numpy.ndarray (jacob)
-        Features: Returns the Jacobian (first partial derivative) for the 
-                  light-use efficiency equation (w.r.t. beta)
-        Depends:  - kc
-                  - kphio
-        
-        @TODO: is this function still necessary?
-        """
-        # Variable substitutes:
-        kc23 = self.kc**(2./3.)
-        xh = numpy.sqrt(1.6)
-        b2 = p**2
-        ced = x['ns']*x['D']
-        v1 = xh*x['Gs']*x['ns']*x['D']
-        v2 = x['ca'] - x['Gs']
-        v22 = v2**2
-        v243 = v2**(4./3.)
-        v3 = x['K'] + x['Gs']
-        bv3 = p*v3
-        v4 = ced/bv3
-        xv4 = numpy.sqrt(v4)
-        v5 = 3.*xh*x['Gs']*xv4 + 2.*x['Gs'] + x['ca']
-        v52 = v5**2
-        v53 = v5**3
-        v543 = v5**(4./3.)
-        v573 = v5**(7./3.)
-        s1 = self.kphio*x['fa']*x['Iabs']
-        f1 = v3*xv4
-        f2 = v22/v52
-        f3 = v243/v543
-        f4 = kc23*v1*v243
-        f5 = v1*v22
-        f6 = f2 - kc23*f3
-        #
-        # Check for negatives in f6:
-        temp_list = [1e-6 + 0.*i if i < 0 else i for i in f6]
-        f6 = numpy.array(temp_list)
-        #
-        # First partial derivative
-        n1 = 3.*f5
-        n2 = 2.*f4
-        d1 = b2*f1*v53
-        d2 = b2*f1*v573
-        d3 = 2.*numpy.sqrt(f6)
-        jacob = s1*(n1/d1 - n2/d2)
-        jacob /= d3
-        #
-        return(jacob)
-    #
-    def lue_resid(self, p, x, y):
-        """
-        Name:     LUE.lue_reside
-        Inputs:   - float, model estimate (p)
-                  - numpy.ndarray, model predictors (x)
-                  - numpy.ndarray, model observations (y)
-        Features: Returns the weighted residuals of the light-use efficiency 
-                  model for a given model estimate
-        Depends:  next_gen_lue
-        
-        @TODO: is this function still necessary?
-        """
-        sigma = x['GPP_err']
-        y_hat = self.next_gen_lue(x, p)
-        resid = (y_hat - y)/sigma
-        return resid
-    #
     def next_gen_lue(self, x, beta):
         """
         Name:     LUE.next_gen_lue
@@ -648,7 +481,7 @@ class LUE:
         #
         return gpp
     #
-    def nxtgn(self, iabs, ca, gs, d, k, ns, fa, beta):
+    def nxtgn(self, iabs, ca, gs, d, k, ns, fa):
         """
         Name:     LUE.nxtgn
         Input:    - float, 'Iabs' : mol/m2, fAPARxPPFD
@@ -658,12 +491,12 @@ class LUE:
                   - float, 'K' : Pa, Michaelis-Menten coeff.
                   - float, 'ns' : mPa s, viscosity of water
                   - float, 'fa' : unitless, function of alpha
-                  - float, beta parameter (beta)
         Output:   float, estimate of GPP (gpp)
         Features: Returns an estimate of GPP based on the next-generation light 
                   and water use efficiency model.
         Depends:  - kc
                   - kphio
+                  - kbeta
         """
         # Define default GPP return value:
         gpp = numpy.nan
@@ -671,7 +504,7 @@ class LUE:
         # Define variable substitutes:
         vdcg = ca - gs
         vacg = ca + 2.*gs
-        vbkg = beta*(k + gs)
+        vbkg = self.kbeta*(k + gs)
         #
         # Check for negatives:
         if vbkg > 0:
@@ -785,8 +618,7 @@ class LUE:
                     f.write(("%s,%f,%f,%f,%f,"
                              "%f,%f,%f,%f,%f,"
                              "%f,%f,%f,%f,%f,"
-                             "%f,%f,%f,%f,%f,"
-                             "%f,%f\n") % tuple(t))
+                             "%f,%f,%f,%f\n") % tuple(t))
                     f.close()
     #
     def write_out_lue(self, out_file):
@@ -843,174 +675,186 @@ class LUE:
                         "%f,%f,%f,%f,%f,%f,"
                         "%f,%f,%f,%f,%f,%f\n" % t)
                 f.close()
+    #
+    # ~~~~~~~~~~~~~~~~~ NOT USED FUNCTIONS ~~~~~~~~~~~~~~~~~~
+    #
+    def lue_resid(self, p, x, y):
+        """
+        Name:     LUE.lue_reside
+        Inputs:   - float, model estimate (p)
+                  - numpy.ndarray, model predictors (x)
+                  - numpy.ndarray, model observations (y)
+        Features: Returns the weighted residuals of the light-use efficiency 
+                  model for a given model estimate
+        Depends:  next_gen_lue
+        
+        NOT USED
+        """
+        sigma = x['GPP_err']
+        y_hat = self.next_gen_lue(x, p)
+        resid = (y_hat - y)/sigma
+        return resid
+    #
+    def lue_jacob(self, p, x, y):
+        """
+        Name:     LUE.lue_jacob
+        Inputs:   - float, model estimate (p)
+                  - numpy.ndarray, model predictors (x)
+                  - numpy.ndarray, model observations (y)
+        Outputs:  numpy.ndarray (jacob)
+        Features: Returns the Jacobian (first partial derivative) for the 
+                  light-use efficiency equation (w.r.t. beta)
+        Depends:  - kc
+                  - kphio
+        
+        NOT USED
+        """
+        # Variable substitutes:
+        kc23 = self.kc**(2./3.)
+        xh = numpy.sqrt(1.6)
+        b2 = p**2
+        ced = x['ns']*x['D']
+        v1 = xh*x['Gs']*x['ns']*x['D']
+        v2 = x['ca'] - x['Gs']
+        v22 = v2**2
+        v243 = v2**(4./3.)
+        v3 = x['K'] + x['Gs']
+        bv3 = p*v3
+        v4 = ced/bv3
+        xv4 = numpy.sqrt(v4)
+        v5 = 3.*xh*x['Gs']*xv4 + 2.*x['Gs'] + x['ca']
+        v52 = v5**2
+        v53 = v5**3
+        v543 = v5**(4./3.)
+        v573 = v5**(7./3.)
+        s1 = self.kphio*x['fa']*x['Iabs']
+        f1 = v3*xv4
+        f2 = v22/v52
+        f3 = v243/v543
+        f4 = kc23*v1*v243
+        f5 = v1*v22
+        f6 = f2 - kc23*f3
+        #
+        # Check for negatives in f6:
+        temp_list = [1e-6 + 0.*i if i < 0 else i for i in f6]
+        f6 = numpy.array(temp_list)
+        #
+        # First partial derivative
+        n1 = 3.*f5
+        n2 = 2.*f4
+        d1 = b2*f1*v53
+        d2 = b2*f1*v573
+        d3 = 2.*numpy.sqrt(f6)
+        jacob = s1*(n1/d1 - n2/d2)
+        jacob /= d3
+        #
+        return(jacob)
+    #
+    def calc_statistics(self, my_array):
+        """
+        Name:     LUE.calc_statistics
+        Input:    numpy.ndarray (my_array)
+        Output:   tuple, statistical quantities
+                  - float, max value (max_val)
+                  - float, min value (min_val)
+                  - float, mean value (ave_val)
+                  - float, standard deviation (std_val)
+                  - float, skewness (skew_val)
+                  - float, kurtosis (kurt_val)
+        Features: Returns the basic/advanced statistics for an array of values
+        
+        NOT USED
+        """
+        # Make sure my_array is a numpy array:
+        if not isinstance(my_array, numpy.ndarray):
+            my_array = numpy.array(my_array)
+        #
+        # Initialize return array:
+        my_stats = numpy.array(tuple([-9999., -9999., -9999., 
+                                      -9999., -9999., -9999.]),
+                               dtype={'names' : ('max', 'min', 'ave', 
+                                                 'std', 'skw', 'krt'),
+                                      'formats' : ('f4', 'f4', 'f4', 
+                                                   'f4', 'f4', 'f4')},
+                               ndmin=1)
+        #
+        # Make sure my_array is not empty or crashes on skew/kurt:
+        if my_array.any() and len(my_array) > 1:
+            # Max, min, mean, st dev, skew, kurtosis (offset from normal)
+            max_val = my_array.max()
+            min_val = my_array.min()
+            ave_val = my_array.mean()
+            std_val = my_array.std()
+            #
+            # Address divide by zero issues:
+            if std_val == 0:
+                std_val = 1e-4
+            #
+            skew_val = (
+                sum((my_array - ave_val)**3)/
+                ((len(my_array) - 1)*std_val**3)
+                )
+            kurt_val = (
+                sum((my_array - ave_val)**4)/
+                ((len(my_array) - 1)*std_val**4) - 3
+                )
+        else:
+            # Maintain initial quantity values:
+            max_val = -9999.
+            min_val = -9999.
+            ave_val = -9999.
+            std_val = -9999.
+            skew_val = -9999.
+            kurt_val = -9999.
+            #
+        my_stats[0] = (max_val, min_val, ave_val, std_val, skew_val, kurt_val)
+        return my_stats
+    #
+    def beta_estimate(self, my_ca, my_d, my_k, my_gs, my_ns, my_t, my_z):
+        """
+        Name:     LUE.beta_estimate
+        Input:    - float, atmospheric CO2 concentration, Pa (my_ca)
+                  - float, vapor pressure deficit, Pa (my_d)
+                  - float, Michaelis-Menten coeff, Pa (my_k)
+                  - float, photorespiratory comp point, Pa (my_gs)
+                  - float, viscosity, unitless (my_ns)
+                  - float, air temperature, deg C (my_t)
+                  - float, elevation, m (my_z)
+        Output:   tuple 
+                  - float, predicted beta from simple expression (beta_p1)
+                  - float, predicted beta from precise expression (beta_p2)
+        Features: Returns an estimate for beta based on the Wang Han equation
+        
+        NOT USED
+        """
+        if not numpy.isfinite(my_z):
+            my_z = 0.
+        #
+        whe = numpy.exp(
+            1.19 
+            + 0.0545*(my_t - 25.)        # T in deg C
+            - 0.5*numpy.log(1e-3*my_d)   # D in kPa
+            - 0.0815*(1e-3*my_z)         # z in km
+        )
+        chi = whe/(1. + whe)
+        #
+        beta_p1 = 1.6*my_ns*my_d*(chi**2)
+        beta_p1 /= (1. - chi)**2
+        beta_p1 /= my_k
+        #
+        beta_p2 = 1.6*my_ns*my_d
+        beta_p2 /= (my_k + my_gs)
+        beta_p2 *= (chi*my_ca - my_gs)**2
+        beta_p2 /= (my_ca**2)
+        beta_p2 /= (chi - 1.)**2
+        #
+        return (beta_p1, beta_p2)
+    #
+    
 
 ###############################################################################
 ## FUNCTIONS:
 ###############################################################################
-def get_lue(lue_class, station):
-    """
-    Name:     get_lue
-    Input:    - LUE class (lue_class)
-              - string, station name (station)
-    Output:   tuple
-              - numpy.ndarray, Iabs (x_data)
-              - numpy.ndarray, GPP (y_data)
-              - float, fitted phi_o (st_phio)
-              - float, fitted beta (st_beta)
-              - float, R-squared (st_rsqr)
-    Features: Fits the next generation LUE model to the monthly flux tower 
-              data and returns the model fit
-    Depends:  - next_gen_lue
-              - calc_gstar
-              - calc_k
-              - viscosity_h2o
-    """
-    # Initialize fitness parameters:
-    st_rsqr = -9999.              # model coef. of determination
-    st_beta = -9999.              # beta parameter
-    st_phio = lue_class.kphio     # intrinsic quantum efficiency parameter
-    #
-    if station in lue_class.station_vals.keys():
-        # Get predictors and observations:
-        x_data = numpy.copy(lue_class.st_lue_vars[station])
-        y_data = x_data['GPP']
-        #
-        # Estimate beta:
-        est_beta = lue_class.beta_estimate(station)
-        #
-        # Curve fit:
-        plsq, cov, infodict, mesg, ier = leastsq(lue_class.lue_resid, 
-                                                 est_beta,
-                                                 args=(x_data, y_data), 
-                                                 Dfun=lue_class.lue_jacob, 
-                                                 full_output=True)
-        #
-        beta_fit = plsq[0]
-        y_fit = lue_class.next_gen_lue(x_data, beta_fit)
-        #
-        # Calculate fitness:
-        m = len(y_data)
-        ssxx = numpy.power(y_fit, 2).sum() - m*(y_fit.mean()**2)
-        ssyy = numpy.power(y_data, 2).sum() - m*(y_data.mean()**2)
-        ssxy = (y_fit*y_data).sum() - m*y_fit.mean()*y_data.mean()
-        rsqr = ssxy**2/(ssxx*ssyy)
-        #
-        st_beta = beta_fit
-        st_rsqr = rsqr
-    #
-    return (x_data, y_data, st_phio, st_beta, st_rsqr)
-
-def grad_hess(my_vars, beta):
-    """
-    Name:     grad_hess
-    Inputs:   - numpy.ndarray (my_vars)
-              - float (beta)
-    Outputs:  tuple
-              - numpy.ndarray (grad_f)
-              - numpy.ndarray (grad2_f)
-    Features: Returns the gradient (first partial derivative) and hessian 
-              (second partial derivative) for the light-use efficiency equation
-    """
-    # Variable substitues:
-    kc23 = kc**(2./3.)
-    xh = numpy.sqrt(1.6)
-    b2 = beta*beta
-    b3 = b2*beta
-    b4 = b3*beta
-    ced = my_vars['ns']*my_vars['D']
-    cgh = my_vars['Gs']*xh
-    v1 = xh*my_vars['Gs']*my_vars['ns']*my_vars['D']
-    v2 = my_vars['ca'] - my_vars['Gs']
-    v22 = v2**2
-    v243 = v2**(4./3.)
-    v3 = my_vars['K'] + my_vars['Gs']
-    v32 = v3**2
-    bv3 = beta*v3
-    v4 = ced/bv3
-    xv4 = numpy.sqrt(v4)
-    v432 = v4**(3./2.)
-    v5 = 3.*xh*my_vars['Gs']*xv4 + 2.*my_vars['Gs'] + my_vars['ca']
-    v52 = v5**2
-    v53 = v5**3
-    v54 = v5**4
-    v543 = v5**(4./3.)
-    v573 = v5**(7./3.)
-    v503 = v5**(10./3.)
-    s1 = kphio*my_vars['fa']*my_vars['Iabs']
-    f1 = v3*xv4
-    f2 = v22/v52
-    f3 = v243/v543
-    f4 = kc23*v1*v243
-    f5 = v1*v22
-    f6 = f2 - kc23*f3
-    #
-    # First partial derivative
-    n1 = 3.*f5
-    n2 = 2.*f4
-    d1 = b2*f1*v53
-    d2 = b2*f1*v573
-    d3 = 2.*numpy.sqrt(f6)
-    grad_f = s1*(n1/d1 - n2/d2)
-    grad_f /= d3
-    #
-    # Second partial derivative
-    n5 = 3.*f5
-    d5 = b2*f1*v53
-    t5 = n5/d5
-    n6 = 2.*f4
-    d6 = b2*f1*v573
-    t6 = n6/d6
-    n20 = 4.*f4
-    d20 = b3*f1*v573
-    t20 = n20/d20
-    n21 = f4*ced
-    d21 = b4*v32*v432*v573
-    t21 = n21/d21
-    n22 = 6.*f5
-    d22 = b3*f1*v53
-    t22 = n22/d22
-    n23 = 3.*f5*ced
-    d23 = 2.*b4*v32*v432*v53
-    t23 = n23/d23
-    n24 = 7.*f4*cgh
-    d24 = b3*v3*v503
-    t24 = n24/d24
-    n25 = 27.*f5*cgh
-    d25 = 2.*b3*v3*v54
-    t25 = n25/d25
-    #
-    n3 = t25 - t24 + t23 - t22 - t21 + t20
-    n4 = (t5 - t6)**2
-    d4 = 4.*numpy.power(f6, 1.5)
-    grad2_f = s1*(n3/d3 - n4/d4)
-    #
-    return(grad_f, grad2_f)
-
-def make_plot(my_fit, my_obs, my_text):
-    """
-    Name:     make_plot
-    Input:    - numpy.ndarray, modelled GPP (my_fit)
-              - numpy.ndarray, observed GPP (my_obs)
-              - str, plot text (my_text)
-    Output:   None
-    Features: Creates a plot of predicted versus observed GPP
-    """
-    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-    plot_max = numpy.concatenate((my_fit, my_obs)).max()
-    fig = plt.figure()
-    ax1 = fig.add_subplot(111)
-    plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=14)
-    plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
-    ax1.plot(my_obs, my_fit, 'ro', label='Fitted') 
-    ax1.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
-    ax1.set_ylabel('Modeled GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
-    ax1.set_xlabel('Observed GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
-    ax1.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
-                ncol=3, mode="expand", borderaxespad=0., fontsize=14)
-    ax1.text(0.05, 0.95, my_text, transform=ax1.transAxes, fontsize=14, 
-            verticalalignment='top', bbox=props)
-    plt.show()
-
 def get_elv(meta_dir, st_name):
     """
     Name:     get_elv
@@ -1070,6 +914,84 @@ def get_veg_type(meta_dir, st_name):
         my_veg = ''
     #
     return my_veg
+
+def get_lue(lue_class, station):
+    """
+    Name:     get_lue
+    Input:    - LUE class (lue_class)
+              - string, station name (station)
+    Output:   tuple
+              - numpy.ndarray, Iabs (x_data)
+              - numpy.ndarray, GPP (y_data)
+              - float, fitted phi_o (st_phio)
+              - float, fitted beta (st_beta)
+              - float, R-squared (st_rsqr)
+    Features: Fits the next generation LUE model to the monthly flux tower 
+              data and returns the model fit
+    Depends:  - next_gen_lue
+              - calc_gstar
+              - calc_k
+              - viscosity_h2o
+    """
+    # Initialize fitness parameters:
+    st_rsqr = -9999.              # model coef. of determination
+    st_beta = -9999.              # beta parameter
+    st_phio = lue_class.kphio     # intrinsic quantum efficiency parameter
+    #
+    if station in lue_class.station_vals.keys():
+        # Get predictors and observations:
+        x_data = numpy.copy(lue_class.st_lue_vars[station])
+        y_data = x_data['GPP']
+        #
+        # Estimate beta:
+        est_beta = lue_class.beta_estimate(station)
+        #
+        # Curve fit:
+        plsq, cov, infodict, mesg, ier = leastsq(lue_class.lue_resid, 
+                                                 est_beta,
+                                                 args=(x_data, y_data), 
+                                                 Dfun=lue_class.lue_jacob, 
+                                                 full_output=True)
+        #
+        beta_fit = plsq[0]
+        y_fit = lue_class.next_gen_lue(x_data, beta_fit)
+        #
+        # Calculate fitness:
+        m = len(y_data)
+        ssxx = numpy.power(y_fit, 2).sum() - m*(y_fit.mean()**2)
+        ssyy = numpy.power(y_data, 2).sum() - m*(y_data.mean()**2)
+        ssxy = (y_fit*y_data).sum() - m*y_fit.mean()*y_data.mean()
+        rsqr = ssxy**2/(ssxx*ssyy)
+        #
+        st_beta = beta_fit
+        st_rsqr = rsqr
+    #
+    return (x_data, y_data, st_phio, st_beta, st_rsqr)
+
+def make_plot(my_fit, my_obs, my_text):
+    """
+    Name:     make_plot
+    Input:    - numpy.ndarray, modelled GPP (my_fit)
+              - numpy.ndarray, observed GPP (my_obs)
+              - str, plot text (my_text)
+    Output:   None
+    Features: Creates a plot of predicted versus observed GPP
+    """
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    plot_max = numpy.concatenate((my_fit, my_obs)).max()
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=14)
+    plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
+    ax1.plot(my_obs, my_fit, 'ro', label='Fitted') 
+    ax1.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
+    ax1.set_ylabel('Modeled GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
+    ax1.set_xlabel('Observed GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
+    ax1.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+                ncol=3, mode="expand", borderaxespad=0., fontsize=14)
+    ax1.text(0.05, 0.95, my_text, transform=ax1.transAxes, fontsize=14, 
+            verticalalignment='top', bbox=props)
+    plt.show()
 
 def wang_han_eq(my_d, my_k, my_n, my_t, my_z, my_gs, my_ca):
     """
@@ -1256,8 +1178,10 @@ def make_two_plots(my_obs, my_fit1, my_fit2, my_txt1, my_txt2, v=1):
     plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
     if v == 1:
         ax1.plot(my_obs, my_fit1, 'ro', label='Simple $\\beta$ formula') 
-    else:
+    elif v == 2:
         ax1.plot(my_obs, my_fit1, 'ro', label='Basic LUE model') 
+    elif v == 3:
+        ax1.plot(my_obs, my_fit1, 'ro', label='Seasonal')
     ax1.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
     ax1.set_ylabel('Modeled GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
     ax1.set_xlabel('Observed GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
@@ -1271,8 +1195,10 @@ def make_two_plots(my_obs, my_fit1, my_fit2, my_txt1, my_txt2, v=1):
     plt.setp(ax2.get_yticklabels(), rotation=0, fontsize=14)
     if v == 1:
         ax2.plot(my_obs, my_fit2, 'ro', label='Precise $\\beta$ formula') 
-    else:
+    elif v == 2:
         ax2.plot(my_obs, my_fit2, 'ro', label='Next-Gen LUE model') 
+    elif v == 3:
+        ax2.plot(my_obs, my_fit2, 'ro', label='Mean Growing Season')
     ax2.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
     ax2.set_ylabel('Modeled GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
     ax2.set_xlabel('Observed GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
@@ -1336,16 +1262,10 @@ else:
 my_files = glob.glob(my_dir + 'GePiSaT_All_Data-26*')
 my_data = numpy.loadtxt(
     fname=my_files[0],
-    dtype={
-        'names': (
-            'station', 'timestamp', 'gpp', 'gpp_err', 'fapar',
-            'ppfd', 'vpd', 'alpha', 'tair', 'co2', 'patm'
-        ),
-        'formats' : (
-            'S6', 'O', 'f4', 'f4', 'f4',
-            'f4', 'f4', 'f4', 'f4', 'f4', 'f4'
-        )
-    },
+    dtype={'names': ('station', 'timestamp', 'gpp', 'gpp_err', 'fapar',
+                     'ppfd', 'vpd', 'alpha', 'tair', 'co2', 'patm'),
+           'formats' : ('S6', 'O', 'f4', 'f4', 'f4',
+                        'f4', 'f4', 'f4', 'f4', 'f4', 'f4')},
     delimiter=',',
     skiprows=1,
     converters={
@@ -1355,7 +1275,6 @@ my_data = numpy.loadtxt(
         3 : numpy.float,                       # mol/m2
         4 : numpy.float,                       # unitless
         5 : numpy.float,                       # mol/m2
-        #6 : lambda x: numpy.float(x)*1e3,      # Pa
         6 : numpy.float,                       # kPa
         7 : numpy.float,                       # unitless
         8 : numpy.float,                       # deg C
@@ -1388,10 +1307,10 @@ for line in my_data:
 # List of each station:
 all_stations = numpy.sort(numpy.array(list(set(my_data['station']))))
 
-# Test calc_mgs_beta function:
-# @TODO: get mean growing season values & calc site-specific beta
+# Test calc_mgs_params function:
+# @TODO: get mean growing season values 
 station = all_stations[0]
-my_lue.calc_mgs_beta(station)
+my_lue.calc_mgs_params(station)
 
 # Test write_out_val function:
 station = 'AT-Neu'
@@ -1404,6 +1323,122 @@ my_lue.write_out_val(station, out_file)
 #                                WORKSPACE                                   #
 #                                                                            #
 ##############################################################################
+# Plot crops
+
+# Dictionary of stations, years, veg and irrigation:
+my_crop_dict = {
+    'BE-Lon' : {2004 : {'C4' : False, 'Irr' : False},
+                2005 : {'C4' : False, 'Irr' : False},
+                2006 : {'C4' : False, 'Irr' : False}},
+    'CH-Oe2' : {2005 : {'C4' : False, 'Irr' : False}},
+    'DE-Geb' : {2004 : {'C4' : False, 'Irr' : False},
+                2005 : {'C4' : False, 'Irr' : False},
+                2006 : {'C4' : False, 'Irr' : False}},
+    'DE-Kli' : {2004 : {'C4' : False, 'Irr' : False},
+                2005 : {'C4' : False, 'Irr' : False},
+                2006 : {'C4' : False, 'Irr' : False}},
+    'DK-Fou' : {2005 : {'C4' : False, 'Irr' : False}},
+    'DK-Ris' : {2004 : {'C4' : False, 'Irr' : False},
+                2005 : {'C4' : False, 'Irr' : False}},
+    'ES-ES2' : {2004 : {'C4' : False, 'Irr' : True},
+                2005 : {'C4' : False, 'Irr' : True},
+                2006 : {'C4' : False, 'Irr' : True}},
+    'FR-Gri' : {2005 : {'C4' : True, 'Irr' : False},
+                2006 : {'C4' : False, 'Irr' : False}},
+    'IE-Ca1' : {2004 : {'C4' : False, 'Irr' : False},
+                2005 : {'C4' : False, 'Irr' : False},
+                2006 : {'C4' : False, 'Irr' : False}},
+    'IT-BCi' : {2004 : {'C4' : True, 'Irr' : True},
+                2005 : {'C4' : True, 'Irr' : True},
+                2006 : {'C4' : True, 'Irr' : True}},
+    'IT-Cas' : {2006 : {'C4' : True, 'Irr' : True}},
+    'NL-Lan' : {2005 : {'C4' : True, 'Irr' : False},
+                2006 : {'C4' : True, 'Irr' : False}},
+    'NL-Lut' : {2006 : {'C4' : False, 'Irr' : False}},
+    'NL-Mol' : {2005 : {'C4' : False, 'Irr' : False},
+                2006 : {}},
+    'UK-ESa' : {2003 : {},
+                2004 : {},
+                2005 : {}},
+    'UK-Her' : {2006 : {'C4' : False, 'Irr' : False}},
+    'US-ARM' : {2003 : {'C4' : False},
+                2004 : {'C4' : False},
+                2005 : {'C4' : True},
+                2006 : {'C4' : False}},
+    'US-Bo1' : {2002 : {'C4' : False, 'Irr' : False},
+                2003 : {'C4' : True, 'Irr' : False},
+                2004 : {'C4' : False, 'Irr' : False},
+                2005 : {'C4' : True, 'Irr' : False},
+                2006 : {'C4' : False, 'Irr' : False}},
+    'US-Ne1' : {2002 : {'C4' : True, 'Irr' : True},
+                2003 : {'C4' : True, 'Irr' : True},
+                2004 : {'C4' : True, 'Irr' : True},
+                2005 : {'C4' : True, 'Irr' : True}},
+    'US-Ne2' : {2002 : {'C4' : False, 'Irr' : True},
+                2003 : {'C4' : True, 'Irr' : True},
+                2004 : {'C4' : False, 'Irr' : True},
+                2005 : {'C4' : True, 'Irr' : True}},
+    'US-Ne3' : {2002 : {'C4' : False, 'Irr' : False},
+                2003 : {'C4' : True, 'Irr' : False},
+                2004 : {'C4' : False, 'Irr' : False},
+                2005 : {'C4' : True, 'Irr' : False}}
+}
+
+crop_stations = numpy.sort(my_crop_dict.keys())
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+
+# Plot MGS versus seasonally-varying parameter estimates of GPP
+fig_file = out_dir + 'GePiSaT_nxgn_GPP_seas-v-mgs.pdf'
+pp = PdfPages(fig_file)
+
+for station in all_stations:
+    xdata = numpy.copy(my_lue.st_lue_vars[station])
+    yobs = xdata['GPP']
+    #
+    # Seasonal GPP
+    sea_ymod = my_lue.next_gen_lue(xdata, my_lue.kbeta)
+    my_rsq1, my_r1, my_ioa1 = model_fitness(sea_ymod, yobs)
+    #
+    # Mean Growing Season GPP
+    iabs_data = xdata['Iabs']
+    mgs_data = my_lue.calc_mgs_params(station)
+    mgs_ymod = [my_lue.nxtgn(
+        iabs_data[i], 
+        mgs_data['mgs_ca'], 
+        mgs_data['mgs_gs'], 
+        mgs_data['mgs_d'],
+        mgs_data['mgs_k'],
+        mgs_data['mgs_ns'],
+        mgs_data['mgs_fa']
+        )[0] for i in xrange(len(iabs_data))]
+    mgs_ymod = numpy.array(mgs_ymod)
+    my_rsq2, my_r2, my_ioa2 = model_fitness(mgs_ymod, yobs)
+    #
+    # Plot
+    my_veg_type = get_veg_type(met_dir, station)
+    my_txt1 = ("$\\mathrm{%s}$ ($\\mathrm{%s}$)\n"
+               "$R^2=%0.3f$\n$r=%0.3f$\n"
+               "$IA=%0.3f$") % (station, my_veg_type, my_rsq1,
+                                my_r1, my_ioa1)
+    my_txt2 = ("$\\mathrm{%s}$ ($\\mathrm{%s}$)\n"
+               "$R^2=%0.3f$\n$r=%0.3f$\n"
+               "$IA=%0.3f$") % (station, my_veg_type, my_rsq2,
+                                my_r2, my_ioa2)
+    #
+    if len(yobs) > 2:
+        make_two_plots(yobs, sea_ymod, mgs_ymod, my_txt1, my_txt2, 3)
+        pp.savefig()
+        plt.close()
+
+d = pp.infodict()
+d['Title'] = 'GePiSaT next-gen GPP plots of seasonal versus mean-growning season parameters'
+d['Author'] = 'Tyler W. Davis'
+pp.close()
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+
 # Beni's data:
 # fAPAR = 1.0 for all months
 # alpha = 1.26 for all months
@@ -1489,6 +1524,7 @@ ax1.set_xlabel('Month', fontsize=16)
 plt.show()
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+
 # Estimate beta from Wang Han equation:
 out_file = out_dir + 'Wang_Han_beta_estimates.txt'
 header = ('Timestamp,station,Tair_degC,D_kPa,K_Pa,'
@@ -1627,12 +1663,7 @@ make_bplot(beta1_data, beta1_names, 'Simple $\\beta$')
 make_bplot(beta2_data, beta2_names, 'Precise $\\beta$')
 make_bplot(chi_data, chi_names, '$\\chi_o$')
 
-# Test calc_lue function:
-#for station in all_stations:
-#    calc_lue(my_lue, station)
-#my_lue.write_out_lue(out_dir + "GePiSaT_nxgn.txt")
-
-
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
 ##
 ## PLOT GPP BASED ON MEAN-GROWING SEASON BETA ESTIMATES FOR EACH SITE
@@ -1673,7 +1704,7 @@ d['Title'] = 'GePiSaT GPP Plots with mean-growing season estimates of beta'
 d['Author'] = 'Tyler W. Davis'
 pp.close()
 
-
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
   
 ##
 ## PLOT GPP BASED ON SEASONAL BETA ESTIMATES FOR EACH SITE
@@ -1720,6 +1751,7 @@ d['Title'] = 'GePiSaT GPP Plots with seasonal estimates of beta'
 d['Author'] = 'Tyler W. Davis'
 pp.close()
 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
 ##
 ## PLOT GPP BASED ON BASIC V. NEXT-GEN LUE FORMULA

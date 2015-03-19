@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-11-18 -- created
-# 2015-03-17 -- last updated
+# 2015-03-18 -- last updated
 #
 # ~~~~~~~~~~~~
 # description:
@@ -54,6 +54,8 @@
 # 29. changed calc_mgs_beta to calc_mgs_params [15.03.17]
 # 30. deleted calc_hessian function [15.03.17]
 # 31. started on crop plots (C4 + irrigation) [15.03.17]
+# 32. removed fa from mean growing season calculation [15.03.18]
+# 33. work on wetland over-estimation [15.03.18]
 # 
 # ~~~~~
 # todo:
@@ -341,7 +343,7 @@ class LUE:
         Input:    str, station name (station)
         Ouput:    numpy.ndarray
         Features: Returns the mean-growing season parameters (i.e., ca, d, k,
-                  gs, ns, fa, and tair)
+                  gs, ns, and tair)
         """
         # NOTE: vars in st_lue_vars are above freezing (i.e., growing season)
         if station in self.st_lue_vars.keys():
@@ -350,7 +352,6 @@ class LUE:
             v_d = self.station_vals[station]['D']          # Pa
             v_ca = self.station_vals[station]['ca']        # Pa
             v_patm = self.station_vals[station]['Patm']    # Pa
-            v_fa = self.station_vals[station]['fa']        # unitless
             #
             # Extract constants:
             my_patm = v_patm[0]
@@ -362,7 +363,6 @@ class LUE:
             mgs_tair = v_tair[mgs_idx].mean()
             mgs_d = v_d[mgs_idx].mean()
             mgs_ca = v_ca[mgs_idx].mean()
-            mgs_fa = v_fa[mgs_idx].mean()
             #
             mgs_gs = self.calc_gstar(mgs_tair)
             mgs_k = self.calc_k(mgs_tair, my_patm)
@@ -371,20 +371,20 @@ class LUE:
             #
             mgs_params = (station,
                           mgs_ca, mgs_d, mgs_k, 
-                          mgs_gs, mgs_ns, mgs_fa, mgs_tair)
+                          mgs_gs, mgs_ns, mgs_tair)
         else:
             mgs_params = (station,
                           numpy.nan, numpy.nan, numpy.nan, 
-                          numpy.nan, numpy.nan, numpy.nan, numpy.nan)
+                          numpy.nan, numpy.nan, numpy.nan)
         #
         mgs_return = numpy.array(
             mgs_params,
             dtype={'names' : ('station',
                               'mgs_ca', 'mgs_d', 'mgs_k', 
-                              'mgs_gs', 'mgs_ns', 'mgs_fa', 'mgs_tair'),
+                              'mgs_gs', 'mgs_ns', 'mgs_tair'),
                    'formats' : ('S6',
                                 'f4', 'f4', 'f4', 
-                                'f4', 'f4', 'f4', 'f4')},
+                                'f4', 'f4', 'f4')},
             ndmin=1
             )
         return mgs_return
@@ -1211,7 +1211,7 @@ def make_two_plots(my_obs, my_fit1, my_fit2, my_txt1, my_txt2, v=1):
 
 def elv2pres(z):
     """
-    Name:     EVAP.elv2pres
+    Name:     elv2pres
     Input:    float, elevation above sea level (z), m
     Output:   float, atmospheric pressure, Pa
     Features: Calculates atm. pressure for a given elevation
@@ -1249,7 +1249,7 @@ def calculate_vpd(tmp, vap):
 ###############################################################################
 ## MAIN PROGRAM:
 ###############################################################################
-mac = 0
+mac = False
 if mac:
     my_dir = '/Users/twdavis/Dropbox/Work/Imperial/flux/results/2002-06/lue/'
     met_dir = '/Users/twdavis/Dropbox/Work/Imperial/flux/data/psql-data/flux/'
@@ -1386,6 +1386,38 @@ my_crop_dict = {
 
 crop_stations = numpy.sort(my_crop_dict.keys())
 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+
+# WETLAND REGRESSIONS
+wet_stations = [
+    'AU-Fog', 'CA-Mer', 'CZ-wet', 'FI-Kaa', 
+    'PL-wet', 'SE-Deg', 'SE-Faj', 'UK-AMo', 
+]
+
+wetlands = {}
+for station in wet_stations:
+    xdata = numpy.copy(my_lue.st_lue_vars[station])
+    yobs = xdata['GPP']
+    x = yobs[:, numpy.newaxis]
+    #
+    # Mean Growing Season GPP
+    iabs_data = xdata['Iabs']
+    fa_data = xdata['fa']
+    mgs_data = my_lue.calc_mgs_params(station)
+    mgs_ymod = [my_lue.nxtgn(
+        iabs_data[i], 
+        mgs_data['mgs_ca'], 
+        mgs_data['mgs_gs'], 
+        mgs_data['mgs_d'],
+        mgs_data['mgs_k'],
+        mgs_data['mgs_ns'],
+        fa_data[i]
+        )[0] for i in xrange(len(iabs_data))]
+    y = numpy.array(mgs_ymod)
+    #
+    fit_slope, fit_sse, fit_rank, fit_s = numpy.linalg.lstsq(x, y)
+    wetlands[station] = (fit_slope[0], mgs_data['mgs_tair'][0])
+
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
@@ -1403,6 +1435,7 @@ for station in all_stations:
     #
     # Mean Growing Season GPP
     iabs_data = xdata['Iabs']
+    fa_data = xdata['fa']
     mgs_data = my_lue.calc_mgs_params(station)
     mgs_ymod = [my_lue.nxtgn(
         iabs_data[i], 
@@ -1411,7 +1444,7 @@ for station in all_stations:
         mgs_data['mgs_d'],
         mgs_data['mgs_k'],
         mgs_data['mgs_ns'],
-        mgs_data['mgs_fa']
+        fa_data[i]
         )[0] for i in xrange(len(iabs_data))]
     mgs_ymod = numpy.array(mgs_ymod)
     my_rsq2, my_r2, my_ioa2 = model_fitness(mgs_ymod, yobs)

@@ -4,7 +4,7 @@
 % Imperial College London
 %
 % 2013-08-08 -- created
-% 2014-10-29 -- last updated
+% 2015-03-18 -- last updated
 %
 % ------------
 % description:
@@ -18,15 +18,14 @@
 %   ./gepisat_doc.tex
 %   ./gepisat.bib
 %   ./tex/
-%      gepisat-1_code.tex
-%      gepisat-1_data.tex
-%      gepisat-1_future.tex
-%      gepisat-1_intro.tex
-%      gepisat-1_model.tex
-%      gepisat-2_install.tex
-%      gepisat-2_intro.tex
-%      gepisat-2_setup.tex
-%      gepisat-2_structure.tex
+%      gepisat-1a_intro.tex
+%      gepisat-1b_code.tex
+%      gepisat-1c_data.tex
+%      gepisat-1d_future.tex
+%      gepisat-2a_intro.tex
+%      gepisat-2b_install.tex
+%      gepisat-2c_setup.tex
+%      gepisat-2d_structure.tex
 %      gepisat-3_enviro.tex
 %      gepisat-3_stage1.tex
 %      gepisat-3_stage2.tex
@@ -166,6 +165,12 @@
 % 68. modularized LaTeX file [14.10.29]
 % 69. added graphicspath{} to preamble [14.10.29]
 % 70. updated cpa and evi figures [14.10.29]
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ % 
+%      STARTED VERSION 3.0
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~ % 
+% 69. deleted 1.2 Overview of Model Stages [15.03.18]
+% 70. updated title and authors [15.03.18]
+% 71. replaced stage 1--3 in GePiSaT model with nxtgn [15.03.18]
 %
 % -----
 % todo:
@@ -247,7 +252,7 @@
 %% ------------------------------------------------------------------------ %%
 %% TITLE, AUTHORS, and DATE
 %% ------------------------------------------------------------------------ %%
-\title{\TitleFont Global ecosystem Production in \\Space and Time \\(GePiSaT)}
+\title{\TitleFont The Global ecosystem Production in Space and Time (GePiSaT) Model of the Terrestrial Biosphere}
 \author{
          I. C. Prentice\\
          AXA Chair Programme in Biosphere and Climate Impacts\\
@@ -255,21 +260,17 @@
          Change\\
          Imperial College London, London, UK\\
          \\
-         T. W. Davis\\
+         T. W. Davis and X. M. P. Gilbert\\
          Department of Life Sciences\\
          Imperial College London, London, UK\\
          \\
-         B. J. Evans\\
+         B. J. Evans, H. Wang, and T. F. Keenan\\
          Department of Biological Sciences\\
-         Macquarie University, North Ryde, NSW, Australia\\
-         \\
-         X. M. P. Gilbert\\
-         Department of Life Sciences\\
-         Imperial College London, London, UK\\
+         Macquarie University, North Ryde, NSW, AU\\
          \\
          \\
          \\
-         VERSION 2.0}
+         VERSION 3.0}
 
 \date{Last updated: \today}
 
@@ -296,28 +297,26 @@
 %% //////////////////////////////////////////////////////////////////////// %%
 \part{Project Documentation}
 
-\include{./tex/gepisat-1_intro}
+\include{./tex/gepisat-1a_intro}
 
-\include{./tex/gepisat-1_model}
+\include{./tex/gepisat-1b_code}
 
-\include{./tex/gepisat-1_code}
+\include{./tex/gepisat-1c_data}
 
-\include{./tex/gepisat-1_data}
-
-\include{./tex/gepisat-1_future}
+\include{./tex/gepisat-1d_future}
 
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 2 -- DATABASE DOCUMENTATION
 %% //////////////////////////////////////////////////////////////////////// %%
 \part{Database Documentation}
 
-\include{./tex/gepisat-2_intro}
+\include{./tex/gepisat-2a_intro}
 
-\include{./tex/gepisat-2_install}
+\include{./tex/gepisat-2b_install}
 
-\include{./tex/gepisat-2_setup}
+\include{./tex/gepisat-2c_setup}
 
-\include{./tex/gepisat-2_structure}
+\include{./tex/gepisat-2d_structure}
 
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 3 -- MODEL DOCUMENTATION
@@ -326,11 +325,13 @@
 
 \include{./tex/gepisat-3_enviro}
 
-\include{./tex/gepisat-3_stage1}
+\include{./tex/gepisat-3_nxtgn}
 
-\include{./tex/gepisat-3_stage2}
+%\include{./tex/gepisat-3_stage1}
 
-\include{./tex/gepisat-3_stage3}
+%\include{./tex/gepisat-3_stage2}
+
+%\include{./tex/gepisat-3_stage3}
 
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% THE APPENDICES

@@ -1,0 +1,60 @@
+% gepisat-3_nxtgn.tex
+%
+% written by Tyler W. Davis
+% Imperial College London
+%
+% 2015-03-18 -- created
+% 2015-03-18 -- last updated
+%
+% ------------
+% description:
+% ------------
+% This TEX file contains the next-generation light-use efficiency model.
+%
+% ----------
+% changelog:
+% ----------
+% 01. modularized chapter [15.03.18]
+% 02. newline for each sentence [15.03.18]
+% --> simpler for Git version control
+%
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 3.2 -- NEXT-GENERATION MODEL DEVELOPMENT
+%% //////////////////////////////////////////////////////////////////////// %%
+\section{Next-Generation Model Development}
+\label{nxtgen}
+At the heart of GePiSaT is a production efficiency or ``diagnostic'' model for estimating monthly GPP. 
+Similar to most other production efficiency models, GPP is expressed as a function of absorbed light, $I_{abs}$.
+The basic equation for monthly GPP takes the form:
+%% ------------------------------------------------------------------------ %%
+%% eq:pem | Production efficiency model
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:pem}
+    \text{GPP} = \varepsilon\; I_{abs} 
+\end{equation}
+
+\noindent where:\\
+\indent GPP = gross primary production [mol~C~m$^{-2}$~mo$^{-1}$];\\
+\indent $I_{abs}$ = absorbed photosynthetic light; [mol~photons~m$^{-2}$~mo$^{-1}$];\\
+\indent $\varepsilon$ = light-use efficiency [mol~C~mol~photons$^{-1}$].\\
+
+\noindent The light-use efficiency, $\varepsilon$, is therefore defined as the ratio of GPP to absorbed light. 
+
+The absorbed photosynthetic light is defined as the fraction of absorbed photosynthetically active radiation (PAR) and is calculated as the product of fPAR and PPFD (i.e., PAR in units of quanta).
+
+Despite the simplicity of Eq. \ref{eq:pem}, this basic model performs rather well at a few of the flux tower sites. However, in the effort of building a universal model, Eq. \ref{eq:pem} does not capture the global dynamics of GPP; therefore, a next-generation model is proposed based, in part, on the work of \cite{wang12}:
+%% ------------------------------------------------------------------------ %%
+%% eq:nglue | Production efficiency model
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:nglue}
+    \text{GPP} = \phi_{\circ}\; \text{f}_\alpha\; I_{abs}\; \sqrt{m^2 - c^{2/3}\; m^{4/3}}
+\end{equation}
+
+\noindent where:\\
+\indent $\phi_{\circ}$ = intrinsic quantum efficiency [mol~C~mol~photons$^{-1}$];\\
+\indent f$_\alpha$ = index of plant available moisture;\\
+\indent $I_{abs}$ = absorbed photosynthetic light [mol~photons~m$^{-2}$~mo$^{-1}$];\\
+\indent $c$ = maintenance cost of light-harvesting capacity;\\
+\indent $m$ = substrate limitation term.\\

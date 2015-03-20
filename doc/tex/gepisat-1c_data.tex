@@ -4,7 +4,7 @@
 % Imperial College London
 %
 % 2014-10-29 -- created
-% 2015-03-18 -- last updated
+% 2015-03-19 -- last updated
 %
 % ------------
 % description:
@@ -21,6 +21,7 @@
 % --> added three new references
 % --> added figure
 % 04. updated data to represent the varnames in the GePiSaT database [15.03.18]
+% 05. updated equations and nomenclature [15.03.19]
 %
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 1.4 -- OBSERVATION DATA
@@ -180,7 +181,7 @@ The calculation is as follows \parencite[Eq. 2]{huete02}:
 %% ---------------------------------------------------------------%%
 %% eq:evi | EVI calculation
 %% ---------------------------------------------------------------%%
-\nomenclature{$\text{EVI}$}{enhanced vegetation index}
+\nomenclature{$\text{EVI}$}{enhanced vegetation index [unitless]}
 \begin{equation}
 \label{eq:evi}
     \text{EVI} = G\; \frac{\rho_{nir} - \rho_{red}}{\rho_{nir} + 
@@ -188,26 +189,26 @@ The calculation is as follows \parencite[Eq. 2]{huete02}:
 \end{equation}
 
 \noindent where:\\
-\indent $G$ = gain factor (i.e., 2.5)\\
-\indent $L_{bg}$ = canopy background adjustment factor (i.e., 1.0)\\
-\indent $C_{1}$ = aerosol resistance coefficient (i.e., 6.0)\\
-\indent $C_{2}$ = aerosol resistance coefficient (i.e., 7.5)\\
-\indent $\rho$ = corrected (or partially corrected) surface reflectances\\
+\indent $G$ = gain factor (i.e., 2.5);\\
+\indent $L_{bg}$ = canopy background adjustment factor (i.e., 1.0);\\
+\indent $C_{1}$ = aerosol resistance coefficient (i.e., 6.0);\\
+\indent $C_{2}$ = aerosol resistance coefficient (i.e., 7.5);\\
+\indent $\rho$ = corrected (or partially corrected) surface reflectances.\\
 
 \noindent The calculation to convert EVI to fPAR is expressed as \parencite[Eq. 11]{xiao05}:
 %% ---------------------------------------------------------------%%
 %% eq:fapar | FAPAR based on EVI calculation
 %% ---------------------------------------------------------------%%
-\nomenclature{$\text{fPAR}$}{Absorbed fraction of PAR [unitless]}%
+\nomenclature{$\text{fPAR}$}{absorbed fraction of PAR [unitless]}%
 \begin{equation}
 \label{eq:fapar}
     \text{fPAR} = a\; \text{EVI}
 \end{equation}
 
 \noindent where: \\
-\indent $a$ = 1.0 \\
-\indent fPAR = absorbed fraction of PAR\\
-\indent EVI = MODIS-derived enhanced vegetation index \\
+\indent $a$ = 1.0;\\
+\indent fPAR = absorbed fraction of PAR;\\
+\indent EVI = MODIS-derived enhanced vegetation index.\\
 
 \noindent The fPAR data calculated from the upscaled MODIS-based EVI, by Eq. \ref{eq:fapar}, is stored in the GePiSaT database (see FAPAR in Table \ref{tab:varname}).
 %% ------------------------------------------------------------------------ %%
@@ -248,15 +249,15 @@ In order to estimate VPD, the saturation vapor pressure can be calculated from t
 %% ---------------------------------------------------------------%%
 %% eq:es | Saturation vapor pressure
 %% ---------------------------------------------------------------%%
-\nomenclature{$e_s$}{Saturation vapor pressure [kPa]}%
+\nomenclature{$e_s$}{saturation vapor pressure [kPa]}%
 \begin{equation}
 \label{eq:es}
     e_s = 0.611 \exp \left( \frac{17.27\; T_{air}}{T_{air} + 237.3} \right)
 \end{equation}
 
 \noindent where:\\
-\indent $e_s$ = saturation vapor pressure [kPa]\\
-\indent $T_{air}$ = air temperature [$^{\circ}$C]\\
+\indent $e_s$ = saturation vapor pressure [kPa];\\
+\indent $T_{air}$ = air temperature [$^{\circ}$C].\\
 
 \noindent The air temperature in Eq. \ref{eq:es}, $T_{air}$, may reflect a variety of quantities, such as the 24-hour mean air temperature, the daily maximum air temperature, the daily minimum air temperature, or the average air temperature.  
 The latter quantity is used in the calculation of VPD by means of CRU TS 3.21 monthly average daily temperature, tmp, which is the also the average of the monthly average maximum and minimum daily temperatures (tmx and tmn, respectively).  
@@ -265,7 +266,7 @@ The full expression for calculating VPD based on CRU TS 3.21 datasets is then:
 %% ---------------------------------------------------------------%%
 %% eq:vpd | Vapor pressure deficit
 %% ---------------------------------------------------------------%%
-\nomenclature{$\text{VPD}$}{Vapor pressure deficit [kPa]}
+\nomenclature{$\text{VPD}$}{vapor pressure deficit [kPa]}
 \begin{equation}
 \label{eq:vpd}
     \text{VPD} = 0.611 \exp \left( \frac{17.27\; \text{tmp}}
@@ -273,9 +274,9 @@ The full expression for calculating VPD based on CRU TS 3.21 datasets is then:
 \end{equation}
 
 \noindent where:\\
-\indent VPD = monthly average vapor pressure deficit [kPa]\\
-\indent tmp = monthly average daily mean temperature [$^{\circ}$C]\\
-\indent vap = monthly average vapor pressure [hPa]\\
+\indent VPD = monthly average vapor pressure deficit [kPa];\\
+\indent tmp = monthly average daily mean temperature [$^{\circ}$C];\\
+\indent vap = monthly average vapor pressure [hPa].\\
 
 The monthly VPD data calculated from Eq. \ref{eq:vpd} is stored in the GePiSaT database (see VPD in Table \ref{tab:varname}).
 

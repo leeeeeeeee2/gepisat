@@ -4,7 +4,7 @@
 % Imperial College London
 %
 % 2015-03-18 -- created
-% 2015-03-18 -- last updated
+% 2015-03-20 -- last updated
 %
 % ------------
 % description:
@@ -17,12 +17,13 @@
 % 01. modularized chapter [15.03.18]
 % 02. newline for each sentence [15.03.18]
 % --> simpler for Git version control
+% 03. added subsections [15.03.20]
 %
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 3.2 -- NEXT-GENERATION MODEL DEVELOPMENT
 %% //////////////////////////////////////////////////////////////////////// %%
 \section{Next-Generation Model Development}
-\label{nxtgen}
+\label{sec:nxtgen}
 At the heart of GePiSaT is a production efficiency or ``diagnostic'' model for estimating monthly GPP. 
 Similar to most other production efficiency models, GPP is expressed as a function of absorbed light, $I_{abs}$.
 The basic equation for monthly GPP takes the form:
@@ -43,7 +44,13 @@ The basic equation for monthly GPP takes the form:
 
 The absorbed photosynthetic light is defined as the fraction of absorbed photosynthetically active radiation (PAR) and is calculated as the product of fPAR and PPFD (i.e., PAR in units of quanta).
 
-Despite the simplicity of Eq. \ref{eq:pem}, this basic model performs rather well at a few of the flux tower sites. However, in the effort of building a universal model, Eq. \ref{eq:pem} does not capture the global dynamics of GPP; therefore, a next-generation model is proposed based, in part, on the work of \cite{wang12}:
+Despite the simplicity of Eq. \ref{eq:pem}, this basic model performs rather well at a few of the flux tower sites. 
+However, in the effort of building a universal model of terrestrial GPP, Eq. \ref{eq:pem} does not capture the global dynamics of GPP; therefore, a next-generation model is proposed based on \emph{The Coordination Hypothesis}, which states \parencite{maire12}:
+\begin{quote}
+	``photosynthesis is co-limited by the carboxylation and regeneration of ribulose-1,5-bisphosphate (RuBP)''
+\end{quote}
+where $J_\text{max}$ limitation (i.e., the light harvesting capacity) is accounted by the hypothesis of an optimality between the cost and benefit of maintaining a certain $J_\text{max}$.
+The theoretical model takes the following form:
 %% ------------------------------------------------------------------------ %%
 %% eq:nglue | Production efficiency model
 %% ------------------------------------------------------------------------ %%
@@ -53,8 +60,189 @@ Despite the simplicity of Eq. \ref{eq:pem}, this basic model performs rather wel
 \end{equation}
 
 \noindent where:\\
-\indent $\phi_{\circ}$ = intrinsic quantum efficiency [mol~C~mol~photons$^{-1}$];\\
-\indent f$_\alpha$ = index of plant available moisture;\\
+\indent $\phi_{\circ}$ = intrinsic quantum efficiency [0.093~mol~C~mol~photons$^{-1}$];\\
+\indent $c$ = maintenance cost of light-harvesting capacity [0.41];\\
 \indent $I_{abs}$ = absorbed photosynthetic light [mol~photons~m$^{-2}$~mo$^{-1}$];\\
-\indent $c$ = maintenance cost of light-harvesting capacity;\\
+\indent f$_\alpha$ = index of plant available moisture;\\
 \indent $m$ = substrate limitation term.\\
+
+Equation \ref{eq:nglue} introduces two constants (i.e., $\phi_{\circ}$ and $c$) and two variables (i.e., f$_\alpha$ and $m$).
+The intrinsic quantum efficiency, \nomenclature{$\phi_{\circ}$}{intrinsic quantum efficiency [0.093~mol~C~mol~photons$^{-1}$]}$\phi_{\circ}$, is assumed a constant value of 0.093 mol~C~mol~photons$^{-1}$, based on the mean of eleven measured species by \cite{long93}. 
+The cost for a plant to have a certain light-harvesting capacity, \nomenclature{$c$}{maintenance cost of light-harvesting capacity [0.41]}$c$, set to a constant value 0.41, is empirically derived from reanalysis data of $J_\text{max}$ to $V_\text{cmax}$ ratios presented by \cite{kattge07}.
+
+The index of plant available moisture, f$_\alpha$, is based on the Cramer-Prentice bioclimatic moisture index, $\alpha^\star$ (see \S \ref{sec:gepcp}). 
+To maintain a coefficient that varies between 0 and 1 and to emphasize the effect of low soil moisture on limiting GPP, f$_\alpha$ is set equal to the quarter power of $\alpha^\star$ divided by its maximum value or simply: 
+\nomenclature{$\text{f}_\alpha$}{index of plant available moisture}
+$\text{f}_\alpha = \left(\alpha^\star/1.26\right)^{1/4}$.
+
+The substrate limitation term, $m$, is given by:
+%% ------------------------------------------------------------------------ %%
+%% eq:msimp | The simplification of m
+%% ------------------------------------------------------------------------ %%
+\nomenclature{$m$}{substrate limitation term [unitless]}%
+\begin{equation}
+\label{eq:m}
+    m = \frac{c_a - \Gamma^\star}
+             {c_a 
+              + 2 \Gamma^\star 
+              + 3 \Gamma^\star \sqrt{
+                1.6\; \eta^\star\; D\; \left[
+                  \beta^\star\: \left(K + \Gamma^\star\right)
+                \right]^{-1}
+              }
+             }
+\end{equation}
+
+\noindent where:\\
+\indent $\beta^\star$ = standardized cost ratio [244.0];\\
+\indent $\eta^\star$ = relative viscosity of water [unitless];\\
+\indent $c_a$ = partial pressure of atmospheric CO$_2$ [Pa];\\
+\indent $D$ = vapor pressure deficit [Pa];\\
+\indent $\Gamma^\star$ = photorespiratory compensation point [Pa];\\
+\indent $K$ = Michaelis-Menten rubisco-limited photosynthesis coefficient [Pa].\\
+
+\noindent The following subsections discuss each of the variables used in the calculation of $m$.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 3.2.1 -- THE STANDARDIZED COST RATIO
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{The Standardized Cost Ratio}
+\label{sec:beta}
+\nomenclature{$\beta^\star$}{standardized cost ratio [244.0]}%
+The semi-empirical constant, $\beta^\star$, reflects the ratio of the cost factor for carboxylation and the cost factor for transpiration at standard temperature (i.e., 25 ${}^\circ$C) at sea level. The derivation of $\beta^\star$ is based on \emph{The Least-Cost Hypothesis}, which states \parencite{prentice14}:
+\begin{quote}
+	''plant leaves minimize the summed unit costs of transpiration and carboxylation.''
+\end{quote}
+To begin, we introduce $\chi$ as the ratio between leaf internal, $c_i$, and ambient, $c_a$, mole fractions of CO$_2$, which is known to decline with vapor pressure deficit, $D$, in the following form:
+%% ---------------------------------------------------------------%%
+%% eq:chi | Chi
+%% ---------------------------------------------------------------%%
+\begin{equation}
+\nomenclature{$\chi$}{ratio of leaf internal to ambient mole fraction of CO$_2$ [unitless]}%
+\label{eq:chi}
+    \chi = \frac{\xi}{\xi + \sqrt{D}}
+\end{equation}
+
+\noindent where $\xi$ is carbon cost of water, which may be simply expressed by:
+%% ---------------------------------------------------------------%%
+%% eq:xi | Xi
+%% ---------------------------------------------------------------%%
+\nomenclature{$\xi$}{carbon cost of water [unitless]}%
+\begin{equation}
+\label{eq:xi}
+    \xi = \sqrt{\frac{K\; b}{1.6\; a}} = \sqrt{\frac{K\; \beta^\star}{1.6\; \eta^\star}}
+\end{equation}
+
+\noindent where:\\
+\indent $a$ = carbon cost of maintaining transpiration for assimilation; \\
+\indent $b$ = cost of maintaining photosynthetic proteins for assimilation;\\
+\indent $K$ = Michaelis-Menten rubisco-limited photosynthesis coefficient [Pa];\\
+\indent $\eta^\star$ = relative viscosity of water.\\
+
+Based on Eq. \ref{eq:xi}, $\beta^\star$ is equal to $\eta^\star\: b/a$.
+Taking the inverse logistic sigmoidal function of $\chi$, substituting the definition of $\xi$ from Eq. \ref{eq:xi} into Eq. \ref{eq:chi}, the temperature and elevation effects of $D$, $K$, and $\eta^\star$ on $\chi$ may be explicitly expressed (via partial differentiation):
+%% ---------------------------------------------------------------%%
+%% eq:whe | Wang Han equation
+%% ---------------------------------------------------------------%%
+\begin{equation}
+\label{eq:whe}
+    \ln \left(\frac{\chi_o}{1 - \chi_o}\right) = 4.64 + 
+    	0.0545\: \left(T_{air} - 25\right) - 
+    	0.5\; \ln (D) - 
+    	8.15\times 10^{-5}\; z
+\end{equation}
+
+\noindent where:\\
+\indent $T_{air}$ = air temperature [${}^\circ$C];\\
+\indent $D$ = vapor pressure deficit [Pa];\\
+\indent $\chi_o$ = optimal value of $\chi$ [unitless];\\
+\indent $z$ = altitude above mean sea level [m].\\
+
+\noindent At mean sea level (i.e., $z = 0$), standard temperature (i.e., $T_{air} = 25\;{}^\circ$C), and an ideal vapor pressure deficit (i.e., $D = 1000$ Pa), the optimal value of $\chi$ is 0.767. Substituting this value of $\chi$ and the expression of $\xi$ given in Eq. \ref{eq:xi} (where $K = 70.84$ Pa at 25 ${}^\circ$C) into Eq. \ref{eq:chi}, $\beta^\star$ is found to be 244.0. 
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 3.2.2 -- RELATIVE VISCOSITY OF WATER
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Relative Viscosity of Water}
+\label{sec:eta}
+The viscosity of water at a given temperature and pressure, $\eta$, may be calculated based on the methodology of \cite{huber09}. The relative viscosity of water with respect to its value at 25 ${}^\circ$C, $\eta^\star$, is calculated by:
+%% ---------------------------------------------------------------%%
+%% eq:ns | Relative viscosity of water
+%% ---------------------------------------------------------------%%
+\nomenclature{$\eta^\star$}{relative viscosity of water [unitless]}%
+\begin{equation}
+\label{eq:ns}
+    \eta^\star = \frac{\eta}{\eta_{25}}
+\end{equation}
+
+\noindent where:\\
+\indent $\eta$ = viscosity of water at a given temperature and pressure [Pa s];\\
+\indent $\eta_{25}$ = viscosity at 25 ${}^\circ$C and standard pressure [8.90$\times 10^-4$ Pa s].\\
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 3.2.3 -- AMBIENT PARTIAL PRESSURE OF CO2
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Ambient Partial Pressure of CO$_2$}
+\label{sec:ca}
+The partial pressure of CO$_2$, $c_a$, is calculated based on the observed annual atmospheric CO$_2$ concentration (see \S \ref{sec:gepnoaa}). 
+The conversion can be done knowing the total atmospheric pressure, $P_{atm}$, and using Dalton's Law of Partial Pressure:
+%% ---------------------------------------------------------------%%
+%% eq:pp | Partial Pressure Convertion
+%% ---------------------------------------------------------------%%
+\begin{equation}
+\label{eq:pp}
+    p_x = 1\times 10^{-6}\; ppm_x\; P_{atm}
+\end{equation}
+
+\noindent where:\\
+\indent $p_x$ = partial pressure of gas \textit{x} [Pa];\\
+\indent $ppm_x$ = parts-per-million concentration of gas \textit{x} [ppm];\\
+\indent $P_{atm}$ = total atmospheric pressure [Pa].\\
+
+\noindent For instances when $P_{atm}$ is unknown, the elevation-dependent atmospheric pressure may be computed using the Barometric Formula \parencite{allen98}:
+%% ---------------------------------------------------------------%%
+%% eq:pz | Atmospheric pressure as a function of elevation
+%% ---------------------------------------------------------------%%
+\nomenclature{$P_{atm}$}{total atmospheric pressure [Pa]}%
+\begin{equation}
+\label{eq:pz}
+    P_{atm}\left( z \right) = P_{\circ} \left( 
+    	1 - \frac{L\; z}{T_{\circ}} 
+    \right)^{\frac{g\; M_a}{R_u\; L}}
+\end{equation}
+
+\noindent where:\\
+\indent $z$ = altitude above mean sea level [m];\\
+\indent $g$ = standard gravity [9.80665 m$\cdot$s$^{-2}$];\\
+\indent $P_{\circ}$ = base atmospheric pressure [101325 Pa];\\
+\indent $L$ = temperature lapse rate [0.0065 K$\cdot$m$^{-2}$];\\
+\indent $T_{\circ}$ = base temperature [298.15 K];\\
+\indent $M_a$ = molecular weight for dry air [0.028963 kg$\cdot$mol$^{-1}$];\\
+\indent $R_u$ = universal gas constant [8.3143 J$\cdot$mol$^{-1}\cdot$K$^{-1}$].\\
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 3.2.4 -- VAPOR PRESSURE DEFICIT
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Vapor Pressure Deficit}
+\label{sec:d}
+The vapor pressure deficit, $D$, is based on the unit conversion of the observed VPD (see \S \ref{sec:gepvpd}) from kPa to Pa.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 3.2.5 -- PHOTORESPIRATORY COMPENSATION POINT
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Photorespiratory Compensation Point}
+\label{sec:gs}
+The photorespiratory compensation point, $\Gamma^\star$, depends on both the atmospheric pressure and temperature.
+\cite{bernacchi01} provides empirical equations for the temperature-dependency of $\Gamma^\star$:
+%% ---------------------------------------------------------------%%
+%% eq:gst | Temperature dependency of Gamma*
+%% ---------------------------------------------------------------%%
+\begin{equation}
+\label{eq:gst}
+    \Gamma^\star = \exp \left(19.02 - \frac{3783}{R_u\: T_k}\right)
+\end{equation}
+
+\noindent where:\\
+\indent $\Gamma^\star$ = photorespiratory compensation point [Pa];\\
+\indent $R_u$ = universal gas constant [8.3143 J$\cdot$mol$^{-1}\cdot$K$^{-1}$];\\
+\indent $T_k$ = air temperature [K].\\

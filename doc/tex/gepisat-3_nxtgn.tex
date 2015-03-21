@@ -49,8 +49,8 @@ However, in the effort of building a universal model of terrestrial GPP, Eq. \re
 \begin{quote}
 	``photosynthesis is co-limited by the carboxylation and regeneration of ribulose-1,5-bisphosphate (RuBP)''
 \end{quote}
-where $J_\text{max}$ limitation (i.e., the light harvesting capacity) is accounted by the hypothesis of an optimality between the cost and benefit of maintaining a certain $J_\text{max}$.
-The theoretical model takes the following form:
+where $J_\text{max}$ limitation (i.e., the light harvesting capacity) of photosynthesis is accounted by the hypothesis of an optimality between the cost and benefit of maintaining a certain light-harvesting capacity.
+The theoretical model, using the empirical expression for the potential rate of electron transport by \cite{smith37}, takes the following form:
 %% ------------------------------------------------------------------------ %%
 %% eq:nglue | Production efficiency model
 %% ------------------------------------------------------------------------ %%
@@ -158,14 +158,15 @@ Taking the inverse logistic sigmoidal function of $\chi$, substituting the defin
 \indent $\chi_o$ = optimal value of $\chi$ [unitless];\\
 \indent $z$ = altitude above mean sea level [m].\\
 
-\noindent At mean sea level (i.e., $z = 0$), standard temperature (i.e., $T_{air} = 25\;{}^\circ$C), and an ideal vapor pressure deficit (i.e., $D = 1000$ Pa), the optimal value of $\chi$ is 0.767. Substituting this value of $\chi$ and the expression of $\xi$ given in Eq. \ref{eq:xi} (where $K = 70.84$ Pa at 25 ${}^\circ$C) into Eq. \ref{eq:chi}, $\beta^\star$ is found to be 244.0. 
+\noindent At mean sea level (i.e., $z = 0$), standard temperature (i.e., $T_{air} = 25\;{}^\circ$C), and an ideal vapor pressure deficit (i.e., $D = 1000$ Pa), the optimal value of $\chi$ is 0.767. Substituting this value of $\chi$ and the expression of $\xi$, given in Eq. \ref{eq:xi} (where $K = 70.84$ Pa at 25 ${}^\circ$C), into Eq. \ref{eq:chi}, $\beta^\star$ is found to be 244.0. 
 
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 3.2.2 -- RELATIVE VISCOSITY OF WATER
 %% //////////////////////////////////////////////////////////////////////// %%
 \subsection{Relative Viscosity of Water}
 \label{sec:eta}
-The viscosity of water at a given temperature and pressure, $\eta$, may be calculated based on the methodology of \cite{huber09}. The relative viscosity of water with respect to its value at 25 ${}^\circ$C, $\eta^\star$, is calculated by:
+The viscosity of water at a given temperature and pressure, $\eta$, may be calculated based on the methodology of \cite{huber09}. 
+The relative viscosity of water with respect to its value at 25 ${}^\circ$C, $\eta^\star$, is calculated by the following ratio:
 %% ---------------------------------------------------------------%%
 %% eq:ns | Relative viscosity of water
 %% ---------------------------------------------------------------%%
@@ -213,12 +214,12 @@ The conversion can be done knowing the total atmospheric pressure, $P_{atm}$, an
 
 \noindent where:\\
 \indent $z$ = altitude above mean sea level [m];\\
-\indent $g$ = standard gravity [9.80665 m$\cdot$s$^{-2}$];\\
+\indent $g$ = standard gravity [9.80665 m s$^{-2}$];\\
 \indent $P_{\circ}$ = base atmospheric pressure [101325 Pa];\\
-\indent $L$ = temperature lapse rate [0.0065 K$\cdot$m$^{-2}$];\\
+\indent $L$ = temperature lapse rate [0.0065 K m$^{-2}$];\\
 \indent $T_{\circ}$ = base temperature [298.15 K];\\
-\indent $M_a$ = molecular weight for dry air [0.028963 kg$\cdot$mol$^{-1}$];\\
-\indent $R_u$ = universal gas constant [8.3143 J$\cdot$mol$^{-1}\cdot$K$^{-1}$].\\
+\indent $M_a$ = molecular weight for dry air [0.028963 kg mol$^{-1}$];\\
+\indent $R_u$ = universal gas constant [8.3145 J mol$^{-1}$ K$^{-1}$].\\
 
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 3.2.4 -- VAPOR PRESSURE DEFICIT
@@ -232,17 +233,133 @@ The vapor pressure deficit, $D$, is based on the unit conversion of the observed
 %% //////////////////////////////////////////////////////////////////////// %%
 \subsection{Photorespiratory Compensation Point}
 \label{sec:gs}
+\nomenclature{$\Gamma^\star$}{photorespiratory compensation point [Pa]}%
 The photorespiratory compensation point, $\Gamma^\star$, depends on both the atmospheric pressure and temperature.
-\cite{bernacchi01} provides empirical equations for the temperature-dependency of $\Gamma^\star$:
+\cite{bernacchi01} provides the definitive equation for $\Gamma^\star$:
+%% ---------------------------------------------------------------%%
+%% eq:gsbasic | Basic equation of Gamma*
+%% ---------------------------------------------------------------%%
+\begin{equation}
+\label{eq:gsbasic}
+    \Gamma^\star = \frac{O\: K_c\: V_\text{o,max}}
+                        {2\: K_o\: V_\text{c,max}}
+\end{equation}
+
+\noindent where:\\
+\indent $O$ = partial pressure of atmospheric O$_2$, [Pa];\\
+\indent $K_c$ = Michaelis-Menten constant for carboxylation [Pa];\\
+\indent $K_o$ = Michaelis-Menten constant for oxygenation [Pa];\\
+\indent $V_\text{c,max}$ = maximum rate of carboxylation [$\mu$mol~m$^{-2}$~s$^{-1}$];\\
+\indent $V_\text{o,max}$ = maximum rate of oxygenation [$\mu$mol~m$^{-2}$~s$^{-1}$].\\
+
+\noindent The temperature-dependency of $\Gamma^\star$ is derived from the temperature dependencies of $K_c$, $K_o$, $V_\text{c,max}$, and $V_\text{o,max}$, which have been empirically solved by \cite{bernacchi01}. 
+Substituting the temperature-dependency equations for each term in Eq. \ref{eq:gsbasic}, results in the following expression:
 %% ---------------------------------------------------------------%%
 %% eq:gst | Temperature dependency of Gamma*
 %% ---------------------------------------------------------------%%
 \begin{equation}
 \label{eq:gst}
-    \Gamma^\star = \exp \left(19.02 - \frac{3783}{R_u\: T_k}\right)
+    \Gamma^\star = \exp \left(7.472 - \frac{\Delta H_a}{R_u\: T_k}\right) \frac{O}{2}
 \end{equation}
 
 \noindent where:\\
-\indent $\Gamma^\star$ = photorespiratory compensation point [Pa];\\
-\indent $R_u$ = universal gas constant [8.3143 J$\cdot$mol$^{-1}\cdot$K$^{-1}$];\\
-\indent $T_k$ = air temperature [K].\\
+\indent $\Delta H_a$ = activation energy for $\Gamma^\star$ [37$\,$830 J mol$^{-1}$];\\
+\indent $R_u$ = universal gas constant [8.3145 J mol$^{-1}$ K$^{-1}$];\\
+\indent $O$ = partial pressure of atmospheric O$_2$, [Pa];\\
+\indent $T_k$ = leaf temperature [K].\\
+
+\noindent To account for changes in the atmospheric pressure, the partial pressure of O$_2$ may be expressed in terms of molar fraction based on Dalton's Law (see Eq. \ref{eq:pp}):
+%% ---------------------------------------------------------------%%
+%% eq:gstpa | Temperature & pressure dependency of Gamma*
+%% ---------------------------------------------------------------%%
+\begin{equation}
+\label{eq:gstpa}
+    \Gamma^\star = 5\times 10^{-7}\: ppm_{O_2}\: P_{atm}\: \exp \left(7.472 - \frac{\Delta H_a}{R_u\: T_k}\right)
+\end{equation}
+
+\noindent where $ppm_{O_2}$ is the molar fraction of atmospheric O$_2$. Assuming a constant value for $ppm_{O_2}$ (i.e., 209476 ppm), $\Gamma^\star$ may be simplified to:
+%% ---------------------------------------------------------------%%
+%% eq:gstpb | Temperature & pressure dependency of Gamma*
+%% ---------------------------------------------------------------%%
+\begin{equation}
+\label{eq:gstpb}
+    \Gamma^\star = \exp \left(5.216 - \frac{\Delta H_a}{R_u\: T_k}\right)\: P_{atm}
+\end{equation}
+
+\noindent where:\\
+\indent $\Delta H_a$ = activation energy for $\Gamma^\star$ [37$\,$830 J mol$^{-1}$];\\
+\indent $R_u$ = universal gas constant [8.3145 J mol$^{-1}$ K$^{-1}$];\\
+\indent $P_{atm}$ = atmospheric pressure [Pa];\\
+\indent $T_k$ = leaf temperature [K].\\
+
+\noindent Due to a general lack of understanding, the leaf temperature in Eq. \ref{eq:gst}, $T_k$, may be substituted by the ambient air temperature, $T_{air}$, in units of Kelvin. 
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 3.2.6 -- MICHAELIS-MENTON COEFFICIENT
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Michaelis-Menten Coefficient of Photosynthesis}
+\label{sec:k}
+\nomenclature{$K$}{Michaelis-Menten coefficient of photosynthesis [Pa]}%
+The Michaelis-Menten coefficient of Rubisco-limited photosynthesis is a function of the Rubisco photosynthetic rates for O$_2$ and CO$_2$ \parencite{farquhar80}:
+%% ------------------------------------------------------------------------ %%
+%% eq:michaelis | Michaelis Menten coefficient
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:michaelis}
+	K = K_c\: \left( 1 + \frac{O}{K_o} \right)
+\end{equation}
+
+\noindent where:\\
+\indent $K_c$ = Michaelis-Menten constant for CO$_2$ [Pa];\\
+\indent $K_o$ = Michaelis-Menten constant for O$_2$ [Pa];\\
+\indent $O$ = partial pressure of atmospheric O$_2$, [Pa].\\
+
+\noindent The Michaelis-Menton constants for CO$_2$ and O$_2$ ($K_c$ and $K_o$, respectively) have temperature dependencies, which have been empirically fit to the Arrhenius function and normalized to 25~$^\circ$C \parencite{farquhar80}:
+%% ------------------------------------------------------------------------ %%
+%% eq:kcko | Michaelis Menten Kc & Ko coefficients
+%% ------------------------------------------------------------------------ %%
+\nomenclature{$K_c$}{Michaelis-Menten constant for CO$_2$ [Pa]}%
+\nomenclature{$K_o$}{Michaelis-Menten constant for O$_2$ [Pa]}%
+\begin{subequations}
+\label{eq:kcko}
+\begin{align}
+	K_c&=K_{c25}\: \exp \left[ 
+    	\frac{\Delta H_{a,c}\: \left(T_k-298.15\right)}{298.15\: R_{u}\: T_k}
+    \right] \label{eq:kc} \\
+    K_o&=K_{o25}\: \exp \left[ 
+    	\frac{\Delta H_{a,o}\: \left(T_k-298.15\right)}{298.15\: R_{u}\: T_k}
+    \right] \label{eq:ko}
+\end{align}
+\end{subequations}
+
+\noindent where:\\
+\indent $K_{c25}$ = Michaelis-Menten constant for CO$_2$ at 25~$^{\circ}$C [Pa];\\
+\indent $K_{o25}$ = Michaelis-Menten constant for O$_2$ at 25~$^{\circ}$C [Pa];\\
+\indent $\Delta H_{a,c}$ = activation energy for carboxylation [79$\,$430 J mol$^{-1}$];\\
+\indent $\Delta H_{a,o}$ = activation energy for oxygenation [36$\,$380 J mol$^{-1}$];\\
+\indent $R_{u}$ = universal gas constant [8.3145 J mol$^{-1}$ K$^{-1}$];\\
+\indent $T_k$ = leaf temperature [K].\\
+
+\noindent Once again, leaf temperature, as in Eqns. \ref{eq:michaelis} and \ref{eq:kcko}, may be substituted by the ambient air temperature, $T_{air}$, converted to units of Kelvin. 
+
+The partial pressure values of $K_{c25}$ and $K_{o25}$ are based on the empirical temperature dependencies given by \cite{bernacchi01}, in mole fractions, converted to partial pressures by Dalton's Law (see Eq. \ref{eq:pp}):
+%% ------------------------------------------------------------------------ %%
+%% eq:kcko25 | Michaelis Menten Kc & Ko coefficients
+%% ------------------------------------------------------------------------ %%
+\nomenclature{$K_{c25}$}{Michaelis-Menten coefficient of carboxylation at 25~$^\circ$C [Pa]}%
+\nomenclature{$K_{o25}$}{Michaelis-Menten coefficient of oxygenation at 25~$^\circ$C [Pa]}%
+\begin{subequations}
+\label{eq:kcko25}
+\begin{align}
+	K_{c25}&=1\times 10^{-6} \exp \left[ 38.05 - 
+    	\frac{\Delta H_{a,c}}{298.15\: R_{u}}
+    \right]\: P_{atm} \label{eq:kc25} \\
+    K_{o25}&=1\times 10^{-3} \exp \left[ 20.30 - 
+    	\frac{\Delta H_{a,o}}{298.15\: R_{u}}
+    \right]\: P_{atm} \label{eq:ko25}
+\end{align}
+\end{subequations}
+
+\noindent Assuming that the experiments conducted at the University of Illinois at Urbana-Champaign were performed under atmospheric pressure (at elevation 227 m above mean sea level), the partial pressure of $K_{c25}$ is 39.97 Pa and the partial pressure of $K_{o25}$ is 27$\,$480 Pa and are invariant to changes in atmospheric pressure.
+
+% @TODO: write K as a function of Patm and Tk.

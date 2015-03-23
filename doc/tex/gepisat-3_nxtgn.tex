@@ -141,8 +141,27 @@ To begin, we introduce $\chi$ as the ratio between leaf internal, $c_i$, and amb
 \indent $K$ = Michaelis-Menten rubisco-limited photosynthesis coefficient [Pa];\\
 \indent $\eta^\star$ = relative viscosity of water.\\
 
-Based on Eq. \ref{eq:xi}, $\beta^\star$ is equal to $\eta^\star\: b/a$.
-Taking the inverse logistic sigmoidal function of $\chi$, substituting the definition of $\xi$ from Eq. \ref{eq:xi} into Eq. \ref{eq:chi}, the temperature and elevation effects of $D$, $K$, and $\eta^\star$ on $\chi$ may be explicitly expressed (via partial differentiation):
+\noindent From Eq. \ref{eq:xi}, $\beta^\star$ is shown equal to $\eta^\star\: b/a$.
+The standardized cost ration may be solved for by substituting Eq. \ref{eq:xi} into Eq. \ref{eq:chi} and solving for $\beta^\star$:
+%% ---------------------------------------------------------------%%
+%% eq:bstar | Beta star
+%% ---------------------------------------------------------------%%
+\begin{equation}
+\label{eq:bstar}
+    \beta^\star = \frac{\chi^2}{\left(1 - \chi \right)^2}\: \frac{1.6\: \eta^\star\: D}{K}
+\end{equation}
+
+Equation \ref{eq:chi} can be linearized by taking the natural logarithm of the inverse logistic sigmoidal function of $\chi$ following the substitution of $\xi$ from Eq. \ref{eq:xi} into Eq. \ref{eq:chi}:
+%% ---------------------------------------------------------------%%
+%% eq:logit | Inverse logit function of chi
+%% ---------------------------------------------------------------%%
+\begin{equation}
+\label{eq:logit}
+    \ln \left( \frac{\chi}{1 - \chi} \right) = 
+    	0.235 - 0.5\:\ln(b) - 0.5\:\ln(a) + 0.5\:\ln(K) - 0.5\:\ln(D)
+\end{equation}
+
+\noindent To determine an optimal value of $\chi$, $\chi_o$, the temperature, elevation, and vapor pressure deficit effects are explicitly derived via partial differentiation, where the intercept has been empirically fitted to leaf $\delta^{13}$ isotope data:
 %% ---------------------------------------------------------------%%
 %% eq:whe | Wang Han equation
 %% ---------------------------------------------------------------%%
@@ -160,7 +179,8 @@ Taking the inverse logistic sigmoidal function of $\chi$, substituting the defin
 \indent $\chi_o$ = optimal value of $\chi$ [unitless];\\
 \indent $z$ = altitude above mean sea level [m].\\
 
-\noindent At mean sea level (i.e., $z = 0$), standard temperature (i.e., $T_{air} = 25\;{}^\circ$C), and an ideal vapor pressure deficit (i.e., $D = 1000$ Pa), the optimal value of $\chi$ is 0.767. Substituting this value of $\chi$ and the expression of $\xi$, given in Eq. \ref{eq:xi} (where $K = 70.84$ Pa at 25 ${}^\circ$C), into Eq. \ref{eq:chi}, $\beta^\star$ is found to be 244.0. 
+\noindent At mean sea level (i.e., $z = 0$), standard temperature (i.e., $T_{air} = 25\;{}^\circ$C), and ideal vapor pressure deficit (i.e., $D = 1000$ Pa), the right-hand side of Eq. \ref{eq:whe} is equal to 1.19. From this, the standard value of $\chi$ is 0.767. 
+Substituting these values into Eq. \ref{eq:bstar} (where $K = 70.84$ Pa at 25 ${}^\circ$C), $\beta^\star$ is found to be 244.0. 
 
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 3.2.2 -- RELATIVE VISCOSITY OF WATER
@@ -202,7 +222,7 @@ The conversion can be done knowing the total atmospheric pressure, $P_{atm}$, an
 \indent $ppm_x$ = parts-per-million concentration of gas \textit{x} [ppm];\\
 \indent $P_{atm}$ = total atmospheric pressure [Pa].\\
 
-\noindent For instances when $P_{atm}$ is unknown, the elevation-dependent atmospheric pressure may be computed using the Barometric Formula \parencite{allen98}:
+\noindent For instances when $P_{atm}$ is unknown, the elevation-dependent atmospheric pressure may be computed using the Barometric Formula, assuming a linear decrease in temperature with height within the troposphere and a mean adiabatic lapse rate \parencite{berberan97}:
 %% ---------------------------------------------------------------%%
 %% eq:pz | Atmospheric pressure as a function of elevation
 %% ---------------------------------------------------------------%%
@@ -211,15 +231,15 @@ The conversion can be done knowing the total atmospheric pressure, $P_{atm}$, an
 \label{eq:pz}
     P_{atm}\left( z \right) = P_{\circ} \left( 
     	1 - \frac{L\; z}{T_{\circ}} 
-    \right)^{\frac{g\; M_a}{R_u\; L}}
+    \right)^{g\; M_a\; \left(R_u\; L\right)^{-1}}
 \end{equation}
 
 \noindent where:\\
 \indent $z$ = altitude above mean sea level [m];\\
 \indent $g$ = standard gravity [9.80665 m s$^{-2}$];\\
 \indent $P_{\circ}$ = base atmospheric pressure [101325 Pa];\\
-\indent $L$ = temperature lapse rate [0.0065 K m$^{-2}$];\\
-\indent $T_{\circ}$ = base temperature [298.15 K];\\
+\indent $L$ = mean adiabatic lapse rate [0.0065 K m$^{-2}$];\\
+\indent $T_{\circ}$ = base temperature [288.15 K];\\
 \indent $M_a$ = molecular weight for dry air [0.028963 kg mol$^{-1}$];\\
 \indent $R_u$ = universal gas constant [8.3145 J mol$^{-1}$ K$^{-1}$].\\
 
@@ -377,9 +397,9 @@ The second is the Python application code, which integrates with the database, w
 The key inputs required for model testing and comparison include in-situ measurements of half-hourly net ecosystem exchange and photosynthetic flux density (\S \ref{sec:gepfluxd}) and annual atmospheric CO$_2$ concentration (\S \ref{sec:gepnoaa}) along with remotely sensed gridded observations of daily shortwave solar radiation (\S \ref{sec:gepwatch}), monthly vegetative greenness (\S \ref{sec:gepmodis}), and various monthly meteorological observations (\S \ref{sec:gepvpd} and \ref{sec:gepcru}).
 
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
-%% PART 3.4 -- FLUX PARTITIONING
+%% PART 3.3.1 -- FLUX PARTITIONING
 %% //////////////////////////////////////////////////////////////////////// %%
-\section{Flux Partitioning}
+\subsection{Flux Partitioning}
 \label{sec:fluxparti}
 The first step in the model testing is to derive the monthly observed GPP from the flux tower measurements.
 As GPP is not observed at the flux towers, it is therefore necessary to empirically decompose the high resolution CO$_{2}$ flux into quantities of GPP and ecosystem respiration (R$_{\mathrm{e}}$) based on the theoretical expression for net ecosytem exchange (NEE) \parencite{lovett06}:
@@ -455,7 +475,7 @@ By combining Eqns. \ref{eq:fmodels} with Eq. \ref{eq:nee}, GPP partitioning can 
 %% Add outlier removal
 %%
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
-%% PART 3.4.1 -- OUTLIER REMOVAL
+%% PART 3.3.2 -- OUTLIER REMOVAL
 %% //////////////////////////////////////////////////////////////////////// %%
 \subsection{Outlier removal}
 \label{sec:mst1out}
@@ -618,7 +638,7 @@ Based on 267 months of observation pairs (i.e., PPFD and NEE), the average perce
 Overall, this method presents a sufficient and efficient identification and removal process for handling outliers. 
 
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
-%% PART 3.4.2 -- DYNAMIC PARAMETERIZATION
+%% PART 3.3.3 -- DYNAMIC PARAMETERIZATION
 %% //////////////////////////////////////////////////////////////////////// %%
 \subsection{Dynamic parameterization}
 To perform the regression analysis, the parameters (i.e., $R$, $\alpha$, and $F_\infty$) must be given an initial guessed value. 
@@ -721,9 +741,9 @@ The simplicity of the dynamic parameterization model (requiring only mean, stand
 \end{figure}
 
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
-%% PART 3.5 -- CALCULATING GPP
+%% PART 3.3.4 -- CALCULATING GPP
 %% //////////////////////////////////////////////////////////////////////// %%
-\section{Calculating GPP}
+\subsection{Calculating GPP}
 \label{sec:calcgpp}
 Following the regression of the flux partitioning parameters (i.e., $R$, $\alpha$, and $F_\infty$) from Eqns. \ref{eq:neemodels}, GPP can now be solved for:
 %% ------------------------------------------------------------------------ %%
@@ -759,7 +779,7 @@ The high level of variability in Fig. \ref{fig:parti}d results in poor regressio
 %% Add error propagation
 %%
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
-%% PART 3.5.1 -- ERROR PROPAGATION
+%% PART 3.3.5 -- ERROR PROPAGATION
 %% //////////////////////////////////////////////////////////////////////// %%
 \subsection{Error propagation}
 \label{sec:mst1errprop}
@@ -811,4 +831,4 @@ For the rectangular hyperbola formula for GPP (i.e., Eq. \ref{eq:gpph}), let $A 
 
 By substituting Eqs. \ref{eq:hparta}--\ref{eq:hpartc} into Eq. \ref{eq:errprop} and assigning the corresponding error values to $s_{a}$, $s_{b}$, and $s_{c}$ (note: the measurement of PPFD is assumed to be error-free, $s_{c} = 0$) the associated error for GPP can be calculated. 
 
-In the more trivial case of the linear equation for GPP (i.e., Eq. \ref{eq:gppl}), the error propagation is directly proportional to the coefficient $alpha$ and its associated error.
+In the more trivial case of the linear equation for GPP (i.e., Eq. \ref{eq:gppl}), the error propagation is directly proportional to the coefficient $\alpha$ and its associated error.

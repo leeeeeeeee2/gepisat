@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-11-18 -- created
-# 2015-03-18 -- last updated
+# 2015-03-23 -- last updated
 #
 # ~~~~~~~~~~~~
 # description:
@@ -56,6 +56,7 @@
 # 31. started on crop plots (C4 + irrigation) [15.03.17]
 # 32. removed fa from mean growing season calculation [15.03.18]
 # 33. work on wetland over-estimation [15.03.18]
+# 34. new gamma star equation for temp and press [15.03.23]
 # 
 # ~~~~~
 # todo:
@@ -192,7 +193,7 @@ class LUE:
         # Calculate lue variables & place into tuple:
         iabs = fpar*ppfd                    # mol/m2, abs. PPFD
         ca = (1.e-6)*co2*patm               # Pa, atms. CO2
-        gs = self.calc_gstar(tair)          # Pa, photores. comp. point
+        gs = self.calc_gstar(tair, patm)    # Pa, photores. comp. point
         d = (1e3)*vpd                       # Pa, vapor pressure deficit
         k = self.calc_k(tair, patm)         # Pa, Michaelis-Menten coef.
         ns = self.viscosity_h2o(tair, patm) # Pa s, viscosity
@@ -292,24 +293,27 @@ class LUE:
                     axis=0
                     )
     #
-    def calc_gstar(self, tc):
+    def calc_gstar(self, tc, patm):
         """
         Name:     LUE.calc_gstar
-        Input:    float, air temperature, degrees C (tc)
+        Input:    - float, air temperature, degrees C (tc)
+                  - float, atmospheric pressure, Pa (patm)
         Output:   float, gamma-star, Pa (gs)
-        Features: Returns the temperature-dependent photorespiratory 
-                  compensation point, Gamma star (Pascals), based on constants 
-                  derived from Bernacchi et al. (2001) study.
+        Features: Returns the temperature and pressure dependent 
+                  photorespiratory compensation point, Gamma star (Pascals), 
+                  based on constants derived from Bernacchi et al. (2001).
         Ref:      Bernacchi et al. (2001), Improved temperature response 
                   functions for models of Rubisco-limited photosynthesis, 
                   Plant, Cell and Environment, 24, 253--259.
         """
         # Define constants
-        gs25 = 4.220  # Pa, assuming 25 deg C & 98.716 kPa)
-        dha = 37830   # J/mol
-        kR = 8.3145   # J/mol/K
+        gsc = 7.472      # empirical constant
+        kco = 2.09476e5  # ppm, US Standard Atmosphere
+        dha = 37830      # J/mol
+        kR = 8.3145      # J/mol/K
+        tk = tc + 273.15
         #
-        gs = gs25*numpy.exp(dha*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
+        gs = (5e-7)*kco*patm*numpy.exp(gsc - dha/(kR*tk))
         return gs
     #
     def calc_k(self, tc, patm):
@@ -364,7 +368,7 @@ class LUE:
             mgs_d = v_d[mgs_idx].mean()
             mgs_ca = v_ca[mgs_idx].mean()
             #
-            mgs_gs = self.calc_gstar(mgs_tair)
+            mgs_gs = self.calc_gstar(mgs_tair, my_patm)
             mgs_k = self.calc_k(mgs_tair, my_patm)
             mgs_ns = self.viscosity_h2o(mgs_tair, my_patm)
             mgs_ns /= self.n25
@@ -1246,6 +1250,45 @@ def calculate_vpd(tmp, vap):
     vpd = (0.611*numpy.exp((17.27*tmp)/(tmp + 237.3)) - 0.10*vap)
     return vpd
 
+def plot_two_obs(my_obs1, my_fit1, my_obs2, my_fit2, my_txt1, my_txt2):
+    """
+    Name:     plot_two_obs
+    Input:    - numpy.ndarray, observed 1 GPP (my_obs1)
+              - numpy.ndarray, observed 2 GPP (my_obs2)
+              - numpy.ndarray, modelled 1 GPP (my_fit1)
+              - numpy.ndarray, modelled 2 GPP (my_fit2)
+              - str, plot text for model 1 (my_txt1)
+              - str, plot text for model 2 (my_txt2)
+    Output:   None
+    Features: Creates two plots of predicted versus observed GPP
+    """
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    plot_max = numpy.concatenate((my_fit1, my_fit2, my_obs1, my_obs2)).max()
+    #
+    fig = plt.figure(figsize=(14,8), dpi=180)
+    #
+    ax1 = fig.add_subplot(121)
+    plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=14)
+    plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
+    ax1.plot(my_obs1, my_fit1, 'ro') 
+    ax1.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
+    ax1.set_ylabel('Modeled GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+    ax1.set_xlabel('Observed GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+    ax1.text(0.05, 0.95, my_txt1, transform=ax1.transAxes, fontsize=14, 
+             verticalalignment='top', bbox=props)
+    #
+    ax2 = fig.add_subplot(122)
+    plt.setp(ax2.get_xticklabels(), rotation=0, fontsize=14)
+    plt.setp(ax2.get_yticklabels(), rotation=0, fontsize=14)
+    ax2.plot(my_obs2, my_fit2, 'ro') 
+    ax2.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
+    ax2.set_ylabel('Modeled GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+    ax2.set_xlabel('Observed GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+    ax2.text(0.05, 0.95, my_txt2, transform=ax2.transAxes, fontsize=14, 
+             verticalalignment='top', bbox=props)
+    #
+    plt.show()
+
 ###############################################################################
 ## MAIN PROGRAM:
 ###############################################################################
@@ -1422,6 +1465,36 @@ for station in wet_stations:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
 # Plot MGS versus seasonally-varying parameter estimates of GPP
+# Presentation stations
+# station = 'NL-Loo'  nlloo_obs = numpy.copy(yobs)
+#                     nlloo_mod = numpy.copy(mgs_ymod)
+#                     nlloo_txt = my_txt2
+#
+# station = 'BE-Vie'  bevie_obs = numpy.copy(yobs)
+#                     bevie_mod = numpy.copy(mgs_ymod)
+#                     bevie_txt = my_txt2
+#
+# station = 'DE-Hai'  dehai_obs = numpy.copy(yobs)
+#                     dehai_mod = numpy.copy(mgs_ymod)
+#                     dehai_txt = my_txt2
+#
+# station = 'CH-Oe1'  choe1_obs = numpy.copy(yobs)
+#                     choe1_mod = numpy.copy(mgs_ymod)
+#                     choe1_txt = my_txt2
+#
+# station = 'US-Bo1'  usbo1_obs = numpy.copy(yobs)
+#                     usbo1_mod = numpy.copy(mgs_ymod)
+#                     usbo1_txt = my_txt2
+#
+# station = 'SE-Deg'  sedeg_obs = numpy.copy(yobs)
+#                     sedeg_mod = numpy.copy(mgs_ymod)
+#                     sedeg_txt = my_txt2
+#
+# 93, 17, 10, 97, 0.20, 0.25
+# plot_two_obs(nlloo_obs, nlloo_mod, bevie_obs, bevie_mod, nlloo_txt, bevie_txt)
+# plot_two_obs(dehai_obs, dehai_mod, choe1_obs, choe1_mod, dehai_txt, choe1_txt)
+# plot_two_obs(usbo1_obs, usbo1_mod, sedeg_obs, sedeg_mod, usbo1_txt, sedeg_txt)
+
 fig_file = out_dir + 'GePiSaT_nxgn_GPP_seas-v-mgs.pdf'
 pp = PdfPages(fig_file)
 

@@ -4,7 +4,7 @@
 % Imperial College London
 %
 % 2015-03-18 -- created
-% 2015-03-22 -- last updated
+% 2015-03-24 -- last updated
 %
 % ------------
 % description:
@@ -19,6 +19,7 @@
 % --> simpler for Git version control
 % 03. added subsections [15.03.20]
 % 04. added new section, testing and development [15.03.22]
+% 05. added new sections, gap-filling & ET solar rad [15.03.24]
 %
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 3.2 -- THE NEXT-GENERATION MODEL
@@ -62,14 +63,19 @@ The theoretical model, using the empirical expression for the potential rate of 
 
 \noindent where:\\
 \indent $\phi_{\circ}$ = intrinsic quantum efficiency [0.093~mol~C~mol~photons$^{-1}$];\\
-\indent $c$ = maintenance cost of light-harvesting capacity [0.41];\\
+\indent $c$ = maintenance cost of electron transport [0.41];\\
 \indent $I_{abs}$ = absorbed photosynthetic light [mol~photons~m$^{-2}$~mo$^{-1}$];\\
 \indent f$_\alpha$ = index of plant available moisture;\\
 \indent $m$ = substrate limitation term.\\
 
 Equation \ref{eq:nglue} introduces two constants (i.e., $\phi_{\circ}$ and $c$) and two variables (i.e., f$_\alpha$ and $m$).
 The intrinsic quantum efficiency, \nomenclature{$\phi_{\circ}$}{intrinsic quantum efficiency [0.093~mol~C~mol~photons$^{-1}$]}$\phi_{\circ}$, is assumed a constant value of 0.093 mol~C~mol~photons$^{-1}$, based on the mean of eleven measured species by \cite{long93}. 
-The cost for a plant to have a certain light-harvesting capacity, \nomenclature{$c$}{maintenance cost of light-harvesting capacity [0.41]}$c$, set to a constant value 0.41, is empirically derived from reanalysis data of $J_\text{max}$ to $V_\text{cmax}$ ratios presented by \cite{kattge07}.
+This is just below the theoretical maximum value (i.e., 0.125 mol~C~mol~photons$^{-1}$) based on the necessity of eight moles of photons to fix one mole of carbon.
+In C3 photosynthesis, electrons are expended on nitrate reduction and hydrocarbon formation, which explains the lower value for $\phi_o$.
+In C4 photosynthesis, $\phi_o$ is reduced even more due to the associated cost of their CO$_2$ concentrating mechanism. 
+
+The cost for maintaining a certain electron transport capacity, \nomenclature{$c$}{maintenance cost of light-harvesting capacity [0.41]}$c$, is set to a constant value 0.41, empirically derived from reanalysis data of $J_\text{max}$ to $V_\text{cmax}$ ratios presented by \cite{kattge07}.
+Based on this empirical analysis, the cost of $J_\text{max}$ is considerably large and is found to have an appreciable effect on GPP, which should not be ignored.
 
 The index of plant available moisture, f$_\alpha$, is based on the Cramer-Prentice bioclimatic moisture index, $\alpha^\star$ (see \S \ref{sec:gepcp}). 
 To maintain a coefficient that varies between 0 and 1 and to emphasize the effect of low soil moisture on limiting GPP, f$_\alpha$ is set equal to the quarter power of $\alpha^\star$ divided by its maximum value or simply: 
@@ -110,7 +116,7 @@ The substrate limitation term, $m$, is given by:
 \subsection{The Standardized Cost Ratio}
 \label{sec:beta}
 \nomenclature{$\beta^\star$}{standardized cost ratio [244.0]}%
-The semi-empirical constant, $\beta^\star$, reflects the ratio of the cost factors for carboxylation and transpiration at standard temperature (i.e., 25 ${}^\circ$C) and sea level. 
+The semi-empirical constant, $\beta^\star$, reflects the ratio of the cost factors for carboxylation and transpiration at standard temperature (i.e., 25 ${}^\circ$C), ideal vapor pressure deficit (i.e., 1000 Pa), and mean sea level. 
 The derivation of $\beta^\star$ is based on \emph{The Least-Cost Hypothesis}, which states \parencite{prentice14}:
 \begin{quote}
 	''plant leaves minimize the summed unit costs of transpiration and carboxylation.''
@@ -161,7 +167,7 @@ Equation \ref{eq:chi} can be linearized by taking the natural logarithm of the i
     	0.235 - 0.5\:\ln(b) - 0.5\:\ln(a) + 0.5\:\ln(K) - 0.5\:\ln(D)
 \end{equation}
 
-\noindent To determine an optimal value of $\chi$, $\chi_o$, the temperature, elevation, and vapor pressure deficit effects are explicitly derived via partial differentiation, where the intercept has been empirically fitted to leaf $\delta^{13}$ isotope data:
+\noindent To determine an optimal value of $\chi$, $\chi_o$, the temperature, elevation, and vapor pressure deficit effects are explicitly derived via partial differentiation, where the intercept has been empirically fitted to leaf $\delta^{13}$ stable isotope data (Han Wang, personal communication, 10 February 2015):
 %% ---------------------------------------------------------------%%
 %% eq:whe | Wang Han equation
 %% ---------------------------------------------------------------%%
@@ -179,8 +185,8 @@ Equation \ref{eq:chi} can be linearized by taking the natural logarithm of the i
 \indent $\chi_o$ = optimal value of $\chi$ [unitless];\\
 \indent $z$ = altitude above mean sea level [m].\\
 
-\noindent At mean sea level (i.e., $z = 0$), standard temperature (i.e., $T_{air} = 25\;{}^\circ$C), and ideal vapor pressure deficit (i.e., $D = 1000$ Pa), the right-hand side of Eq. \ref{eq:whe} is equal to 1.19. From this, the standard value of $\chi$ is 0.767. 
-Substituting these values into Eq. \ref{eq:bstar} (where $K = 70.84$ Pa at 25 ${}^\circ$C), $\beta^\star$ is found to be 244.0. 
+\noindent At mean sea level (i.e., $z = 0$), standard temperature (i.e., $T_{air} = 25\;{}^\circ$C), and ideal vapor pressure deficit (i.e., $D = 1000$ Pa), the right-hand side of Eq. \ref{eq:whe} is equal to 1.19. From this, a ``standardized'' value of $\chi$ is 0.767 (between the theoretical ranges of 0.7 to 0.8). 
+Substituting the standardized $\chi$ into Eq. \ref{eq:bstar} (where $\eta^\star = 1$; $D = 1000$~Pa; and $K = 70.84$ Pa at 25 ${}^\circ$C), $\beta^\star$ is found to be 244.0. 
 
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 3.2.2 -- RELATIVE VISCOSITY OF WATER
@@ -310,7 +316,7 @@ Substituting the temperature-dependency equations for each term in Eq. \ref{eq:g
 
 \noindent where:\\
 \indent $\Delta H_a$ = activation energy for $\Gamma^\star$ [37$\,$830 J mol$^{-1}$];\\
-\indent $R_u$ = universal gas constant [8.3145 J mol$^{-1}$ K$^{-1}$];\\
+\indent $R_u$ = universal gas constant [8.31447 J mol$^{-1}$ K$^{-1}$];\\
 \indent $P_{atm}$ = atmospheric pressure [Pa];\\
 \indent $T_k$ = leaf temperature [K].\\
 
@@ -359,7 +365,7 @@ The Michaelis-Menten coefficient of Rubisco-limited photosynthesis is a function
 \indent $K_{o25}$ = Michaelis-Menten constant for O$_2$ at 25~$^{\circ}$C [Pa];\\
 \indent $\Delta H_{a,c}$ = activation energy for carboxylation [79$\,$430 J mol$^{-1}$];\\
 \indent $\Delta H_{a,o}$ = activation energy for oxygenation [36$\,$380 J mol$^{-1}$];\\
-\indent $R_{u}$ = universal gas constant [8.3145 J mol$^{-1}$ K$^{-1}$];\\
+\indent $R_{u}$ = universal gas constant [8.31447 J mol$^{-1}$ K$^{-1}$];\\
 \indent $T_k$ = leaf temperature [K].\\
 
 \noindent Once again, leaf temperature, as in Eqns. \ref{eq:michaelis} and \ref{eq:kcko}, may be substituted by the ambient air temperature, $T_{air}$, converted to units of Kelvin. 
@@ -382,7 +388,8 @@ The partial pressure values of $K_{c25}$ and $K_{o25}$ are based on the empirica
 \end{align}
 \end{subequations}
 
-\noindent Assuming that the experiments conducted at the University of Illinois at Urbana-Champaign were performed under atmospheric pressure (at elevation 227 m above mean sea level), the partial pressure of $K_{c25}$ is 39.97 Pa and the partial pressure of $K_{o25}$ is 27$\,$480 Pa and are invariant to changes in atmospheric pressure.
+\noindent The experiments to determine these values were conducted in a laboratory under ambient atmospheric conditions at the University of Illinois at Urbana-Champaign (Carl Bernacchi, personal communication, 24 March 2015) where the elevation is approximately 227 m above mean sea level. 
+The constant partial pressure of $K_{c25}$ is 39.93 Pa and the partial pressure of $K_{o25}$ is 27$\,$460 Pa (based on $P_{atm}$~=~98627~Pa).
 
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 3.3 -- MODEL TESTING AND DEVELOPMENT
@@ -394,7 +401,14 @@ To test the model, a open-source framework was established consisting of two par
 The first is a PostgreSQL database, which stores the various observations for unified data access (see Part \ref{partii} for details).
 The second is the Python application code, which integrates with the database, written to be easily readable and reproducible while still being computationally powerful (see Part \ref{parti} for more details).
 
-The key inputs required for model testing and comparison include in-situ measurements of half-hourly net ecosystem exchange and photosynthetic flux density (\S \ref{sec:gepfluxd}) and annual atmospheric CO$_2$ concentration (\S \ref{sec:gepnoaa}) along with remotely sensed gridded observations of daily shortwave solar radiation (\S \ref{sec:gepwatch}), monthly vegetative greenness (\S \ref{sec:gepmodis}), and various monthly meteorological observations (\S \ref{sec:gepvpd} and \ref{sec:gepcru}).
+The key inputs required for model testing and comparison include the in-situ point measurements of half-hourly net ecosystem exchange and photosynthetic flux density (\S \ref{sec:gepfluxd}), the global annual atmospheric CO$_2$ concentration (\S \ref{sec:gepnoaa}), the daily reanalysis shortwave solar radiation (\S \ref{sec:gepwatch}), the remotely-sensed monthly vegetative greenness (\S \ref{sec:gepmodis}), and various global monthly meteorological observations (\S \ref{sec:gepvpd} and \ref{sec:gepcru}).
+
+The observations of GPP begin with the flux partitioning at flux tower sites (see \S \ref{sec:fluxparti} for details).
+To improve the model fitness of the flux partitioning, outliers in the half-hourly data sets are removed using Peirce's criterion (see \S \ref{sec:mst1out} for details). 
+Initial values given for the fitting parameters in the least squares regression are determined statistically based on the actual measurements (see \S \ref{sec:mst1dyn} for details).
+Following the determination of the flux partitioning parameters, GPP may be calculated (see \S \ref{sec:calcgpp} for details) along with its associated error due to the uncertainty in the fitted parameters (see \S \ref{sec:mst1errprop} for details).
+
+To calculate monthly totals of GPP, the observed PPFD measurements are gap-filled  based on the calculation of extraterrestrial solar radiation (see \S \ref{sec:mst2etsr} for details) and converted to GPP based on the fitted flux partitioning parameters and integrated into a monthly total value (see \S \ref{sec:mst2gfppfd} for details). 
 
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 3.3.1 -- FLUX PARTITIONING
@@ -417,7 +431,7 @@ As GPP is not observed at the flux towers, it is therefore necessary to empirica
 \indent R$_\text{e}$ = ecosystem respiration [$\mu$mol CO$_2$ m$^{-2}$ s$^{-1}$];\\
 \indent GPP = gross primary production [$\mu$mol CO$_2$ m$^{-2}$ s$^{-1}$].\\
 
-\noindent The convention presented in equation \ref{eq:nee} indicates that positive CO$_{2}$ exchange occurs in the form of ecosystem respiration (i.e., adding CO$_{2}$ into the atmosphere) and negative exchange occurs during photosynthesis (i.e., atmospheric carbon sequestration into plant leaves). 
+\noindent The convention presented in equation \ref{eq:nee} indicates positive CO$_{2}$ exchange in the form adding CO$_{2}$ into the atmosphere (i.e., respiration) and negative exchange occurs during photosynthesis (i.e., atmospheric carbon sequestration into plant leaves). 
 
 There are several models that combine leaf photosynthesis (e.g., GPP) and radiation transfer (e.g., PPFD) through a vegetated canopy.  
 In \parencite{ruimy95}, the response curve of leaves to radiative energy is assumed to follow one of two models described below (rearranged for consistency with the sign convention presented in Eq. \ref{eq:nee}).  
@@ -470,14 +484,10 @@ By combining Eqns. \ref{eq:fmodels} with Eq. \ref{eq:nee}, GPP partitioning can 
 
 \noindent Note that the form of the rectangular hyperbola presented in Eq. \ref{eq:hypmod} has an x-axis asymptote defined by $a/c$ from Eqns. \ref{eq:shypa} and \ref{eq:shypc}. 
 
-
-%%
-%% Add outlier removal
-%%
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 3.3.2 -- OUTLIER REMOVAL
 %% //////////////////////////////////////////////////////////////////////// %%
-\subsection{Outlier removal}
+\subsection{Outlier Removal}
 \label{sec:mst1out}
 While there are morality debates over whether outliers should be removed at all from observation datasets, it is well known that outliers are detrimental when present during model fitting.  
 This project is trying to address large scale processes and therefore removing outliers from instantaneous measurement fields to improve the fitted relationships between NEE and PPFD is viewed as acceptable.
@@ -640,7 +650,8 @@ Overall, this method presents a sufficient and efficient identification and remo
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 3.3.3 -- DYNAMIC PARAMETERIZATION
 %% //////////////////////////////////////////////////////////////////////// %%
-\subsection{Dynamic parameterization}
+\subsection{Dynamic Parameterization}
+\label{sec:mst1dyn}
 To perform the regression analysis, the parameters (i.e., $R$, $\alpha$, and $F_\infty$) must be given an initial guessed value. 
 Linear regressions tend to be robust against initial conditions while hyperbolas can be rather sensitive, especially around y-axis asymptotes.  
 One approach is to assign constant initial values to each parameter; however, to dynamically assigning parameter values based on statistical characteristics of the data can provide a better (i.e., closer to optimal) initial value that may speed up the convergence of the regression. 
@@ -652,6 +663,18 @@ Combinations of these statistics were regressed against the optimized parameters
 Equations \ref{eq:dpm1}--\ref{eq:dpm3} represent the three formulas for performing dynamic parameterization on the five optimization parameters, $\hat{p}$, (i.e., three parameters for the hyperbolic model: $F_{\infty}$, $R_{hyp}$, and $\alpha_{hyp}$; and two parameters for the linear model: $\alpha_{lin}$, and $R_{lin}$).  
 The parameter subscripts match the parameter values presented in Table \ref{tab:dpe}.  
 The coefficients presented in Table \ref{tab:dpe} are based on three iterations on 28 flux towers over the course of one year.
+%% ------------------------------------------------------------------------ %%
+%% fig:hmodest | Hyperbolic model parameter estimates : optimized
+%% ------------------------------------------------------------------------ %%
+\begin{figure}[h!]
+    \includegraphics[width=\textwidth]{dpe_hyp.eps}
+    \caption{Estimated regression parameters versus optimized regression 
+    parameters (fitted after outliers were removed) for the hyperbolic model 
+    (i.e., $F_{\infty}$, $R$, $\alpha$). Data is based on the monthly 
+    partitioning of 25 flux towers during 2002. Parameter units have been 
+    normalized for readability. The dashed line represents unity.}
+    \label{fig:hmodest}
+\end{figure}
 %% ------------------------------------------------------------------------ %%
 %% eq:dpm1 | Dynamic parameterization models
 %% ------------------------------------------------------------------------ %%
@@ -705,28 +728,6 @@ The coefficients presented in Table \ref{tab:dpe} are based on three iterations 
     \hline
     \end{tabular}\\
 \end{table}
-
-%% ------------------------------------------------------------------------ %%
-%% fig:hmodest | Hyperbolic model parameter estimates : optimized
-%% ------------------------------------------------------------------------ %%
-\begin{figure}[h!]
-    \includegraphics[width=\textwidth]{dpe_hyp.eps}
-    \caption{Estimated regression parameters versus optimized regression 
-    parameters (fitted after outliers were removed) for the hyperbolic model 
-    (i.e., $F_{\infty}$, $R$, $\alpha$). Data is based on the monthly 
-    partitioning of 25 flux towers during 2002. Parameter units have been 
-    normalized for readability. The dashed line represents unity.}
-    \label{fig:hmodest}
-\end{figure}
-
-Figure \ref{fig:hmodest} shows the relationship between the estimated parameters and optimized parameters for the hyperbolic model (i.e., equation \ref{eq:hypmod}).  
-The units for each of three parameters have been normalized (i.e., values range between 0 and 1) for readability.  
-The data is based on monthly regressions from 2002 of PPFD and NEE data pairs from 25 flux tower stations.  
-A similar plot is shown in Figure \ref{fig:lmodest} where instead the regression parameters are shown for the linear model (i.e., equation \ref{eq:linmod}) for the same flux stations and time period.  
-In both plots, the 1:1 line is shown for comparison.  
-Both the hyperbolic and linear model parameter estimations exhibit moderately strong positively linear correlations to their optimized parameters ($r \approx 0.78$) suggesting that the dynamic parameterization methodology presented in equations \ref{eq:dpm1}--\ref{eq:dpm3} is suitable for this model.  
-The simplicity of the dynamic parameterization model (requiring only mean, standard deviation, maximum and minimum of the observations) allows for the coefficients to be updated when new stations are included in the model.
-
 %% ------------------------------------------------------------------------ %%
 %% fig:lmodest | Linear model parameter estimates : optimized
 %% ------------------------------------------------------------------------ %%
@@ -740,12 +741,20 @@ The simplicity of the dynamic parameterization model (requiring only mean, stand
     \label{fig:lmodest}
 \end{figure}
 
+Figure \ref{fig:hmodest} shows the relationship between the estimated parameters and optimized parameters for the hyperbolic model (i.e., equation \ref{eq:hypmod}).  
+The units for each of three parameters have been normalized (i.e., values range between 0 and 1) for readability.  
+The data is based on monthly regressions from 2002 of PPFD and NEE data pairs from 25 flux tower stations.  
+A similar plot is shown in Figure \ref{fig:lmodest} where instead the regression parameters are shown for the linear model (i.e., equation \ref{eq:linmod}) for the same flux stations and time period.  
+In both plots, the 1:1 line is shown for comparison.  
+Both the hyperbolic and linear model parameter estimations exhibit moderately strong positively linear correlations to their optimized parameters ($r \approx 0.78$) suggesting that the dynamic parameterization methodology presented in equations \ref{eq:dpm1}--\ref{eq:dpm3} is suitable for this model.  
+The simplicity of the dynamic parameterization model (requiring only mean, standard deviation, maximum and minimum of the observations) allows for the coefficients to be updated when new stations are included in the model.
+
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 3.3.4 -- CALCULATING GPP
 %% //////////////////////////////////////////////////////////////////////// %%
 \subsection{Calculating GPP}
 \label{sec:calcgpp}
-Following the regression of the flux partitioning parameters (i.e., $R$, $\alpha$, and $F_\infty$) from Eqns. \ref{eq:neemodels}, GPP can now be solved for:
+Following the successful regression of the flux partitioning parameters (i.e., $R$, $\alpha$, and $F_\infty$) from Eqns. \ref{eq:neemodels}, GPP can now be solved for:
 %% ------------------------------------------------------------------------ %%
 %% eq:gppmod | GPP models (Ruimy's models)
 %% ------------------------------------------------------------------------ %%
@@ -775,13 +784,10 @@ In Figs. \ref{fig:parti}a and \ref{fig:parti}c, the trend between NEE and PPFD o
 On the contrary, the trend presented in Fig. \ref{fig:parti}b cannot be clearly distinguished as linear from hyperbolic as both models perform equally well ($R^{2}$ is 0.90 and 0.91 for the linear and hyperbolic fits, respectively). 
 The high level of variability in Fig. \ref{fig:parti}d results in poor regression fitting and is therefore difficult to distinguish between hyperbolic and linear model fits ($R^{2}\approx$0.1 for both linear and hyperbolic model fits).
 
-%%
-%% Add error propagation
-%%
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 3.3.5 -- ERROR PROPAGATION
 %% //////////////////////////////////////////////////////////////////////// %%
-\subsection{Error propagation}
+\subsection{Error Propagation}
 \label{sec:mst1errprop}
 During the flux partitioning of NEE and PPFD observations, the fitting parameters used to calculate GPP (i.e., Eq. \ref{eq:gppl} and Eq. \ref{eq:gpph}) are estimated.  
 The parameter estimates include some uncertainty or associated error.  
@@ -832,3 +838,292 @@ For the rectangular hyperbola formula for GPP (i.e., Eq. \ref{eq:gpph}), let $A 
 By substituting Eqs. \ref{eq:hparta}--\ref{eq:hpartc} into Eq. \ref{eq:errprop} and assigning the corresponding error values to $s_{a}$, $s_{b}$, and $s_{c}$ (note: the measurement of PPFD is assumed to be error-free, $s_{c} = 0$) the associated error for GPP can be calculated. 
 
 In the more trivial case of the linear equation for GPP (i.e., Eq. \ref{eq:gppl}), the error propagation is directly proportional to the coefficient $\alpha$ and its associated error.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 3.3.6 -- GAP-FILLING PPFD
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Gap-Filling PPFD}
+\label{sec:mst2gfppfd}
+In order to compute the monthly GPP, the complete time series of PPFD is necessary for the integration. 
+Due to gaps present in the half-hourly PPFD datasets, a gap-filling product is used to fill the absent measurements based on scaled half-hourly extraterrestrial solar radiation (see \S \ref{sec:ra} for details).
+The scaling of the extraterrestrial solar radiation is based on the ratio of daily observed $SW_{down}$ to the daily total extraterrestrial solar radiation and is converted from units of energy to photon flux using a from-flux-to-energy conversion (fFEC) efficiency coefficient \parencite{ge11}:
+%% ------------------------------------------------------------------------ %%
+%% eq:gapfill | PPFD gapfilling product
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:gapfill}
+    Q_{gap} = \text{fFEC} \; \frac{\int_{day} SW_{down}}{H_o} \; I_o
+\end{equation}
+
+\noindent where:\\
+\indent $Q_{gap}$ = half-hourly PPFD gap-filling product [$\mu$mol~photons~m$^{-2}$~s$^{-1}$];\\ 
+\indent fFEC = from-flux-to-energy conversion efficiency [$\mu$mol~photons~J$^{-1}$];\\
+\indent $I_o$ = extraterrestrial solar radiation flux [W~m$^{-2}$];\\
+\indent $H_o$ = daily extraterrestrial solar radiation [J~m$^{-2}$].\\
+%% ------------------------------------------------------------------------ %%
+%% fig:gapfill | PPFD gap-filling example
+%% ------------------------------------------------------------------------ %%
+\begin{figure}[h!]
+    \includegraphics[width=0.95\textwidth]{gapfill.eps}
+    \caption{Plots of two-week periods during 2002 of half-hourly PPFD 
+    observations (solid blue) and gap-filling product (dashed red) for flux 
+    tower stations: (a) DK-Sor, Denmark; (b) US-Blo, United States; (c) BR-Sa3, 
+    Brazil; (d) RU-Zot, Russia.}
+    \label{fig:gapfill}
+\end{figure}
+
+\noindent After calculating the daily gap-filling product, the original observation data are inserted to create the gap-filled observation time series.  
+There are several different values for the fFEC coefficient including 2.27 $\mu$mol~J$^{-1}$ \parencite{prentice93}, 2.16 $\mu$mol~J$^{-1}$ \parencite{ge11}, and 2.04 $\mu$mol~J$^{-1}$ \parencite{meek84}. 
+For a conservative approach, the value of 2.04 $\mu$mol~J$^{-1}$ is used in Eq. \ref{eq:gapfill}.
+
+Figure \ref{fig:gapfill} shows and example of gap-filled data during a two-week period at four flux towers.  
+PPFD observations (depicted as a solid blue line) are gap-filled (shown as dashed red lines) during periods where observations are missing.  
+The results shown in Figure \ref{fig:gapfill} suggest that the gap-filling procedure presented above adequately reproduces diurnal cycling with magnitudes and durations representative of the surrounding observations.  
+Furthermore, the daily $SW_{down}$ measurements seem to capture the inter-daily variability of the PPFD observations (Figures \ref{fig:gapfill} a and d). 
+However, the gap-filling product does not account for sub-daily variability due to the smooth curve represented by the extraterrestrial solar radiation.
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 3.3.7 -- EXTRATERRESTRIAL SOLAR RADIATION FLUX, W/m^2
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Extraterrestrial Solar Radiation Flux}
+\label{sec:ra}
+Modeled extraterrestrial solar radiation flux, $I_o$, or the top-of-the-atmosphere solar irradiance, is used to gap-fill the half-hourly PPFD time series when measurements are missing. 
+The calculation of $I_o$ may be expressed as the product of three terms \parencite[Eq.~1.10.2]{duffie13}:
+%% ------------------------------------------------------------------------ %%
+%% eq:etsr | Extraterrestrial Solar Radiation Flux, W/m^2
+%% ------------------------------------------------------------------------ %%
+\nomenclature{$I_o$}{extraterrestrial solar radiation flux [W~m$^{-2}$]}%
+\begin{equation}
+\label{eq:etsr}
+    I_o = I_{sc} \: d_{r} \: \cos \theta_z
+\end{equation}
+
+\noindent where: \\
+\indent $I_{sc}$ = solar constant [1360.8 W~m$^{-2}$];\\
+\indent $I_{o}$ = extraterrestrial solar radiation flux [W~m$^{-2}$];\\
+\indent $d_{r}$ = distance factor [unitless];\\
+\indent $\cos \theta_z$ = inclination factor [unitless].\\
+
+\noindent Note that negative values of $I_o$, which represent when the sun is below the horizon, have no physical meaning and therefore should be set equal to zero.
+
+The solar constant ($I_{sc}$) has a complex behavior and is subject to temporal variability \parencite{crommelynck97}, which is caused by the changing distribution of solar brightness features (e.g., sunspots, faculae, and the network) \parencite{krivova10}. 
+There have been several attempts throughout history to measure the solar constant \parencite[e.g.,][]{thekaekara71,willson97,dewitte04,frohlich06}. 
+The latest estimate of $I_{sc}$ by \cite{kopp11} is 1360.8 W~m$^{-2}$, which is the assumed value for this work.
+
+The distance factor accounts for the variability in $I_o$ that reaches the earth due to the relative change in distance between Earth and the Sun caused by the eccentricity of Earth's elliptical orbit, $e$, and is defined as the inverse square of the relative distance between the earth and sun, given by \parencite{berger93}:
+%% ------------------------------------------------------------------------ %%
+%% eq:dr | Distance factor
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:dr}
+    d_{r} = \left(\frac{1 + e\: \cos\nu}{1 - e^2}\right)^2
+\end{equation}
+
+\noindent where:\\
+\indent $e$ = eccentricity of Earth's orbit [0.0167];\\
+\indent $\nu$ = true anomaly of Earth's orbit [radians].\\
+
+The true anomaly, $\nu$, describes the position of Earth on its orbit around the Sun with respect to its position closest to the Sun (i.e., perihelion). 
+
+The inclination factor, $\cos \theta_z$, attenuates the incident solar radiation perpendicular to earth's surface to account for obliquity, $\epsilon$ (i.e., Earth's tilted axis), and elevation of the Sun above the horizon, $\theta_z$. 
+For a horizontal surface, the incidence angle of solar radiation is given by \parencite{duffie13}:
+%% ------------------------------------------------------------------------ %%
+%% eq:thetaz | Angle of incidence on horizontal surface
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:thetaz}
+	\cos \theta_z = \sin\delta\: \sin\phi + 
+	                \cos\delta\: \cos\phi\: \cos h
+\end{equation}
+
+\noindent where:\\
+\indent $\delta$ = declination angle [radians];\\
+\indent $\phi$ = latitude [radians];\\
+\indent $h$ = hour angle [radians].\\
+
+The declination angle describes the angular position between the Sun at solar noon (i.e., $h=0$) and Earth's equator (ranging from -$\epsilon$ during the winter solstice to +$\epsilon$ during the summer solstice). 
+For the purposes of ecological modeling, $\delta$ may be assumed constant throughout a single day, given by \parencite{woolf68}:
+%% ------------------------------------------------------------------------ %%
+%% eq:delta | Earth's declination angle, radians
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:delta}
+    \delta = \arcsin\left(\sin\lambda\: \sin\epsilon\right)
+\end{equation}
+
+\noindent where: \\
+\indent $\lambda$ = true longitude of Earth's orbit [radians];\\
+\indent $\epsilon$ = obliquity of earth's axis [0.4091 radians].\\
+
+The hour angle, $h$, is the angular displacement of the sun east or west of the local meridian, ranging from -180$^{\circ}$ to 180$^{\circ}$ with 0$^{\circ}$ occurring at solar noon, given by \parencite[Eq. 3.1]{stine01}:
+%% ------------------------------------------------------------------------ %%
+%% eq:hour | Hour angle, radians
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:hour}
+    h = \frac{\pi}{12} \: (t_{s} - 12)
+\end{equation}
+
+\noindent where $t_{s}$ is the solar time, which describes the apparent angular motion of the sun across the sky with solar noon representing the time when the sun crosses the local meridian of the observer. 
+The conversion between local clock time, $LCT$, and $t_{s}$ depends on the physical location of the observer, the current day of the year, and the time zone of the location, given by \parencite[Eq. 3.5]{stine01}:
+%% ------------------------------------------------------------------------ %%
+%% eq:soltime | Solar time, hr
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:soltime}
+    t_{s} = LCT + EOT - LC - DS
+\end{equation}
+
+\noindent where: \\
+\indent $t_s$ = solar time [hours];\\
+\indent $LCT$ = local clock time [hours];\\
+\indent $EOT$ = equation of time [hours];\\
+\indent $LC$ = longitude correction factor [hours]; \\
+\indent $DS$  = daylight savings correction factor [hours]. \\
+
+\noindent The equation of time, $EOT$, measures the difference between the mean solar time and the true solar time, approximated by \cite{spencer71} and corrected by \cite{oglesby98} to be accurate to within 35 seconds, is given by:
+%% ------------------------------------------------------------------------ %%
+%% eq:eotb | Equation of time, Spencer's formula
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:eotb}
+	\begin{split}
+    	EOT = \frac{12}{\pi} \times ( 
+    	    & 7.5 \times 10^{-6} \\ 
+        	& + 1.868 \times 10^{-3} \: \cos B \\ 
+            & - 3.2077 \times 10^{-2} \: \sin B \\
+            & - 1.4615 \times 10^{-2} \: \cos 2B \\
+            & - 4.0849 \times 10^{-2} \: \sin 2B) \\
+            & ~ \\
+        B = \frac{2\: \pi\: \left(n - 1\right)}{N} & ~
+	\end{split}
+\end{equation}
+
+\noindent where:\\
+\indent $n$ = day of the year (i.e., 1--366);\\
+\indent $N$ = days in the year (e.g., 365);\\
+
+\noindent The factor ($12/\pi$) converts radians into hours based on the 24 hours required for the earth to make a full rotation (i.e., $2\pi$ radians). 
+
+The longitude correction factor, $LC$, makes the appropriate adjustment for the number of time zones away the observer is from the UTM/GMT based on Earth's average rotational speed (i.e., $2\pi$ radians in 24 hours), given by \parencite{stine01}:
+%% ------------------------------------------------------------------------ %%
+%% eq:lc | Longitude correction factor, hr
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:lc}
+    LC = TZ_h - \frac{12\: \theta_{lon}}{\pi}
+\end{equation}
+
+\noindent where: \\
+\indent $TZ_{h}$ = time zone hours away from UTC [hours];\\
+\indent $\theta_{lon}$ = longitude of observation [radians].\\
+
+The daylight savings time correction factor, $DS$, corrects local time when summer time is in (i.e., $DS$ = 1) and is ignored otherwise.
+
+\cite{berger78} presents an algorithm for computing the true longitude, $\lambda$, for a given day of the year, $n$, whereby Earth's angular position is associated with a mean planetary orbit. 
+The algorithm begins with the calculation of the mean longitude of the vernal equinox, $\lambda_{m0}$, assumed 21 March: 
+%% ------------------------------------------------------------------------ %%
+%% eq:lambdamo | Mean longitude at vernal equinox
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:lambdamo}
+\begin{split}
+	\lambda_{m0} = & 2\left(\frac{e}{2}+\frac{e^3}{8}\right)\left(1+\beta\right)\:\sin\tilde{\omega} - \\
+	& \frac{e^2}{2}\left(\frac{1}{2}+\beta\right)\sin 2\: \tilde{\omega} + \\
+	& \frac{e^3}{4}\left(\frac{1}{3}+\beta\right)\:\sin 3\: \tilde{\omega}
+\end{split}
+\end{equation}
+
+\noindent where $\beta = \sqrt{1-e^2}$. 
+The mean longitude, $\lambda_m$, is then calculated for a given day based on a daily increment with respect to the vernal equinox (i.e., $n=80$): 
+%% ------------------------------------------------------------------------ %%
+%% eq:lambdam | Mean longitude
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:lambdam}
+	\lambda_m = \lambda_{m0} + \frac{2\pi\left(n-80\right)}{N}
+\end{equation}
+
+\noindent and the true longitude is then back-calculated from the mean longitude:
+%% ------------------------------------------------------------------------ %%
+%% eq:lambdat | True longitude for Berger's method
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:lambdat}
+	\lambda = \lambda_m + 
+	          \left( 2\: e - \frac{1}{4}\; e^3 \right)\: \sin\nu_m + 
+	          \frac{5}{4}\; e^2\: \sin 2\: \nu_m + 
+	          \frac{13}{12}\; e^3\:\sin 3\: \nu_m
+\end{equation}
+
+\noindent where $\nu_m$ and $\lambda_m$ may be converted back and forth based on the  longitude of the perihelion, $\tilde{\omega}$ [4.939~radians], using the following relationship: 
+%% ------------------------------------------------------------------------ %%
+%% eq:nu | Heliocentric longitude, radians
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:nu}
+    \nu = \lambda - \tilde{\omega}
+\end{equation}
+
+\noindent Note that the value of $\lambda$ should be limited to within the bounds of a single orbit (i.e., 0 $\leq$ $\lambda$ $\leq$ $2\pi$ radians).
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 3.3.8 -- DAILY EXTRATERRESTRIAL SOLAR RADIATION
+%% //////////////////////////////////////////////////////////////////////// %%
+\subsection{Daily Extraterrestrial Solar Radiation}
+\label{sec:ho}
+The total daily solar irradiance (i.e., the integration of instantaneous solar irradiance over the course of the day), $H_o$, can be analytically solved by integrating the instantaneous extraterrestrial solar radiation curve, defined by Eq. \ref{eq:etsr} (see \S \ref{sec:ra}), over the daylight hours. 
+
+Using the definition of the hour angle, $h$, the sunset angle, $h_s$, can be calculated when $I_o = 0$. 
+Using the inclination factor for horizontal surfaces (i.e., Eq. \ref{eq:thetaz}) the equation for instantaneous solar radiation is:
+%% ------------------------------------------------------------------------ %%
+%% eq:irah | Instantaneous solar radiation on horizontal surface, W/m^2
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:irah}
+	I_o = I_{sc}\: d_r\: \left( \sin\delta\: \sin\phi + 
+	      \cos\delta\: \cos\phi\: \cos h \right)
+\end{equation}
+
+\noindent Setting Eq. \ref{eq:irah} equal to zero and solving for the sunset hour angle:
+%% ------------------------------------------------------------------------ %%
+%% eq:hs | Sunset hour angle, radians
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:hs}
+	h_s  = \arccos\left(\frac{-\sin\delta\: \sin\phi}
+		                          {\cos\delta\: \cos\phi}\right)
+		 = \arccos\left(-\tan\delta\: \tan\phi\right)
+\end{equation}
+
+\noindent where:\\
+\indent $h_s$ = sunset hour angle [radians];\\
+\indent $\delta$ = declination angle [radians];\\
+\indent $\phi$ = latitude [radians].\\
+
+\noindent Special care needs to be made when $\tan\delta\:\tan\phi \geq 1$ (i.e., polar day, no sunset, $h_s = \pi$) and when $\tan\delta\:\tan\phi \leq -1$ (i.e., polar night, no sunrise, $h_s = 0$).
+
+The daily integral of solar radiation is solved by integrating Eq. \ref{eq:irah} from solar noon, $h_o$, to sunset, $h_s$, assuming that the angles related to earth's orbital position are constant for the whole day:
+%% ------------------------------------------------------------------------ %%
+%% eq:intrahs | Integral of Ra from solar noon to Hs
+%% ------------------------------------------------------------------------ %%
+\begin{equation}
+\label{eq:intrahs}
+	\int_0^{h_s} I_o = I_{sc}\: d_r\: \left( 
+	      \sin\delta\: \sin\phi\: h_s + 
+	      \cos\delta\: \cos\phi\: \sin h_s \right)
+\end{equation}
+
+\noindent The total daily solar radiation, $H_o$, is found by doubling the quantity in Eq. \ref{eq:intrahs} (again to account for the morning half of the daily radiation curve) and converting the units integrated over from radians to seconds (i.e., 86400 seconds per day):
+%% ------------------------------------------------------------------------ %%
+%% eq:dayra | Ho, J/m^2
+%% ------------------------------------------------------------------------ %%
+\nomenclature{$H_o$}{daily total extraterrestrial solar radiation, J~m$^{-2}$}
+\begin{equation}
+\label{eq:dayra}
+	H_o = \frac{86400}{\pi}\: I_{sc}\: d_r\: \left( 
+	      \sin\delta\: \sin\phi\: h_s + 
+	      \cos\delta\: \cos\phi\: \sin h_s \right)
+\end{equation}
+
+\noindent where $H_o$ is the daily total extraterrestrial solar radiation [J~m$^{-2}$].

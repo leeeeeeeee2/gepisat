@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-11-18 -- created
-# 2015-03-23 -- last updated
+# 2015-03-25 -- last updated
 #
 # ~~~~~~~~~~~~
 # description:
@@ -57,6 +57,16 @@
 # 32. removed fa from mean growing season calculation [15.03.18]
 # 33. work on wetland over-estimation [15.03.18]
 # 34. new gamma star equation for temp and press [15.03.23]
+# 35. updated kR and kTo and references  [15.03.25]
+# 36. completed crop dictionary [15.03.25]
+# 37. updated Bernacchi et al. 2001 kc25 and ko25 values [15.03.25]
+# 38. replaced kco with class variable ko2 [15.03.25]
+# 39. renamed kbeta with kbstar [15.03.25]
+# 40. added c4 bool to nxtgn LUE class function for crops [15.03.25]
+#     --> m instead of m'
+#     --> 90 Pa for ca
+#     --> 0.05 for phi_o
+# 41. working on plot_two_crops function [15.03.25]
 # 
 # ~~~~~
 # todo:
@@ -85,11 +95,11 @@ class LUE:
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Variable Definitions
     # ////////////////////////////////////////////////////////////////////////
+    kbstar = 244.0     # standardized cost ratio
     kc = 0.41          # Jmax cost coefficient
+    ko2 = 2.09476e5    # atm. O2 concentration, ppm (US Standard Atmosphere)
     kphio = 0.093      # intrinsic quantum efficiency (Long et al., 1993)
-    kbeta = 244.033    # ground-state simple-formula global beta
     kPo = 101325.      # standard atmosphere, Pa (Allen, 1973)
-    kTo = 25.          # base temperature, deg C (Prentice, unpublished)
     #
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -158,7 +168,7 @@ class LUE:
         self.station_lue = {}
         #
         # Define standard viscosity of water, Pa s
-        self.n25 = self.viscosity_h2o(self.kTo, self.kPo)
+        self.n25 = self.viscosity_h2o(25.0, self.kPo)
     #
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
@@ -308,12 +318,11 @@ class LUE:
         """
         # Define constants
         gsc = 7.472      # empirical constant
-        kco = 2.09476e5  # ppm, US Standard Atmosphere
         dha = 37830      # J/mol
-        kR = 8.3145      # J/mol/K
+        kR = 8.31447      # J/mol/K
         tk = tc + 273.15
         #
-        gs = (5e-7)*kco*patm*numpy.exp(gsc - dha/(kR*tk))
+        gs = (5e-7)*self.ko2*patm*numpy.exp(gsc - dha/(kR*tk))
         return gs
     #
     def calc_k(self, tc, patm):
@@ -329,16 +338,15 @@ class LUE:
                   Plant, Cell and Environment, 24, 253--259.
         """
         # Define constants
-        kc25 = 39.97     # Pa, assuming 25 deg C & 98.716 kPa
-        ko25 = (2.748e4) # Pa, assuming 25 deg C & 98.716 kPa
+        kc25 = 39.93     # Pa, assuming 25 deg C & 98.716 kPa
+        ko25 = (2.746e4) # Pa, assuming 25 deg C & 98.716 kPa
         dhac = 79430     # J/mol
         dhao = 36380     # J/mol
-        kR = 8.3145      # J/mol/K
-        kco = 2.09476e5  # ppm, US Standard Atmosphere
+        kR = 8.31447     # J/mol/K
         #
         vc = kc25*numpy.exp(dhac*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
         vo = ko25*numpy.exp(dhao*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
-        k = vc*(1 + kco*(1e-6)*patm/vo)
+        k = vc*(1 + self.ko2*(1e-6)*patm/vo)
         return k
     #
     def calc_mgs_params(self, station):
@@ -485,7 +493,7 @@ class LUE:
         #
         return gpp
     #
-    def nxtgn(self, iabs, ca, gs, d, k, ns, fa):
+    def nxtgn(self, iabs, ca, gs, d, k, ns, fa, c4=False):
         """
         Name:     LUE.nxtgn
         Input:    - float, 'Iabs' : mol/m2, fAPARxPPFD
@@ -495,33 +503,42 @@ class LUE:
                   - float, 'K' : Pa, Michaelis-Menten coeff.
                   - float, 'ns' : mPa s, viscosity of water
                   - float, 'fa' : unitless, function of alpha
+                  - bool, 'c4' : for crop photosynthesis
         Output:   float, estimate of GPP (gpp)
         Features: Returns an estimate of GPP based on the next-generation light 
                   and water use efficiency model.
         Depends:  - kc
                   - kphio
-                  - kbeta
+                  - kbstar
         """
         # Define default GPP return value:
         gpp = numpy.nan
         #
         # Define variable substitutes:
+        if c4:
+            ca = 90.
         vdcg = ca - gs
         vacg = ca + 2.*gs
-        vbkg = self.kbeta*(k + gs)
+        vbkg = self.kbstar*(k + gs)
         #
         # Check for negatives:
         if vbkg > 0:
             vsr = numpy.sqrt(1.6*ns*d/(vbkg))
             #
-            # Based on the m' formulation (see Regressing_LUE.pdf)
+            # The m formula:
             m = vdcg/(vacg + 3.*gs*vsr)
-            mpi = m**2 - self.kc**(2./3.)*(m**(4./3.))
-            # 
-            # Check for negatives:
-            if mpi > 0:
-                mp = numpy.sqrt(mpi)
-                gpp = self.kphio*iabs*fa*mp
+            #
+            if c4:
+                # Assumes a lower value of phi_o & uses m instead of m'
+                gpp = 0.05*iabs*fa*m
+            else:
+                # Use the m' formula (Jmax limitation):
+                mpi = m**2 - self.kc**(2./3.)*(m**(4./3.))
+                # 
+                # Check for negatives:
+                if mpi > 0:
+                    mp = numpy.sqrt(mpi)
+                    gpp = self.kphio*iabs*fa*mp
         #
         return gpp
     #
@@ -1151,8 +1168,8 @@ def make_one_plot(my_obs, my_fit, my_txt):
     plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
     ax1.plot(my_obs, my_fit, 'ro', label='Basic LUE formula') 
     ax1.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
-    ax1.set_ylabel('Modeled GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
-    ax1.set_xlabel('Observed GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
+    ax1.set_ylabel('Modeled GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+    ax1.set_xlabel('Observed GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
     ax1.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
                ncol=2, mode="expand", borderaxespad=0., fontsize=14)
     ax1.text(0.05, 0.95, my_txt, transform=ax1.transAxes, fontsize=14, 
@@ -1186,11 +1203,14 @@ def make_two_plots(my_obs, my_fit1, my_fit2, my_txt1, my_txt2, v=1):
         ax1.plot(my_obs, my_fit1, 'ro', label='Basic LUE model') 
     elif v == 3:
         ax1.plot(my_obs, my_fit1, 'ro', label='Seasonal')
+    else:
+        ax1.plot(my_obs, my_fit1, 'ro')
     ax1.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
-    ax1.set_ylabel('Modeled GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
-    ax1.set_xlabel('Observed GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
-    ax1.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
-               ncol=2, mode="expand", borderaxespad=0., fontsize=14)
+    ax1.set_ylabel('Modeled GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+    ax1.set_xlabel('Observed GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+    if v < 4:
+        ax1.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+                   ncol=2, mode="expand", borderaxespad=0., fontsize=14)
     ax1.text(0.05, 0.95, my_txt1, transform=ax1.transAxes, fontsize=14, 
              verticalalignment='top', bbox=props)
     #
@@ -1203,11 +1223,14 @@ def make_two_plots(my_obs, my_fit1, my_fit2, my_txt1, my_txt2, v=1):
         ax2.plot(my_obs, my_fit2, 'ro', label='Next-Gen LUE model') 
     elif v == 3:
         ax2.plot(my_obs, my_fit2, 'ro', label='Mean Growing Season')
+    else:
+        ax2.plot(my_obs, my_fit2, 'ro')
     ax2.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
-    ax2.set_ylabel('Modeled GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
-    ax2.set_xlabel('Observed GPP, mol CO$_2$ m$^{-2}$', fontsize=16)
-    ax2.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
-               ncol=2, mode="expand", borderaxespad=0., fontsize=14)
+    ax2.set_ylabel('Modeled GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+    ax2.set_xlabel('Observed GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+    if v < 4:
+        ax2.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+                   ncol=2, mode="expand", borderaxespad=0., fontsize=14)
     ax2.text(0.05, 0.95, my_txt2, transform=ax2.transAxes, fontsize=14, 
              verticalalignment='top', bbox=props)
     #
@@ -1224,10 +1247,10 @@ def elv2pres(z):
     # Def constants:
     kPo = 101325   # standard atmosphere, Pa (Allen, 1973)
     kL = 0.0065    # temperature lapse rate, K/m (Allen, 1973)
-    kTo = 298.15   # base temperature, K (Prentice, unpublished)
+    kTo = 288.15   # base temperature, K (Berberan-Santos et al., 1997)
     kG = 9.80665   # gravitational acceleration, m/s^2 (Allen, 1973)
     kMa = 0.028963 # molecular weight of dry air, kg/mol (Tsilingiris, 2008)
-    kR = 8.3143    # universal gas constant, J/mol/K (Allen, 1973)
+    kR = 8.31447   # universal gas constant, J/mol/K (Moldover et al., 1988)
     #
     p = kPo*(1.0 - kL*z/kTo)**(kG*kMa/(kR*kL))
     return p
@@ -1288,6 +1311,66 @@ def plot_two_obs(my_obs1, my_fit1, my_obs2, my_fit2, my_txt1, my_txt2):
              verticalalignment='top', bbox=props)
     #
     plt.show()
+
+def plot_two_crops(my_obs, my_fit1, my_fit2, my_txt1, my_txt2, my_c):
+    """
+    Name:     plot_two_crops
+    Input:    - numpy.ndarray, observed GPP (my_obs)
+              - numpy.ndarray, modelled 1 GPP (my_fit1)
+              - numpy.ndarray, modelled 2 GPP (my_fit2)
+              - str, plot text for model 1 (my_txt1)
+              - str, plot text for model 2 (my_txt2)
+              - tuple, colors (my_c)
+    Output:   None
+    Features: Creates two plots of predicted versus observed GPP
+    """
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    plot_max = numpy.ceil(numpy.concatenate((my_fit1, my_fit2, my_obs)).max())
+    #
+    fig = plt.figure(figsize=(14,8), dpi=180)
+    #
+    ax1 = fig.add_subplot(121)
+    plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=14)
+    plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
+    ax1.scatter(my_obs, my_fit1, c=my_c, s=40, edgecolors='none', 
+                label='Original model')
+    ax1.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
+    ax1.set_ylabel('Modeled GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+    ax1.set_xlabel('Observed GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+    #
+    bothArtist = plt.scatter((-1,-1),(-1,-1), color='c', marker='o')
+    c4Artist = plt.scatter((-1,-1),(-1,-1), color='r', marker='o')
+    irrArtist = plt.scatter((-1,-1),(-1,-1), color='b', marker='o')
+    #
+    ax1.legend([c4Artist,irrArtist,bothArtist],
+               ['C4 Plants', 'Irrigated', 'Both'], 
+               scatterpoints=1, 
+               bbox_to_anchor=(0., 1.02, 1., .102), 
+               loc=3, ncol=3, mode="expand", borderaxespad=0., fontsize=14)
+    ax1.text(0.05, 0.95, my_txt1, transform=ax1.transAxes, fontsize=14, 
+             verticalalignment='top', bbox=props)
+    ax1.grid(True)
+    plt.ylim([0, plot_max])
+    plt.xlim([0, plot_max])
+    #
+    ax2 = fig.add_subplot(122)
+    plt.setp(ax2.get_xticklabels(), rotation=0, fontsize=14)
+    plt.setp(ax2.get_yticklabels(), rotation=0, fontsize=14)
+    ax2.scatter(my_obs, my_fit2, c=my_c, s=40, edgecolors='none', 
+                label='Crop model')
+    ax2.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
+    ax2.set_ylabel('Modeled GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+    ax2.set_xlabel('Observed GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+    ax2.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+               ncol=2, mode="expand", borderaxespad=0., fontsize=14)
+    ax2.text(0.05, 0.95, my_txt2, transform=ax2.transAxes, fontsize=14, 
+             verticalalignment='top', bbox=props)
+    ax2.grid(True)
+    plt.ylim([0, plot_max])
+    plt.xlim([0, plot_max])
+    #
+    plt.show()
+
 
 ###############################################################################
 ## MAIN PROGRAM:
@@ -1380,7 +1463,7 @@ my_crop_dict = {
     'DE-Kli' : {2004 : {'C4' : False, 'Irr' : False},
                 2005 : {'C4' : False, 'Irr' : False},
                 2006 : {'C4' : False, 'Irr' : False}},
-    'DK-Fou' : {2005 : {'C4' : False, 'Irr' : False}},
+    'DK-Fou' : {2005 : {'C4' : True, 'Irr' : False}},
     'DK-Ris' : {2004 : {'C4' : False, 'Irr' : False},
                 2005 : {'C4' : False, 'Irr' : False}},
     'ES-ES2' : {2004 : {'C4' : False, 'Irr' : True},
@@ -1399,15 +1482,15 @@ my_crop_dict = {
                 2006 : {'C4' : True, 'Irr' : False}},
     'NL-Lut' : {2006 : {'C4' : False, 'Irr' : False}},
     'NL-Mol' : {2005 : {'C4' : False, 'Irr' : False},
-                2006 : {}},
-    'UK-ESa' : {2003 : {},
-                2004 : {},
-                2005 : {}},
+                2006 : {'C4' : False, 'Irr' : False}},
+    'UK-ESa' : {2003 : {'C4' : False, 'Irr' : False},
+                2004 : {'C4' : False, 'Irr' : False},
+                2005 : {'C4' : False, 'Irr' : False}},
     'UK-Her' : {2006 : {'C4' : False, 'Irr' : False}},
-    'US-ARM' : {2003 : {'C4' : False},
-                2004 : {'C4' : False},
-                2005 : {'C4' : True},
-                2006 : {'C4' : False}},
+    'US-ARM' : {2003 : {'C4' : False, 'Irr' : False},
+                2004 : {'C4' : False, 'Irr' : False},
+                2005 : {'C4' : True, 'Irr' : False},
+                2006 : {'C4' : False, 'Irr' : False}},
     'US-Bo1' : {2002 : {'C4' : False, 'Irr' : False},
                 2003 : {'C4' : True, 'Irr' : False},
                 2004 : {'C4' : False, 'Irr' : False},
@@ -1428,6 +1511,111 @@ my_crop_dict = {
 }
 
 crop_stations = numpy.sort(my_crop_dict.keys())
+
+###
+### Plot crops
+###   input: my_data, my_crop_dict
+fig_file = out_dir + 'GePiSaT_crop_gpp.pdf'
+pp = PdfPages(fig_file)
+
+for my_station in crop_stations:
+    # original method
+    my_xdata = numpy.copy(my_lue.st_lue_vars[my_station])
+    my_yobs = my_xdata['GPP']
+    my_iabs = my_xdata['Iabs']
+    my_fa = my_xdata['fa']
+    my_mgs_params = my_lue.calc_mgs_params(my_station)
+    my_mgs_ymod = [my_lue.nxtgn(
+        my_iabs[i], 
+        my_mgs_params['mgs_ca'], 
+        my_mgs_params['mgs_gs'], 
+        my_mgs_params['mgs_d'],
+        my_mgs_params['mgs_k'],
+        my_mgs_params['mgs_ns'],
+        my_fa[i]
+        )[0] for i in xrange(len(my_iabs))]
+    my_mgs_ymod = numpy.array(my_mgs_ymod)
+    my_rsq1, my_r1, my_ioa1 = model_fitness(my_mgs_ymod, my_yobs)
+    #
+    ###
+    # crop method
+    my_cdata = numpy.copy(my_lue.station_vals[my_station])
+    my_crop_ymod = []
+    my_colors = []
+    for row in my_cdata:
+        is_c4 = my_crop_dict[my_station][row['Timestamp'].year]['C4']
+        is_irr = my_crop_dict[my_station][row['Timestamp'].year]['Irr']
+        if is_irr:
+            crop_fa = 1.
+        else:
+            crop_fa = row['fa']
+        #
+        crop_gpp = my_lue.nxtgn(row['Iabs'], 
+                                my_mgs_params['mgs_ca'], 
+                                my_mgs_params['mgs_gs'], 
+                                my_mgs_params['mgs_d'],
+                                my_mgs_params['mgs_k'],
+                                my_mgs_params['mgs_ns'],
+                                crop_fa,
+                                is_c4)[0]
+        if row['Tair'] > 0 and row['D'] > 0:
+            my_crop_ymod.append(crop_gpp)
+            if is_irr:
+                if is_c4:
+                    my_colors.append('c')
+                else:
+                    my_colors.append('b')
+            else:
+                if is_c4:
+                    my_colors.append('r')
+                else:
+                    my_colors.append('k')
+    my_crop_ymod = numpy.array(my_crop_ymod)
+    my_colors = tuple(my_colors)
+    my_rsq2, my_r2, my_ioa2 = model_fitness(my_crop_ymod, my_yobs)
+    #
+    my_veg_type = get_veg_type(met_dir, my_station)
+    my_txt1 = ("$\\mathrm{%s}$ ($\\mathrm{%s}$)\n"
+               "$R^2=%0.3f$\n$r=%0.3f$\n"
+               "$IA=%0.3f$") % (my_station, my_veg_type, my_rsq1,
+                                my_r1, my_ioa1)
+    my_txt2 = ("$\\mathrm{%s}$ ($\\mathrm{%s}$)\n"
+               "$R^2=%0.3f$\n$r=%0.3f$\n"
+               "$IA=%0.3f$") % (my_station, my_veg_type, my_rsq2,
+                                my_r2, my_ioa2)
+    plot_two_crops(my_yobs, my_mgs_ymod, my_crop_ymod, my_txt1, my_txt2, my_colors)
+    pp.savefig()
+    plt.close()
+
+d = pp.infodict()
+d['Title'] = 'GePiSaT GPP plots for mean-growing season crops'
+d['Author'] = 'Tyler W. Davis'
+pp.close()
+
+fig = plt.figure()
+ax1 = fig.add_subplot(111)
+plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=14)
+plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
+ax1.scatter(my_yobs, my_crop_ymod, c=my_colors, s=40, edgecolors='none', 
+            label='Original model')
+ax1.plot([0., 50.], [0., 50.], '--k', label='1:1 Line')
+ax1.set_ylabel('Modeled GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+ax1.set_xlabel('Observed GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
+ax1.grid(True)
+handles, labels = ax1.get_legend_handles_labels()
+#
+bothArtist = plt.scatter((-1,-1),(-1,-1), color='c', marker='o')
+c4Artist = plt.scatter((-1,-1),(-1,-1), color='r', marker='o')
+irrArtist = plt.scatter((-1,-1),(-1,-1), color='b', marker='o')
+ax1.legend([handle for handle in handles]+[c4Artist,irrArtist,bothArtist],
+           [label for label in labels]+['C4', 'Irrig', 'Both'], 
+           scatterpoints=1, 
+           bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+           ncol=5, mode="expand", borderaxespad=0., fontsize=14)
+#
+
+#
+plt.show()
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
@@ -1503,7 +1691,7 @@ for station in all_stations:
     yobs = xdata['GPP']
     #
     # Seasonal GPP
-    sea_ymod = my_lue.next_gen_lue(xdata, my_lue.kbeta)
+    sea_ymod = my_lue.next_gen_lue(xdata, my_lue.kbstar)
     my_rsq1, my_r1, my_ioa1 = model_fitness(sea_ymod, yobs)
     #
     # Mean Growing Season GPP

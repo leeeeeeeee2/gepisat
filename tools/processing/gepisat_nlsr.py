@@ -6,7 +6,7 @@
 # Imperial College London
 #
 # 2014-11-18 -- created
-# 2015-03-25 -- last updated
+# 2015-03-29 -- last updated
 #
 # ~~~~~~~~~~~~
 # description:
@@ -67,6 +67,9 @@
 #     --> 90 Pa for ca
 #     --> 0.05 for phi_o
 # 41. working on plot_two_crops function [15.03.25]
+# 42. working more on plotting crops [15.03.27]
+# 42. fixed C4 equation [15.03.29]
+# 43. updated phi_o (Skillman 2008) [15.03.29]
 # 
 # ~~~~~
 # todo:
@@ -98,7 +101,7 @@ class LUE:
     kbstar = 244.0     # standardized cost ratio
     kc = 0.41          # Jmax cost coefficient
     ko2 = 2.09476e5    # atm. O2 concentration, ppm (US Standard Atmosphere)
-    kphio = 0.093      # intrinsic quantum efficiency (Long et al., 1993)
+    kphio = 0.096      # intrinsic quantum efficiency (Skillman, 2008)
     kPo = 101325.      # standard atmosphere, Pa (Allen, 1973)
     #
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
@@ -515,8 +518,6 @@ class LUE:
         gpp = numpy.nan
         #
         # Define variable substitutes:
-        if c4:
-            ca = 90.
         vdcg = ca - gs
         vacg = ca + 2.*gs
         vbkg = self.kbstar*(k + gs)
@@ -526,18 +527,20 @@ class LUE:
             vsr = numpy.sqrt(1.6*ns*d/(vbkg))
             #
             # The m formula:
-            m = vdcg/(vacg + 3.*gs*vsr)
-            #
             if c4:
-                # Assumes a lower value of phi_o & uses m instead of m'
-                gpp = 0.05*iabs*fa*m
+                m = 1.0
             else:
-                # Use the m' formula (Jmax limitation):
-                mpi = m**2 - self.kc**(2./3.)*(m**(4./3.))
-                # 
-                # Check for negatives:
-                if mpi > 0:
-                    mp = numpy.sqrt(mpi)
+                m = vdcg/(vacg + 3.*gs*vsr)
+            #
+            # The m' formula (Jmax limitation):
+            mpi = m**2 - self.kc**(2./3.)*(m**(4./3.))
+            # 
+            # Check for negatives:
+            if mpi > 0:
+                mp = numpy.sqrt(mpi)
+                if c4:
+                    gpp = 0.058*iabs*fa*mp
+                else:
                     gpp = self.kphio*iabs*fa*mp
         #
         return gpp
@@ -936,6 +939,48 @@ def get_veg_type(meta_dir, st_name):
     #
     return my_veg
 
+def model_fitness(fit, obs):
+    """
+    Name:     model_fitness
+    Input:    - numpy.ndarray, fitted data (fit)
+              - numpy.ndarray, observed data (obs)
+    Output:   - float, coefficient of determination, (rsqr)
+              - float, correlation coefficient (r)
+              - float, index of agreement (ioa)
+    Features: Returns model fitness parameters (rsqr, r, ioa)
+    """
+    # 1. Calculate the R-square
+    # VERSION 1: ratio of regression sum of squares (SSR) to total sum of 
+    #            squares (SST), where SSR = SST - SSE (error sum of squares):
+    sst = obs - obs.mean()
+    sst = numpy.power(sst, 2.0)
+    sst = sst.sum()
+    sse = obs - fit
+    sse = numpy.power(sse, 2.0)
+    sse = sse.sum()
+    rsqr = (sst - sse)/sst
+    #
+    # VERSION 2: correlation coefficient, r
+    n = float(len(obs))
+    ssxy = (obs*fit).sum() - obs.sum()*fit.sum()/n
+    ssx = numpy.power(fit, 2.0).sum() - numpy.power(fit.sum(), 2.0)/n
+    sst = numpy.power(obs, 2.0).sum() - numpy.power(obs.sum(), 2.0)/n
+    r = ssxy/numpy.power(ssx*sst, 0.5)
+    #
+    # 2. Calculate the index of agreement
+    mae = numpy.abs(fit - obs)
+    smae = mae.sum()
+    mao = numpy.abs(obs - obs.mean())
+    smao = mao.sum()
+    tsmo = 2.0*smao
+    #
+    if smae <= tsmo:
+        ioa = 1.0 - smae/tsmo
+    else:
+        ioa = tsmo/smae - 1.0
+    #
+    return (rsqr, r, ioa)
+
 def get_lue(lue_class, station):
     """
     Name:     get_lue
@@ -1106,48 +1151,6 @@ def make_bplot(my_data, my_names, x_lab):
     ytickNames = plt.setp(ax1, yticklabels=my_names)
     plt.setp(ytickNames, rotation=0, fontsize=6) # was fontsize=8
     plt.show()
-
-def model_fitness(fit, obs):
-    """
-    Name:     model_fitness
-    Input:    - numpy.ndarray, fitted data (fit)
-              - numpy.ndarray, observed data (obs)
-    Output:   - float, coefficient of determination, (rsqr)
-              - float, correlation coefficient (r)
-              - float, index of agreement (ioa)
-    Features: Returns model fitness parameters (rsqr, r, ioa)
-    """
-    # 1. Calculate the R-square
-    # VERSION 1: ratio of regression sum of squares (SSR) to total sum of 
-    #            squares (SST), where SSR = SST - SSE (error sum of squares):
-    sst = obs - obs.mean()
-    sst = numpy.power(sst, 2.0)
-    sst = sst.sum()
-    sse = obs - fit
-    sse = numpy.power(sse, 2.0)
-    sse = sse.sum()
-    rsqr = (sst - sse)/sst
-    #
-    # VERSION 2: correlation coefficient, r
-    n = float(len(obs))
-    ssxy = (obs*fit).sum() - obs.sum()*fit.sum()/n
-    ssx = numpy.power(fit, 2.0).sum() - numpy.power(fit.sum(), 2.0)/n
-    sst = numpy.power(obs, 2.0).sum() - numpy.power(obs.sum(), 2.0)/n
-    r = ssxy/numpy.power(ssx*sst, 0.5)
-    #
-    # 2. Calculate the index of agreement
-    mae = numpy.abs(fit - obs)
-    smae = mae.sum()
-    mao = numpy.abs(obs - obs.mean())
-    smao = mao.sum()
-    tsmo = 2.0*smao
-    #
-    if smae <= tsmo:
-        ioa = 1.0 - smae/tsmo
-    else:
-        ioa = tsmo/smae - 1.0
-    #
-    return (rsqr, r, ioa)
 
 def make_one_plot(my_obs, my_fit, my_txt):
     """
@@ -1339,14 +1342,16 @@ def plot_two_crops(my_obs, my_fit1, my_fit2, my_txt1, my_txt2, my_c):
     ax1.set_xlabel('Observed GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
     #
     bothArtist = plt.scatter((-1,-1),(-1,-1), color='c', marker='o')
+    c3Artist = plt.scatter((-1,-1),(-1,-1), color='k', marker='o')
     c4Artist = plt.scatter((-1,-1),(-1,-1), color='r', marker='o')
     irrArtist = plt.scatter((-1,-1),(-1,-1), color='b', marker='o')
     #
-    ax1.legend([c4Artist,irrArtist,bothArtist],
-               ['C4 Plants', 'Irrigated', 'Both'], 
+    ax1.legend([c3Artist,c4Artist,irrArtist,bothArtist],
+               ['C3', 'C4', 'C3+Irr.', 'C4+Irr.'], 
                scatterpoints=1, 
                bbox_to_anchor=(0., 1.02, 1., .102), 
-               loc=3, ncol=3, mode="expand", borderaxespad=0., fontsize=14)
+               loc=3, ncol=4, mode="expand", borderaxespad=0., fontsize=14,
+               handletextpad=1)
     ax1.text(0.05, 0.95, my_txt1, transform=ax1.transAxes, fontsize=14, 
              verticalalignment='top', bbox=props)
     ax1.grid(True)
@@ -1357,7 +1362,7 @@ def plot_two_crops(my_obs, my_fit1, my_fit2, my_txt1, my_txt2, my_c):
     plt.setp(ax2.get_xticklabels(), rotation=0, fontsize=14)
     plt.setp(ax2.get_yticklabels(), rotation=0, fontsize=14)
     ax2.scatter(my_obs, my_fit2, c=my_c, s=40, edgecolors='none', 
-                label='Crop model')
+                label='Considering Crops')
     ax2.plot([0., plot_max], [0., plot_max], '--k', label='1:1 Line')
     ax2.set_ylabel('Modeled GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
     ax2.set_xlabel('Observed GPP, mol C m$^{-2}$ mo$^{-1}$', fontsize=16)
@@ -1527,13 +1532,13 @@ for my_station in crop_stations:
     my_mgs_params = my_lue.calc_mgs_params(my_station)
     my_mgs_ymod = [my_lue.nxtgn(
         my_iabs[i], 
-        my_mgs_params['mgs_ca'], 
-        my_mgs_params['mgs_gs'], 
-        my_mgs_params['mgs_d'],
-        my_mgs_params['mgs_k'],
-        my_mgs_params['mgs_ns'],
+        my_mgs_params['mgs_ca'][0], 
+        my_mgs_params['mgs_gs'][0], 
+        my_mgs_params['mgs_d'][0],
+        my_mgs_params['mgs_k'][0],
+        my_mgs_params['mgs_ns'][0],
         my_fa[i]
-        )[0] for i in xrange(len(my_iabs))]
+        ) for i in xrange(len(my_iabs))]
     my_mgs_ymod = numpy.array(my_mgs_ymod)
     my_rsq1, my_r1, my_ioa1 = model_fitness(my_mgs_ymod, my_yobs)
     #
@@ -1551,13 +1556,13 @@ for my_station in crop_stations:
             crop_fa = row['fa']
         #
         crop_gpp = my_lue.nxtgn(row['Iabs'], 
-                                my_mgs_params['mgs_ca'], 
-                                my_mgs_params['mgs_gs'], 
-                                my_mgs_params['mgs_d'],
-                                my_mgs_params['mgs_k'],
-                                my_mgs_params['mgs_ns'],
+                                my_mgs_params['mgs_ca'][0], 
+                                my_mgs_params['mgs_gs'][0], 
+                                my_mgs_params['mgs_d'][0],
+                                my_mgs_params['mgs_k'][0],
+                                my_mgs_params['mgs_ns'][0],
                                 crop_fa,
-                                is_c4)[0]
+                                is_c4)
         if row['Tair'] > 0 and row['D'] > 0:
             my_crop_ymod.append(crop_gpp)
             if is_irr:
@@ -1574,14 +1579,14 @@ for my_station in crop_stations:
     my_colors = tuple(my_colors)
     my_rsq2, my_r2, my_ioa2 = model_fitness(my_crop_ymod, my_yobs)
     #
-    my_veg_type = get_veg_type(met_dir, my_station)
-    my_txt1 = ("$\\mathrm{%s}$ ($\\mathrm{%s}$)\n"
+    #my_veg_type = get_veg_type(met_dir, my_station)
+    my_txt1 = ("$\\mathrm{%s}$ \n"
                "$R^2=%0.3f$\n$r=%0.3f$\n"
-               "$IA=%0.3f$") % (my_station, my_veg_type, my_rsq1,
+               "$IA=%0.3f$") % (my_station, my_rsq1,
                                 my_r1, my_ioa1)
-    my_txt2 = ("$\\mathrm{%s}$ ($\\mathrm{%s}$)\n"
+    my_txt2 = ("$\\mathrm{%s}$ \n"
                "$R^2=%0.3f$\n$r=%0.3f$\n"
-               "$IA=%0.3f$") % (my_station, my_veg_type, my_rsq2,
+               "$IA=%0.3f$") % (my_station, my_rsq2,
                                 my_r2, my_ioa2)
     plot_two_crops(my_yobs, my_mgs_ymod, my_crop_ymod, my_txt1, my_txt2, my_colors)
     pp.savefig()

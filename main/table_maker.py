@@ -1,24 +1,29 @@
 #!/usr/bin/python
 #
-# table_maker.py -- Version 2.02
-# previously: tableMaker.py -- Version 1.07
+# table_maker.py
 #
-# written by Tyler W. Davis
-# Imperial College London
+# VERSION 2.02
 #
 # 2013-05-14 -- created
-# 2014-09-03 -- last updated
+# 2015-11-18 -- last updated
+#
+# ---------
+# citation:
+# ---------
+# I. C. Prentice, T. W. Davis, X. M. P. Gilbert, B. D. Stocker, B. J. Evans,
+# H. Wang, and T. F. Keenan, "The Global ecosystem in Space and Time (GePiSaT)
+# Model of the Terrestrial Biosphere," (in progress).
 #
 # ------------
 # description:
 # ------------
-# This script reads raw observation data, e.g., flux tower and gridded 
-# satellite data, and outputs CSV files formatted for the PostgreSQL database 
-# tables.  Currently, fluxdata.org CSV files, WATCH (WFDEI) 0.5 degree 
-# satellite netCDF files, and MODIS 0.05 HDF files, CRU netcdf, GLAS geoTIFF, 
-# and CRU dat files are supported.  
+# This script reads raw observation data, e.g., flux tower and gridded
+# satellite data, and outputs CSV files formatted for the PostgreSQL database
+# tables.  Currently, fluxdata.org CSV files, WATCH (WFDEI) 0.5 degree
+# satellite netCDF files, and MODIS 0.05 HDF files, CRU netcdf, GLAS geoTIFF,
+# and CRU dat files are supported.
 #
-# Only two of the three tables are output for flux tower data 
+# Only two of the three tables are output for flux tower data
 # (var_list and data_set).
 #
 # ----------
@@ -27,9 +32,9 @@
 # 01. Updated input file path and output file name for bitnami [13.06.17]
 # 02. Fixed IOError output (filename is FILE, not f) [13.06.17]
 # 03. Reading data to make data_set table [13.06.17]
-# 04. Changed output for both var_list and data_set to be restricted to 
+# 04. Changed output for both var_list and data_set to be restricted to
 #     core-vars only [13.06.18]
-# 05. Changed DATA class to FLUXDATA, because it's specific to fluxdata.org 
+# 05. Changed DATA class to FLUXDATA, because it's specific to fluxdata.org
 #     station data [13.06.18]
 # 06. Abbreviated the list of core variables to those with qc flags [13.07.04]
 # 07. Added core variable qc flag dictionary [13.07.04]
@@ -38,15 +43,15 @@
 # 10. Added scipy.io for netcdf handling [13.08.09]
 # 11. Changed class "LINE" to "VAR" [13.08.09]
 # 12. Added "SWdown" to coreVars and variableUnits hashes [13.08.09]
-# 13. Moved main to "process_flux" function call to give room for gridded data 
+# 13. Moved main to "process_flux" function call to give room for gridded data
 #     processing [13.08.09]
 # 14. Added process_grid function for WATCH WFDEI [13.08.19]
-# 15. Updated VAR class getStation function 
+# 15. Updated VAR class getStation function
 #     separated it based on variable type 'flux' or 'grid' [13.08.19]
-# 16. Changed WFD grid station naming scheme from lat+lon combo to 
+# 16. Changed WFD grid station naming scheme from lat+lon combo to
 #     3 char + 6 digits (e.g., "WFD000123") [13.08.27]
 # --> changed "WFD" to "HDF" [13.09.23]
-# 17. Reordered processing of grids; spatial first (row-major) to get var_list, 
+# 17. Reordered processing of grids; spatial first (row-major) to get var_list,
 #     then temporal to get data_set [13.08.27]
 # 18. Updated get_flux_station to search filename for station ID [13.08.27]
 # 19. Individualized data_set output files [13.08.27]
@@ -78,7 +83,7 @@
 # 43. Renamed process_cru to process_cru_vpd [14.01.17]
 # 44. New process_cru for single netCDF file [14.01.17]
 # 45. Added new variables to VAR class [14.01.17]
-# --> Tc (monthly mean temp, deg. C) 
+# --> Tc (monthly mean temp, deg. C)
 # --> Pre (monthly precip, mm)
 # 46. Fixed calc_vpd in CRUDATA class [14.01.17]
 # --> skip 89 years (not 90)
@@ -100,11 +105,12 @@
 # 58. General updates to style and inline comments [14.04.16]
 # 59. More housekeeping [14.09.03]
 # 60. Improved initializationo of vpd in calculate_vpd() [14.09.03]
+# 61. PEP8 style fixes [15.11.18]
 #
 # -----
 # todo:
 # -----
-# 1. VAR class: 
+# 1. VAR class:
 #    a. add new dictionary for variable names?
 #       * map the "_f" to more natural names
 # 2. Improve calculate_vpd
@@ -112,7 +118,7 @@
 #    * calculate vpd in a single line computation
 #
 ###############################################################################
-## IMPORT MODULES
+# IMPORT MODULES
 ###############################################################################
 import datetime
 import glob
@@ -120,11 +126,12 @@ import Image
 import os.path
 import re
 import numpy
-from pyhdf import SD 
+from pyhdf import SD
 from scipy.io import netcdf
 
+
 ###############################################################################
-## CLASSES 
+# CLASSES
 ###############################################################################
 class VAR:
     """
@@ -141,71 +148,71 @@ class VAR:
     varUnit = ""       # unit of measure for variable
     varType = ""       # flux, met, or grid
     varCore = ""       # core (1) or non-core (0)
-    #
+
     # Core variable, and unit dictionaries:
     # * core variable 1--17 based on fluxdata.org
     #   (those core vars not used are commented out)
     # * additional core variables added for GePiSaT (18--26)
     coreVars = {
-        'NEE_f'     : 1,     # Net ecosystem exchange (CO2 flux)
-        #'GPP_f'     : 2, 
-        #'LE_f'      : 3,
-        #'H_f'       : 4, 
-        #'G_f'       : 5, 
-        #'Ta_f'      : 6, 
-        #'Ts1_f'     : 7, 
-        #'Ts2_f'     : 8, 
-        #'VPD_f'     : 9, 
-        #'Precip_f'  : 10, 
-        #'SWC1_f'    : 11,
-        #'SWC2_f'    : 12, 
-        #'WS_f'      : 13, 
-        #'Rg_f'      : 14, 
-        'PPFD_f'    : 15,    # Photosynthetic photon flux density
-        #'Rn_f'      : 16, 
-        #'gsurf_f'   : 17,
-        'SWdown'    : 18,    # WATCH shortwave downwelling solar radiation
-        'FAPAR'     : 19,    # MODIS-based fraction of absorbed PAR
-        'VPD'       : 20,    # CRU-based vapor pressure deficit
-        'CO2'       : 21,    # NOAA sea-surface annual atm. CO2 concen.
-        'Tc'        : 22,    # CRU monthly mean daily air temperature
-        'Pre'       : 23,    # CRU monthly total precipitation
-        'Cld'       : 24,    # CRU monthly cloudiness
-        'Elv'       : 25,    # CRU 0.5 degree pixel centroid elevations
-        'alpha'     : 26     # Cramer-Prentice bioclimatic moisture index
+        'NEE_f': 1,      # Net ecosystem exchange (CO2 flux)
+        #'GPP_f': 2,
+        #'LE_f': 3,
+        #'H_f': 4,
+        #'G_f': 5,
+        #'Ta_f': 6,
+        #'Ts1_f': 7,
+        #'Ts2_f': 8,
+        #'VPD_f': 9,
+        #'Precip_f': 10,
+        #'SWC1_f': 11,
+        #'SWC2_f': 12,
+        #'WS_f': 13,
+        #'Rg_f': 14,
+        'PPFD_f': 15,    # Photosynthetic photon flux density
+        #'Rn_f': 16,
+        #'gsurf_f': 17,
+        'SWdown': 18,    # WATCH shortwave downwelling solar radiation
+        'FAPAR': 19,     # MODIS-based fraction of absorbed PAR
+        'VPD': 20,       # CRU-based vapor pressure deficit
+        'CO2': 21,       # NOAA sea-surface annual atm. CO2 concen.
+        'Tc': 22,        # CRU monthly mean daily air temperature
+        'Pre': 23,       # CRU monthly total precipitation
+        'Cld': 24,       # CRU monthly cloudiness
+        'Elv': 25,       # CRU 0.5 degree pixel centroid elevations
+        'alpha': 26      # Cramer-Prentice bioclimatic moisture index
         }
     #
-    variableUnits = {'NEE_f' : 'umolCO2 m-2 s-1', 
-                     'GPP_f' : 'umolCO2 m-2 s-1', 
-                     'LE_f'  : 'W m-2',
-                     'H_f'   : 'W m-2', 
-                     'G_f'   : 'W m-2', 
-                     'Ta_f'  : 'deg C', 
-                     'Ts1_f' : 'deg C', 
-                     'Ts2_f' : 'deg C', 
-                     #'VPD_f' : 'hPa', 
-                     #'Precip_f' : 'mm', 
-                     'SWC1_f'  : '%',
-                     'SWC2_f'  : '%', 
-                     'WS_f'    : 'm s-1', 
-                     'Rg_f'    : 'W m-2', 
-                     'PPFD_f'  : 'umol m-2 s-1',
-                     'Rn_f'    : 'W m-2', 
-                     'gsurf_f' : 'mmol m-2 s-1',
-                     'SWdown'  : 'W m-2',
-                     'FAPAR'   : 'NA',
-                     'VPD'     : 'kPa',
-                     'CO2'     : 'ppm',
-                     'Tc'      : 'deg C',
-                     'Pre'     : 'mm',
-                     'Cld'     : '%',
-                     'Elv'     : 'm',
-                     'alpha'   : 'NA'}
-    #
+    variableUnits = {'NEE_f': 'umolCO2 m-2 s-1',
+                     'GPP_f': 'umolCO2 m-2 s-1',
+                     'LE_f': 'W m-2',
+                     'H_f': 'W m-2',
+                     'G_f': 'W m-2',
+                     'Ta_f': 'deg C',
+                     'Ts1_f': 'deg C',
+                     'Ts2_f': 'deg C',
+                     #'VPD_f': 'hPa',
+                     #'Precip_f': 'mm',
+                     'SWC1_f': '%',
+                     'SWC2_f': '%',
+                     'WS_f': 'm s-1',
+                     'Rg_f': 'W m-2',
+                     'PPFD_f': 'umol m-2 s-1',
+                     'Rn_f': 'W m-2',
+                     'gsurf_f': 'mmol m-2 s-1',
+                     'SWdown': 'W m-2',
+                     'FAPAR': 'NA',
+                     'VPD': 'kPa',
+                     'CO2': 'ppm',
+                     'Tc': 'deg C',
+                     'Pre': 'mm',
+                     'Cld': '%',
+                     'Elv': 'm',
+                     'alpha': 'NA'}
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
     # ////////////////////////////////////////////////////////////////////////
-    def __init__(self,fileName, variable, t):
+    def __init__(self, fileName, variable, t):
         """
         Name:     VAR.__init__
         Input:    - string/tuple, filename or file naming tuple (fileName)
@@ -229,7 +236,7 @@ class VAR:
             # fileName has station prefix and ID:
             self.stationID = self.get_grid_station(fileName)
             self.msvIDX = self.getIDX(self.varID, self.stationID)
-    #
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
     # ////////////////////////////////////////////////////////////////////////
@@ -246,14 +253,14 @@ class VAR:
             # Use regular expression search on filename
             # note: group(1) returns what is inside the search ()
             sname = re.search(
-                '(\w{2}-\w{2,3})\.', 
+                '(\w{2}-\w{2,3})\.',
                 os.path.basename(fileName)
                 ).group(1)
         except AttributeError:
             print "Station name not found in file:", fileName
             #
         return sname
-    #
+
     def get_grid_station(self, fileName):
         """
         Name:     VAR.get_grid_station
@@ -268,7 +275,7 @@ class VAR:
         # Format ID:
         sname = "%s%06d" % (s_pre, s_id)
         return sname
-    #
+
     def getVarID(self, variable):
         """
         Name:     VAR.getVarID
@@ -281,7 +288,7 @@ class VAR:
         else:
             vid = 0
         return vid
-    #
+
     def isCore(self, variable):
         """
         Name:     VAR.isCore
@@ -296,13 +303,13 @@ class VAR:
         else:
             core = 0
         return core
-    #
+
     def getUnits(self, variable):
         """
         Name:     VAR.getUnits
         Input:    string, variable name (variable)
         Output:   string, variable units (v)
-        Features: Returns the units for a variable in the variableUnits 
+        Features: Returns the units for a variable in the variableUnits
                   dictionary
         """
         if variable in self.variableUnits:
@@ -310,20 +317,20 @@ class VAR:
         else:
             v = ''
         return v
-    #
-    def getIDX(self,vid,sid):
+
+    def getIDX(self, vid, sid):
         """
         Name:     VAR.getIDX
         Input:    - int, variable ID (vid)
                   - string, station name (sid)
         Output:   string, msvidx (msv)
-        Features: Returns the msvidx GePiSaT database entry based on the 
+        Features: Returns the msvidx GePiSaT database entry based on the
                   station name and variable ID
         """
         msv = "%s.%02d" % (sid, vid)
         return msv
-    #
-    def printLine(self,outfile):
+
+    def printLine(self, outfile):
         """
         Name:     VAR.printLine
         Input:    string, output file name and path (outfile)
@@ -334,28 +341,29 @@ class VAR:
         if self.varID != 0 and self.varCore == 1:
             # Create output line:
             outline = "%s,%s,%02d,%s,%s,%s,%s\n" % (
-                self.msvIDX, 
-                self.stationID, 
-                self.varID, 
-                self.varName, 
-                self.varUnit, 
-                self.varType, 
+                self.msvIDX,
+                self.stationID,
+                self.varID,
+                self.varName,
+                self.varUnit,
+                self.varType,
                 self.varCore
                 )
             #
             # Append data to output file:
             try:
-                OUT = open(outfile,'a')
+                OUT = open(outfile, 'a')
                 OUT.write(outline)
             except IOError:
                 print "VAR Class: could not append to file", outfile
             else:
                 OUT.close()
 
+
 class FLUXDATA:
     """
     Name:     FLUXDATA
-    Features: This class creates GePiSaT database data_set table entries based 
+    Features: This class creates GePiSaT database data_set table entries based
               on fluxdata.org flux tower data files
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
@@ -363,34 +371,34 @@ class FLUXDATA:
     # ////////////////////////////////////////////////////////////////////////
     msvIDX = []        # list of identifiers made up of station and var id
     stationID = ""     # station ID (from file name)
-    dateTime = datetime.datetime(1999, 1, 1, 0, 0 ,0)  # timestamp
+    dateTime = datetime.datetime(1999, 1, 1, 0, 0, 0)  # timestamp
     timeVals = []      # timestamp values
     vari = []          # list of variables (from headerline)
     data = []          # list of data (for each line of measurements)
     #
     # Variable quality control (qc) flags:
-    varFlags = {'NEE_f'    : 'NEE_GPP_qc',
-                'GPP_f'    : 'NEE_GPP_qc',
-                'LE_f'     : 'LE_fqc',
-                'H_f'      : 'H_fqc',
-                'G_f'      : 'G_fqc',
-                'Ta_f'     : 'Ta_fqc',
-                'Ts1_f'    : 'Ts1_fqc',
-                'Ts2_f'    : 'Ts2_fqc',
-                'VPD_f'    : 'VPD_fqc',
-                'Precip_f' : 'Precip_fqc',
-                'SWC1_f'   : 'SWC1_fqc',
-                'SWC2_f'   : 'SWC2_fqc',
-                'WS_f'     : 'WS_fqc',
-                'Rg_f'     : 'Rg_fqc',
-                'PPFD_f'   : 'PPFD_fqc',
-                'Rn_f'     : 'Rn_fqc',
-                'gsurf_f'  : 'gsurf_flag'}
-    #
+    varFlags = {'NEE_f': 'NEE_GPP_qc',
+                'GPP_f': 'NEE_GPP_qc',
+                'LE_f': 'LE_fqc',
+                'H_f': 'H_fqc',
+                'G_f': 'G_fqc',
+                'Ta_f': 'Ta_fqc',
+                'Ts1_f': 'Ts1_fqc',
+                'Ts2_f': 'Ts2_fqc',
+                'VPD_f': 'VPD_fqc',
+                'Precip_f': 'Precip_fqc',
+                'SWC1_f': 'SWC1_fqc',
+                'SWC2_f': 'SWC2_fqc',
+                'WS_f': 'WS_fqc',
+                'Rg_f': 'Rg_fqc',
+                'PPFD_f': 'PPFD_fqc',
+                'Rn_f': 'Rn_fqc',
+                'gsurf_f': 'gsurf_flag'}
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
     # ////////////////////////////////////////////////////////////////////////
-    def __init__(self,fileName, v, d):
+    def __init__(self, fileName, v, d):
         """
         Name:     FLUXDATA.__init__
         Input:    - string, file name with path (fileName)
@@ -430,7 +438,7 @@ class FLUXDATA:
         self.data = []
         self.vari = []
         # Get data (note 4:numfields skips the four time fields in CSV):
-        for i in range(4,numfields):
+        for i in range(4, numfields):
             # If variable is core (key in varFlags dictionary):
             if (v[i] in self.varFlags.keys()):
                 # Get qc value:
@@ -455,17 +463,17 @@ class FLUXDATA:
                         self.vari.append(v[i])
                         self.data.append(d[i])
                         self.stationID = l.stationID
-    #
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
     # ////////////////////////////////////////////////////////////////////////
-    def getTS(self,tvals):
+    def getTS(self, tvals):
         """
         Name:     FLUXDATA.getTS
         Input:    list, fluxdata.org time field data (tvals)
                   [0] year, [1] day of year, [2] time (min), [3] datetime
         Output:   datetime.datetime
-        Features: Returns the timestamp based on the three fluxdata.org time 
+        Features: Returns the timestamp based on the three fluxdata.org time
                   fields: year, day of year, and time (minutes)
         """
         # Note: use float() because decimal point is in data file
@@ -474,18 +482,18 @@ class FLUXDATA:
         doy = float(tvals[1])-1
         mn = float(tvals[2])*60
         ts = (
-            datetime.datetime(int(yr), 1, 1, 0, 0, 0) 
-            + datetime.timedelta(days=int(doy)) 
+            datetime.datetime(int(yr), 1, 1, 0, 0, 0)
+            + datetime.timedelta(days=int(doy))
             + datetime.timedelta(minutes=mn)
             )
         return ts
-    #
-    def check_gpp(self,qcf):
+
+    def check_gpp(self, qcf):
         """
         Name:     FLUXDATA.check_gpp
         Input:    int, quality control flag (qcf)
         Output:   int, data type (rval)
-        Features: Returns a value based on the data type defined by the 
+        Features: Returns a value based on the data type defined by the
                   quality control flag for the NEE and GPP flux tower variables
                   0: missing, 1: observed, 2: gap-filled
         """
@@ -504,14 +512,14 @@ class FLUXDATA:
         #
         # Return:
         return rval
-    #
-    def check_vars(self,qcf):
+
+    def check_vars(self, qcf):
         """
         Name:     FLUXDATA.check_vars
         Input:    int, quality control flag (qcf)
         Output:   int, data type (rval)
-        Features: Returns a value based on the data type defined by the 
-                  quality control flag for state variables (not NEE or GPP) 
+        Features: Returns a value based on the data type defined by the
+                  quality control flag for state variables (not NEE or GPP)
                   0: missing, 1: observed, 2: gap-filled
         """
         # Initialize return value
@@ -528,8 +536,8 @@ class FLUXDATA:
         #
         # Return:
         return rval
-    #
-    def print_line(self,outfile):
+
+    def print_line(self, outfile):
         """
         Name:     FLUXDATA.print_line
         Input:    string, output file and path (outfile)
@@ -537,20 +545,21 @@ class FLUXDATA:
         Features: Writes to file the contents for the data_set database table
         """
         # Append data to output file:
-        OUT = open(outfile,'a')
+        OUT = open(outfile, 'a')
         #
         # Create/write output lines:
         for i in range(len(self.data)):
             outline = "%s,%s,%s,%0.3f\n" % (
-                self.msvIDX[i], 
-                self.stationID, 
-                self.dateTime, 
+                self.msvIDX[i],
+                self.stationID,
+                self.dateTime,
                 float(self.data[i])
                 )
             OUT.write(outline)
         #
         # Close output file:
         OUT.close()
+
 
 class WATCHDATA:
     """
@@ -564,7 +573,7 @@ class WATCHDATA:
     station_id = ""     # station ID (from file name)
     data_time = datetime.date(1900, 1, 1)  # timestamp
     data_value = -9999.0      # observation data
-    #
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
     # ////////////////////////////////////////////////////////////////////////
@@ -582,7 +591,7 @@ class WATCHDATA:
         # Save observation and time stamp:
         self.data_value = val_parts[1]
         self.data_time = val_parts[2]
-    #
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
     # ////////////////////////////////////////////////////////////////////////
@@ -606,6 +615,7 @@ class WATCHDATA:
         OUT.write(outline)
         OUT.close()
 
+
 class MODISDATA:
     """
     Name:     MODISDATA
@@ -615,17 +625,17 @@ class MODISDATA:
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Variable Definitions
     # ////////////////////////////////////////////////////////////////////////
-    hdg_id = -9999    # 0.5 deg station id
-    hdg_lon = -999.0 # 0.5 deg longitude
-    hdg_lat = -99.00 # 0.5 deg latitude
-    hdg_ave = -3000  # 0.5 deg ave pxl. value (based on 0.05 data)
-    hdg_res = 0.5    # 0.5 deg pixel resolution
-    foh_res = 0.05   # 0.05 deg pixel resolution
-    station_id = 0   # station id
-    msv_idx = ''     # msvidx
-    data_time = datetime.date(1900, 1, 1) # data time
-    data_val = -9999.0 # EVI (pixel / 10000)
-    #
+    hdg_id = -9999      # 0.5 deg station id
+    hdg_lon = -999.0    # 0.5 deg longitude
+    hdg_lat = -99.00    # 0.5 deg latitude
+    hdg_ave = -3000     # 0.5 deg ave pxl. value (based on 0.05 data)
+    hdg_res = 0.5       # 0.5 deg pixel resolution
+    foh_res = 0.05      # 0.05 deg pixel resolution
+    station_id = 0      # station id
+    msv_idx = ''        # msvidx
+    data_time = datetime.date(1900, 1, 1)  # data time
+    data_val = -9999.0  # EVI (pixel / 10000)
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
     # ////////////////////////////////////////////////////////////////////////
@@ -665,7 +675,7 @@ class MODISDATA:
             # Use the pre-defined error value (i.e., -3000)
             self.hdg_ave = -3000
             self.data_val = -9999.0
-    #
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
     # ////////////////////////////////////////////////////////////////////////
@@ -676,7 +686,7 @@ class MODISDATA:
                   - int, longitude index, e.g., 0--719 (y)
                   - float, resolution, e.g., 0.5 (r)
         Output:   tuple, longitude-latitude pair (lon, lat)
-        Features: Returns lon-lat pair for an x-y index pair (numbered from the 
+        Features: Returns lon-lat pair for an x-y index pair (numbered from the
                   bottom-left corner) and pixel resolution
         """
         # Offset lat, lon to pixel centroid
@@ -688,15 +698,15 @@ class MODISDATA:
         lat = lat - y*r
         #
         return (lon, lat)
-    #
+
     def get_stationid(self):
         """
         Name:     MODISDATA.get_stationid
         Input:    None.
         Output:   int, station id (st_id)
         Features: Returns the half-degree (HDG) station ID for a pixel
-                  numbered from 0 (bottom-left / south-west corner) to 259199 
-                  (top-right / north-east corner) as defined in the GePiSaT 
+                  numbered from 0 (bottom-left / south-west corner) to 259199
+                  (top-right / north-east corner) as defined in the GePiSaT
                   database numbering scheme
         """
         st_id = (
@@ -704,7 +714,7 @@ class MODISDATA:
             + ((self.hdg_lon + 180.0)/self.hdg_res - 0.5)
             )
         return int(st_id)
-    #
+
     def get_foh_points(self, lon, lat, d):
         """
         Name:     MODISDATA.get_foh_points
@@ -712,7 +722,7 @@ class MODISDATA:
                   - float, 0.5 degree pixel latitude (lat)
                   - numpy nd.array, 0.05 degree data (d)
         Output:   numpy nd.array (my_grid_data)
-        Features: Returns array of 100 data values at 0.05 degrees based on a  
+        Features: Returns array of 100 data values at 0.05 degrees based on a
                   single 0.5 degree pixel location
         Depends:  - get_foh_grid
                   - grid_to_index
@@ -721,7 +731,7 @@ class MODISDATA:
         my_grid_pnts = self.get_foh_grid()
         my_grid_indx = self.grid_to_index(my_grid_pnts)
         for indx_pair in my_grid_indx:
-            x,y = indx_pair
+            x, y = indx_pair
             zval = d[y][x]
             # Use NaN for invalid data (easy to remove for averaging):
             if zval < -2000:
@@ -729,14 +739,14 @@ class MODISDATA:
             my_grid_data = numpy.append(my_grid_data, [zval])
         #
         return my_grid_data
-    #
+
     def get_foh_grid(self):
         """
         Name:     MODISDATA.get_foh_grid
         Input:    None.
         Output:   list, list of tuples (foh_grid)
-        Features: Returns a list of one hundred 0.05 degree lon-lat pairs based 
-                  on the class's half degree (HDG) coordinates (i.e., hdg_lon, 
+        Features: Returns a list of one hundred 0.05 degree lon-lat pairs based
+                  on the class's half degree (HDG) coordinates (i.e., hdg_lon,
                   hdg_lat)
         """
         # Initialize five one-hundreths grid:
@@ -758,13 +768,13 @@ class MODISDATA:
                 foh_grid.append((lon, lat))
         #
         return foh_grid
-    #
+
     def grid_to_index(self, grid):
         """
         Name:     MODISDATA.grid_to_index
         Input:    list, list of lon-lat tuples (grid)
         Output:   list, list of tuples (foh_indices)
-        Features: Returns a list of x-y indices based for a given list of 0.05 
+        Features: Returns a list of x-y indices based for a given list of 0.05
                   degree lon-lat pairs
         Depends:  get_x_y
         """
@@ -772,10 +782,10 @@ class MODISDATA:
         for grid_pair in grid:
             lon, lat = grid_pair
             x, y = self.get_x_y(lon, lat, self.foh_res)
-            foh_indices.append((x,y))
+            foh_indices.append((x, y))
         #
         return foh_indices
-    #
+
     def get_x_y(self, lon, lat, r):
         """
         Name:     MODISDATA.get_x_y
@@ -783,7 +793,7 @@ class MODISDATA:
                   - float, latitude (lat)
                   - float, resolution (r)
         Output:   tuple, x-y indices
-        Features: Returns x and y indices for a given lon-lat pair and pixel 
+        Features: Returns x and y indices for a given lon-lat pair and pixel
                   resolution
         """
         # Solve x and y indices:
@@ -791,7 +801,7 @@ class MODISDATA:
         y = (90.0 - lat)/r - 0.5
         #
         return (int(x), int(y))
-    #
+
     def print_line(self, outfile):
         """
         Name:     MODISDATA.print_line
@@ -812,6 +822,7 @@ class MODISDATA:
         OUT.write(outline)
         OUT.close()
 
+
 class GLASDATA:
     """
     Name:     GLASDATA
@@ -823,7 +834,7 @@ class GLASDATA:
     variable_file = ""
     dataset_file = ""
     data = None
-    #
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
     # ////////////////////////////////////////////////////////////////////////
@@ -837,7 +848,7 @@ class GLASDATA:
         self.variable_file = vf
         self.dataset_file = df
         self.data = d
-        #
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
     # ////////////////////////////////////////////////////////////////////////
@@ -846,7 +857,7 @@ class GLASDATA:
         Name:     GLASDATA.process_data
         Input:    None.
         Output:   None.
-        Features: Writes the 0.5 degree averaged image data to variable list 
+        Features: Writes the 0.5 degree averaged image data to variable list
                   and data set files
         Depends:  - get_lon_lat
                   - get_station
@@ -857,7 +868,7 @@ class GLASDATA:
             for x in xrange(720):
                 # Determine lon, lat, and station ID:
                 lon, lat = self.get_lon_lat(x, y, 0.5)
-                st_id = self.get_stationid(lon,lat)
+                st_id = self.get_stationid(lon, lat)
                 #
                 # Create variable class:
                 station_parts = ('HDG', st_id)
@@ -886,14 +897,14 @@ class GLASDATA:
                     )
                 OUT.write(outline)
                 OUT.close()
-    #
+
     def get_1km_grid(self, hdg_lon, hdg_lat):
         """
         Name:     GLASDATA.get_1km_grid
         Input:    - float, 0.5 degree longitude (hdg_lon)
                   - float, 0.5 degree latitude (hdg_lat)
         Output:   list, list of tuples (okm_grid)
-        Features: Returns a list of 3600 lon-lat pairs at 1km resolution for a 
+        Features: Returns a list of 3600 lon-lat pairs at 1km resolution for a
                   given 0.5 degree lon-lat pair
         """
         # Initialize five one-hundreths grid:
@@ -919,14 +930,14 @@ class GLASDATA:
                 okm_grid.append((lon, lat))
         #
         return okm_grid
-    #
+
     def get_1km_rh(self, lon, lat):
         """
         Name:     GLASDATA.get_1km_rh
         Input:    - float, 0.5 degree longitude (lon)
                   - float, 0.5 degree latitude (lat)
         Output:   numpy nd.array
-        Features: Returns array of 3600 canopy height (RH) values at 1 km 
+        Features: Returns array of 3600 canopy height (RH) values at 1 km
                   resolution for a single 0.5 pixel
         Depends:  - get_1km_grid
                   - grid_to_index
@@ -935,12 +946,12 @@ class GLASDATA:
         my_grid_pnts = self.get_1km_grid(lon, lat)
         my_grid_indx = self.grid_to_index(my_grid_pnts)
         for indx_pair in my_grid_indx:
-            x,y = indx_pair
-            zval = self.data.getpixel((x,y))
+            x, y = indx_pair
+            zval = self.data.getpixel((x, y))
             my_grid_rh = numpy.append(my_grid_rh, [zval])
         #
         return my_grid_rh
-    #
+
     def get_lon_lat(self, x, y, r):
         """
         Name:     GLASDATA.get_lon_lat
@@ -948,7 +959,7 @@ class GLASDATA:
                   - int, latitude index (y)
                   - float, pixel resolution (r)
         Output:   tuple, longitude and latitude pair, degrees
-        Features: Returns lon-lat pair for an x-y index pair (numbered from the 
+        Features: Returns lon-lat pair for an x-y index pair (numbered from the
                   bottom-left corner) and pixel resolution
         """
         # Offset lat, lon to pixel centroid
@@ -959,7 +970,7 @@ class GLASDATA:
         lon = lon + x*r
         lat = lat - y*r
         return (lon, lat)
-    #
+
     def get_stationid(self, lon, lat):
         """
         Name:     GLASDATA.get_stationid
@@ -967,19 +978,19 @@ class GLASDATA:
                   - float, 0.5 degree latitude (lat)
         Output:   int, station id (st_id)
         Features: Returns the half-degree (HDG) station ID for a pixel
-                  numbered from 0 (bottom-left / south-west corner) to 259199 
-                  (top-right / north-east corner) as defined in the GePiSaT 
+                  numbered from 0 (bottom-left / south-west corner) to 259199
+                  (top-right / north-east corner) as defined in the GePiSaT
                   database numbering scheme
         """
         # Station ID is based on 0 being the bottom (south) left (west) corner
-        # and 259199 being the top (north) right (east) corner as is used in 
+        # and 259199 being the top (north) right (east) corner as is used in
         # the postgreSQL database naming scheme.
         st_id = (
             720.0 * (359.0 - ((90.0 - lat)/0.5 - 0.5))
             + ((lon + 180.0)/0.5 - 0.5)
             )
         return st_id
-    #
+
     def get_x_y(self, lon, lat, r):
         """
         Name:     GLASDATA.get_x_y
@@ -987,7 +998,7 @@ class GLASDATA:
                   - float, latitude (lat)
                   - float, resolution (r)
         Output:   tuple, x-y indices
-        Features: Returns x and y indices for a given lon-lat pair and pixel 
+        Features: Returns x and y indices for a given lon-lat pair and pixel
                   resolution
         """
         # Solve x and y indices:
@@ -995,13 +1006,13 @@ class GLASDATA:
         y = (90.0 - lat)/r - 0.5
         #
         return (int(x), int(y))
-    #
+
     def grid_to_index(self, grid):
         """
         Name:     GLASDATA.grid_to_index
         Input:    list, list of tuples (grid)
         Output:   list, list of tuples (okm_indices)
-        Features: Returns a list of x-y indices based on a list of lon-lat 
+        Features: Returns a list of x-y indices based on a list of lon-lat
                   pairs for a 1 km grid
         Depends:  get_x_y
         """
@@ -1010,12 +1021,13 @@ class GLASDATA:
         for grid_pair in grid:
             lon, lat = grid_pair
             x, y = self.get_x_y(lon, lat, my_res)
-            okm_indices.append((x,y))
+            okm_indices.append((x, y))
         #
         return okm_indices
 
+
 ###############################################################################
-## FUNCTIONS 
+# FUNCTIONS
 ###############################################################################
 def add_one_month(dt0):
     """
@@ -1028,9 +1040,10 @@ def add_one_month(dt0):
               month-to-a-datetimedate-or-datet/
     """
     dt1 = dt0.replace(day=1)
-    dt2 = dt1 + datetime.timedelta(days=32) 
+    dt2 = dt1 + datetime.timedelta(days=32)
     dt3 = dt2.replace(day=1)
     return dt3
+
 
 def get_modis_ts(f):
     """
@@ -1049,10 +1062,11 @@ def get_modis_ts(f):
         f_year = int(f_date[0:4])
         f_doy = int(f_date[4:7]) - 1
         f_timestamp = (
-            datetime.date(f_year, 1, 1) + 
+            datetime.date(f_year, 1, 1) +
             datetime.timedelta(days=f_doy)
             )
         return f_timestamp
+
 
 def get_monthly_cru(d, ct, v):
     """
@@ -1062,7 +1076,7 @@ def get_monthly_cru(d, ct, v):
               - string, variable of interest (v)
     Output:   numpy nd.array
     Depends:  get_time_index
-    Features: Returns 360x720 monthly CRU TS dataset for a given month and 
+    Features: Returns 360x720 monthly CRU TS dataset for a given month and
               variable of interest (e.g., cld, pre, tmp)
     """
     # Search directory for netCDF file:
@@ -1073,7 +1087,7 @@ def get_monthly_cru(d, ct, v):
         f = netcdf.NetCDFFile(my_file, "r")
         #
         # Save data for variables of interest:
-        # NOTE: for CRU TS 3.21: 
+        # NOTE: for CRU TS 3.21:
         #       variables: 'lat', 'lon', 'time', v
         #       where v is 'tmp', 'pre', 'cld'
         # LAT:  -89.75 -- 89.75
@@ -1088,7 +1102,7 @@ def get_monthly_cru(d, ct, v):
         #       'tmp' units = deg. C
         #       Missing value = 9.96e+36
         # Save the base time stamp:
-        bt = datetime.date(1900,1,1)
+        bt = datetime.date(1900, 1, 1)
         #
         # Read the time data as array:
         f_time = f.variables['time'].data
@@ -1101,6 +1115,7 @@ def get_monthly_cru(d, ct, v):
         f.close()
         return f_data
 
+
 def get_time_index(bt, ct, aot):
     """
     Name:     get_time_index
@@ -1108,7 +1123,7 @@ def get_time_index(bt, ct, aot):
               - datetime.date, current timestamp
               - numpy nd.array, days since base timestamp
     Output:   int
-    Features: Finds the index in an array of CRU TS days for a given timestamp 
+    Features: Finds the index in an array of CRU TS days for a given timestamp
     """
     # For CRU TS 3.21, the aot is indexed for mid-month days, e.g. 15--16th
     # therefore, to make certain that ct index preceeds the index for the
@@ -1120,11 +1135,12 @@ def get_time_index(bt, ct, aot):
     dt = (ct - bt).days
     #
     # Append dt to the aot array:
-    aot = numpy.append(aot, [dt,])
+    aot = numpy.append(aot, [dt, ])
     #
     # Find the first index of dt in the sorted array:
-    idx = numpy.where(numpy.sort(aot)==dt)[0][0]
+    idx = numpy.where(numpy.sort(aot) == dt)[0][0]
     return idx
+
 
 def calculate_vpd(tmin, tmax, vap):
     """
@@ -1134,8 +1150,8 @@ def calculate_vpd(tmin, tmax, vap):
               - numpy nd.array, mean monthly vapor pressure, hPa (vap)
     Output:   numpy nd.array, mean monthly vapor pressure deficit, kPa (vpd)
     Features: Returns an array of mean monthly vapor pressure deficit
-    Ref:      Eq. 5.1, Abtew and Meleese (2013), Ch. 5 Vapor Pressure 
-              Calculation Methods, in Evaporation and Evapotranspiration: 
+    Ref:      Eq. 5.1, Abtew and Meleese (2013), Ch. 5 Vapor Pressure
+              Calculation Methods, in Evaporation and Evapotranspiration:
               Measurements and Estimations, Springer, London.
                 vpd = 0.611*exp[ (17.27 tc)/(tc + 237.3) ] - ea
                 where:
@@ -1144,29 +1160,30 @@ def calculate_vpd(tmin, tmax, vap):
     """
     # Initialize array:
     # NOTE: maintains missing value
-    vpd = -9999.0*(numpy.zeros(shape=(360,720)) + 1)
+    vpd = -9999.0*(numpy.zeros(shape=(360, 720)) + 1)
     #
     # Iterate through each data point:
     lat, lon = tmin.shape
     #
     for y in xrange(lat):
         for x in xrange(lon):
-            tm = tmin[y,x]
-            tx = tmax[y,x]
-            ea = vap[y,x]
+            tm = tmin[y, x]
+            tx = tmax[y, x]
+            ea = vap[y, x]
             if tm < 1.e6 and tx < 1.e6 and ea < 1.e6:
                 to = 0.5*(tm + tx)
-                vpd[y,x] = (
+                vpd[y, x] = (
                     0.611*numpy.exp((17.27*to)/(to + 237.3)) - 0.10*ea
                 )
     return vpd
+
 
 def process_flux(d):
     """
     Name:     process_flux
     Input:    string, input file directory (d)
     Output:   None.
-    Features: Processes flux tower data files into variable list and data set 
+    Features: Processes flux tower data files into variable list and data set
               table output files
     Depends:  writeout
     """
@@ -1187,11 +1204,11 @@ def process_flux(d):
     dat_headerline = "msvidx,stationid,datetime,data\n"
     writeout(dat_outfile, dat_headerline)
     #
-    # Create a list for book keeping which stations have been var-processed: 
+    # Create a list for book keeping which stations have been var-processed:
     var_out_list = []
     var_flag = 1
     #
-    # Statically set data-set processing flag 
+    # Statically set data-set processing flag
     # in case you want to just process var-list
     dat_flag = 1
     #
@@ -1273,14 +1290,15 @@ def process_flux(d):
     else:
         print "No files found in directory:", my_dir
 
+
 def process_watch(d, voi):
     """
     Name:     process_watch
     Input:    - string, input file directory (d)
               - string, variable of interest (voi)
     Output:   None.
-    Features: Processes WATCH WFDEI netCDF files into variable list and data set 
-              table output files
+    Features: Processes WATCH WFDEI netCDF files into variable list and data
+              set table output files
     Depends:  writeout
     """
     # Search directory for WATCH netCDF files:
@@ -1307,7 +1325,7 @@ def process_watch(d, voi):
                     #
                     # Read the year and month values from filename (YYYYMM):
                     yr_mo = re.search(
-                        '_(\d{6})\.', 
+                        '_(\d{6})\.',
                         os.path.basename(f.filename)
                         ).group(1)
                     this_year = int(yr_mo[0:4])
@@ -1328,7 +1346,7 @@ def process_watch(d, voi):
                     # Save the shape values of each variable:
                     sh_day, sh_lat, sh_lon = f.variables[voi].shape
                     #
-                    # Iterate through each lat:lon pair 
+                    # Iterate through each lat:lon pair
                     # * row-major ordering from bottom left
                     #  x (longitude): 0...719
                     #  y (latitude): 0...359
@@ -1352,22 +1370,22 @@ def process_watch(d, voi):
                                 # Get timestamp for this day:
                                 this_day = t+1
                                 time_stamp = datetime.date(
-                                    this_year, 
-                                    this_month, 
+                                    this_year,
+                                    this_month,
                                     this_day
                                     )
                                 #
                                 # ~~~~~~~~~~~~~~~~ DATA-SET ~~~~~~~~~~~~~~~~ #
                                 # Read SWdown for each pixel
-                                # * NOTE 1: variable has five decimal places 
+                                # * NOTE 1: variable has five decimal places
                                 # * NOTE 2: missing values are equal to ~1e20
                                 # * NOTE 3: Antarctica is < -60 latitude
-                                pxl_swr = f.variables[voi].data[t,y,x]
+                                pxl_swr = f.variables[voi].data[t, y, x]
                                 if pxl_swr < 1.0e6 and pxl_lat > -60:
                                     # Process pixel
                                     obs_parts = (voi, pxl_swr, time_stamp)
                                     my_data = WATCHDATA(
-                                        station_parts, 
+                                        station_parts,
                                         obs_parts
                                         )
                                     my_data.print_line(dat_outfile)
@@ -1376,13 +1394,14 @@ def process_watch(d, voi):
                     varlist_flag = 0
                     f.close()
 
+
 def process_modis(d, voi):
     """
     Name:     process_modis
     Input:    - string, input/output file directory (d)
               - string, variable of interest (voi)
     Output:   None.
-    Features: Processes 0.05 degree MODIS EVI from HDF files into 0.5 degree 
+    Features: Processes 0.05 degree MODIS EVI from HDF files into 0.5 degree
               FAPAR and saves to variable list and data set table output files
     Depends:  writeout
     """
@@ -1433,7 +1452,7 @@ def process_modis(d, voi):
                 dat_headerline = "msvidx,stationid,datetime,data\n"
                 writeout(dat_outfile, dat_headerline)
                 #
-                # Iterate through each 0.5 deg lat:lon pair 
+                # Iterate through each 0.5 deg lat:lon pair
                 # x (longitude): 0...719
                 # y (latitude): 0...359
                 for y in xrange(360):
@@ -1453,12 +1472,13 @@ def process_modis(d, voi):
             # Close varflag after processing first doc:
             varlist_flag = 0
 
+
 def process_cru_elv(d):
     """
     Name:     process_cru_elv
     Input:    string, input/output file directory (d)
     Output:   None.
-    Features: Processes CRU TS 3.00 dat file associated with elevation into 
+    Features: Processes CRU TS 3.00 dat file associated with elevation into
               variable list and data set table output files
     Depends:  writeout
     """
@@ -1475,7 +1495,7 @@ def process_cru_elv(d):
     (sh_lat, sh_lon) = f.shape
     #
     # Assign time stamp as CRU TS 3.00 date:
-    time_stamp = datetime.date(2006,6,1)
+    time_stamp = datetime.date(2006, 6, 1)
     #
     # Prepare var output file:
     my_var_out = "CRU_Var-List_elv.csv"
@@ -1501,7 +1521,7 @@ def process_cru_elv(d):
             my_line.printLine(var_outfile)
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
             #
-            elv = f[y,x]
+            elv = f[y, x]
             # Set no-data value:
             if elv > -500:
                 # Append to existing file:
@@ -1515,7 +1535,7 @@ def process_cru_elv(d):
                     )
                 OUT.write(outline)
                 OUT.close()
-    #
+
 
 def process_cru_vpd(cru_dir, my_dir):
     """
@@ -1523,14 +1543,15 @@ def process_cru_vpd(cru_dir, my_dir):
     Input:    - string, directory for CRU input files (cru_dir)
               - string, output file directory (my_dir)
     Output:   None.
-    Features: Processes CRU TS netCDF files (tmn, tmx, vap) to calculate  
-              monthly VPD and save variable list and data set table output files
+    Features: Processes CRU TS netCDF files (tmn, tmx, vap) to calculate
+              monthly VPD and save variable list and data set table output
+              files
     Depends:  - writeout
               - add_one_month
     """
     # Define the start and end dates you want to process (2002-2006):
-    start_date = datetime.date(2002,1,1)
-    end_date = datetime.date(2007,1,1)
+    start_date = datetime.date(2002, 1, 1)
+    end_date = datetime.date(2007, 1, 1)
     #
     # Set flag for varlist:
     varlist_flag = 1
@@ -1561,7 +1582,7 @@ def process_cru_vpd(cru_dir, my_dir):
         dat_headerline = "msvidx,stationid,datetime,data\n"
         writeout(dat_outfile, dat_headerline)
         #
-        # Iterate through each lat:lon pair 
+        # Iterate through each lat:lon pair
         # * row-major ordering from bottom left
         #  x (longitude): 0...719
         #  y (latitude): 0...359
@@ -1581,7 +1602,7 @@ def process_cru_vpd(cru_dir, my_dir):
                 # ~~~~~~~~~~~~~~~~ DATA-SET ~~~~~~~~~~~~~~~~ #
                 # Read VPD for each pixel
                 # * NOTE: missing VPD are equal to -9999
-                pxl_vpd = vpd[y,x]
+                pxl_vpd = vpd[y, x]
                 if pxl_vpd > -9999.0:
                     # Append to existing file:
                     OUT = open(dat_outfile, 'a')
@@ -1600,7 +1621,8 @@ def process_cru_vpd(cru_dir, my_dir):
         varlist_flag = 0
         #
         # Increment cur_date:
-        cur_date = add_one_month(cur_date) 
+        cur_date = add_one_month(cur_date)
+
 
 def process_cru(v, cru_dir, my_dir):
     """
@@ -1609,14 +1631,14 @@ def process_cru(v, cru_dir, my_dir):
               - string, directory name for CRU TS data file (cru_dir)
               - string, directory for output files (my_dir)
     Output:   None.
-    Features: Processes CRU TS netCDF file by month into variable list and data 
+    Features: Processes CRU TS netCDF file by month into variable list and data
               set table output files
     Depends:  - writeout
               - add_one_month
     """
     # Define the start and end dates you want to process (2002-2006):
-    start_date = datetime.date(2002,1,1)
-    end_date = datetime.date(2007,1,1)
+    start_date = datetime.date(2002, 1, 1)
+    end_date = datetime.date(2007, 1, 1)
     #
     # Set flag for varlist:
     varlist_flag = 1
@@ -1635,14 +1657,14 @@ def process_cru(v, cru_dir, my_dir):
         # # Open and read netcdf files in the file directory:
         my_data = get_monthly_cru(cru_dir, cur_date, v)
         (sh_lat, sh_lon) = my_data.shape
-    	#
+        #
         # Prepare data set output file:
         my_dat_out = "CRU_Data-Set_%s_%s.csv" % (v, cur_date)
         dat_outfile = my_dir + my_dat_out
         dat_headerline = "msvidx,stationid,datetime,data\n"
         writeout(dat_outfile, dat_headerline)
         #
-        # Iterate through each lat:lon pair 
+        # Iterate through each lat:lon pair
         # * row-major ordering from bottom left
         #  x (longitude): 0...719
         #  y (latitude): 0...359
@@ -1668,7 +1690,7 @@ def process_cru(v, cru_dir, my_dir):
                 # ~~~~~~~~~~~~~~~~ DATA-SET ~~~~~~~~~~~~~~~~ #
                 # Read each each pixel
                 # * NOTE: missing values are ~ 1e7
-                pxl = my_data[y,x]
+                pxl = my_data[y, x]
                 if pxl < 1.e6:
                     # Append to existing file:
                     OUT = open(dat_outfile, 'a')
@@ -1688,6 +1710,7 @@ def process_cru(v, cru_dir, my_dir):
         #
         # Increment cur_date:
         cur_date = add_one_month(cur_date)
+
 
 def process_glas(d):
     """
@@ -1724,11 +1747,12 @@ def process_glas(d):
     my_glas = GLASDATA(var_outfile, dat_outfile, im)
     my_glas.process_data()
 
+
 def process_alpha(d):
     """
     Name:     process_alpha
     Input:    string, input/output file directory (d)
-    Features: Processes the Cramer-Prentice alpha raster files into variable 
+    Features: Processes the Cramer-Prentice alpha raster files into variable
               list and data set table output files
     Depends:  writeout
     """
@@ -1754,7 +1778,7 @@ def process_alpha(d):
                 #
                 # Read timestamp from filename:
                 yr_mo = re.search(
-                    '_(\d{4}-\d{2}-\d{2})\.', 
+                    '_(\d{4}-\d{2}-\d{2})\.',
                     os.path.basename(doc)
                     ).group(1)
                 this_year = int(yr_mo.split('-')[0])
@@ -1790,7 +1814,7 @@ def process_alpha(d):
                         #
                         # Read pixel value (1000x alpha):
                         # NOTE: missing values are -9999
-                        pxl = f[y,x]
+                        pxl = f[y, x]
                         if pxl != -9999:
                             # Scale pixel to alpha:
                             pxl = 1.0 * pxl / 1000.0
@@ -1812,6 +1836,7 @@ def process_alpha(d):
                 # Turn off varlist flag after processing first month:
                 varlist_flag = 0
 
+
 def writeout(f, d):
     """
     Name:     writeout
@@ -1829,7 +1854,7 @@ def writeout(f, d):
         OUT.close()
 
 ###############################################################################
-## MAIN PROGRAM
+# MAIN PROGRAM
 ###############################################################################
 # Process flux data:
 flux_dir = (

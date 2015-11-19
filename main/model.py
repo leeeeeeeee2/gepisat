@@ -1,40 +1,45 @@
 #!/usr/bin/python
 #
-# model.py 
-# __version__ 2.1.1
+# model.py
 #
-# written by Tyler W. Davis
-# Imperial College London
+# VERSION 2.1.1-dev
 #
 # 2013-07-05 -- created
-# 2015-02-23 -- last updated
+# 2015-11-18 -- last updated
+#
+# ---------
+# citation:
+# ---------
+# I. C. Prentice, T. W. Davis, X. M. P. Gilbert, B. D. Stocker, B. J. Evans,
+# H. Wang, and T. F. Keenan, "The Global ecosystem in Space and Time (GePiSaT)
+# Model of the Terrestrial Biosphere," (in progress).
 #
 # ------------
 # description:
 # ------------
 # This script presents the Python application code for the Global ecosystem
-# in Space and Time (GePiSaT) model of the terrestrial biosphere. 
+# in Space and Time (GePiSaT) model of the terrestrial biosphere.
 #
-# GePiSaT takes a simplistic approach to modelling terrestrial gross primary 
-# production (GPP) by making the best use of in situ observations while 
-# defensibly representing the principal ecophysiological processes that govern 
-# GPP, including: 
-# (1) the eddy-covariance method of partitioning net CO2 and solar radiative 
-#     fluxes into monthly quantities of GPP and respiration; and 
-# (2) the optimality principle of vegetation minimizing the summed costs 
-#     associated with maintaining carbon fixation and water transport 
+# GePiSaT takes a simplistic approach to modelling terrestrial gross primary
+# production (GPP) by making the best use of in situ observations while
+# defensibly representing the principal ecophysiological processes that govern
+# GPP, including:
+# (1) the eddy-covariance method of partitioning net CO2 and solar radiative
+#     fluxes into monthly quantities of GPP and respiration; and
+# (2) the optimality principle of vegetation minimizing the summed costs
+#     associated with maintaining carbon fixation and water transport
 #     capabilities.
 #
-# This script is used to connect to the gepisat database, query and process 
+# This script is used to connect to the gepisat database, query and process
 # data, and perform model analyses.
 #
 # Currently this includes the following:
 #
 #    **STAGE 1**
 # -- Acquires monthly PPFD and NEE observation pairs from postgreSQL database
-# -- Performs GPP and Re partitioning of NEE and PPFD based on models defined 
+# -- Performs GPP and Re partitioning of NEE and PPFD based on models defined
 #    by Ruimy et al. 1995
-# -- Removes outliers in PPFD:NEE observations based on model fitting using 
+# -- Removes outliers in PPFD:NEE observations based on model fitting using
 #    Peirce's criterion (Peirce 1852; Gould 1855)
 # -- Outputs original and outlier-free monthly datasets w/ fitting params
 #    > [STATION]_[YYYY-MM-DD].txt, original
@@ -45,14 +50,14 @@
 #    > selection criteria are based on: model fitness, parameter significance
 #
 #    **STAGE 2**
-# -- Returns WFDEI shortwave radiation grid measurement based on flux tower 
+# -- Returns WFDEI shortwave radiation grid measurement based on flux tower
 #    location and day of the year
 # -- Calculates extraterrestrial solar radiation (in units of PPFD)
 # -- Gap-fills daily PPFD observations with scaled extraterrestrial solar
 # -- Outputs observations and gap-filled time series
 #    > [STATION]-GF_[YYYY-MM-DD].txt
 # -- Calculates half-hourly GPP based on partitioning
-# -- Integrates monthly gap-filled PPFD and GPP 
+# -- Integrates monthly gap-filled PPFD and GPP
 # -- Returns fAPAR based on flux tower location and month
 # -- Curve-fits light-use efficiency based on PEM: GPP = e fPAR PPFD
 # -- Outputs station-specific LUE parameters
@@ -77,12 +82,12 @@
 #  - import numpy and scipy modules [13.07.09]
 # VERSION 0.0.2
 #  - changed requirements on ppfd and nee pairs [13.07.10]
-#    --> ppfd has to be positive 
+#    --> ppfd has to be positive
 #  - added goodness_of_fit function [13.07.10]
 # VERSION 0.0.3
 #  - added get_dates function [13.07.11]
 #  - added update_guess function [13.07.11]
-#  - added check on monthly_pair; need at least two observations for 
+#  - added check on monthly_pair; need at least two observations for
 #    processing regressions [13.07.11]
 #    --> updated to >2 observations (required for model_h) [13.07.16]
 #    --> updated to >3 observations otherwise mse divides by zero [13.07.19]
@@ -91,12 +96,12 @@
 # VERSION 0.0.5
 #  - updated naming convensions for PEP8 [13.07.16]
 #  - updated get_dates function [13.07.16]
-#    --> made startind date begin at day 1 
+#    --> made startind date begin at day 1
 #  - added PPFD & NEE list sepration in monthly_ppfd_nee function [13.07.16]
 # VERSION 0.1.0
 #  - changed the way model_h handles zero division errors [13.07.17]
 #    --> add +1e-6 to denominator
-#  - added standard error lists for optimization parameters and added 
+#  - added standard error lists for optimization parameters and added
 #    calculation for them [13.07.17]
 #  - import sys (noticed is was used in connect_sql function) [13.07.17]
 #  - changed datasets from lists to numpy.ndarrays [13.07.17]
@@ -108,10 +113,10 @@
 # VERSION 0.2.0
 #  - significant formatting updates [13.07.18]
 #  - added summary_statistics function and output [13.07.18]
-#  - important update to crosstab query in monthly_ppfd_nee function; 
+#  - important update to crosstab query in monthly_ppfd_nee function;
 #    added category_sql [13.07.18]
 #  - ppfd and nee records flipped in monthly_ppfd_nee tuples [13.07.18]
-#    --> for some reason ppfd and nee are received in the main code in the 
+#    --> for some reason ppfd and nee are received in the main code in the
 #        opposite order as sent
 # VERSION 0.2.1
 #  - updated update_guess:
@@ -128,7 +133,7 @@
 # VERSION 0.4.0
 #  - created summary_file_init() function [13.09.12]
 #  - created partition() function w/ write_out and rm_out booleans [13.09.12]
-#  - updated update_guess ZeroDivision exception handling; changed 
+#  - updated update_guess ZeroDivision exception handling; changed
 #    denominator only [13.09.12]
 #  - updated connect_sql() to look for credential file [13.09.12]
 #  - added os.path to module list [13.09.12]
@@ -213,7 +218,7 @@
 # VERSION 1.4.0-run16 [14.01.11]
 # VERSION 1.5.0
 #  - GPP calculation error [14.01.12]
-#    --> source: http://chemwiki.ucdavis.edu/Analytical_Chemistry/               \
+#    --> source: http://chemwiki.ucdavis.edu/Analytical_Chemistry/            \
 #        Quantifying_Nature/Significant_Digits/Propagation_of_Error
 #    --> added to calc_gpp function in FLUX_PARTI
 #  - added gpp_err as second return value [14.01.12]
@@ -231,7 +236,7 @@
 #  - updated calc_k, calc_kc, calc_ko, calc_gstar functions [14.02.19]
 #    --> use constant partial pressures for kc, ko and gstar
 #  - updated lue_model [14.02.19]
-#    --> no more V1-V4 shananagens 
+#    --> no more V1-V4 shananagens
 # VERSION 1.6.3
 #  - added [lm/hm]_resid_var[_ro] to variable list in FLUX_PARTI [14.03.10]
 # VERSION 1.7.0-run20
@@ -278,8 +283,8 @@
 #    --> 0 < alpha < 1
 #  - new model_selection criteria [14.04.03]
 #    --> check three criteria: R2 thresh, p-value thresh, param validity
-#    --> if more than one model meets all criteria, check for difference 
-#        between linear and hyperbolic (more than 1% difference) like in 
+#    --> if more than one model meets all criteria, check for difference
+#        between linear and hyperbolic (more than 1% difference) like in
 #        Ruimy et al. 1995
 #    --> outlier versus observation
 #    --> problem finding model ...
@@ -296,7 +301,7 @@
 # VERSION 1.8.4-run25
 #  - moved gap_fill outside conditionals to run all months [14.06.24]
 #    --> undone after model run
-#  - added else to create blank FLUX_PARTI class for poor months [14.06.24] 
+#  - added else to create blank FLUX_PARTI class for poor months [14.06.24]
 #  - moved summary stats outside conditional to run all months [14.06.24]
 # VERSION 1.9.0
 #  - updated class & function doc [14.09.25]
@@ -337,13 +342,13 @@
 #  - updated gapfill_ppfd() function [15.01.30]
 #    --> now outputs array of associated datetime objects
 #  - updated calc_gpp() in FLUX_PARTI class for model select 0 [15.01.30]
-#    --> try hyperbolic model estimates with outliers removed first or default 
+#    --> try hyperbolic model estimates with outliers removed first or default
 #        to linear model estimates with outliers removed
 #  - updated Pearson's r calculation in FLUXPARTI class [15.01.30]
 #    --> use scipy.stats.linregress()
 #  - updated the order of functions [15.01.30]
 #    --> base and dependant function sections
-#    --> otherwise alphabetized 
+#    --> otherwise alphabetized
 # VERSION 2.1.0
 #  - updated LUE class [15.02.20]
 #    --> removed basic_lue() function
@@ -362,14 +367,15 @@
 #    --> moved daily processing & file writing to gapfill_ppfd_day
 #  - updated SOLAR class with local_time class variable [15.02.23]
 #  - created daily_gpp function [15.02.23]
-# 
+#  - PEP8 style fixes [15.11.18]
+#
 # -----
 # todo:
 # -----
 # xx gapfill_ppfd
 #    x what to do with sfactor when ppfd_integral = 0?
 #    --> currently sfactor set to 1.0 (arbitrarily)
-#    --> DOESN'T MATTER, POLAR NIGHT, ppfd_hh WILL BE ARRAY OF ZEROS 
+#    --> DOESN'T MATTER, POLAR NIGHT, ppfd_hh WILL BE ARRAY OF ZEROS
 #
 # xx Implement specific model runs, e.g.:
 #    x calculate daily GPP for a given day and station
@@ -385,14 +391,14 @@
 #    a. check data validity after outliers are removed before reprocessing
 #
 # 3. model_select()
-#    a. Consider implementing either Shapiro-Wilks or Anderson test of 
+#    a. Consider implementing either Shapiro-Wilks or Anderson test of
 #       normality on model residuals
 #    --> scipy.stats.shapiro(my_resids)
 #        * returns test statistic and p-value
 #        * Note: p-value indicates significantly different from normal
 #    --> scipy.stats.anderson(my_resids, 'norm')
 #        * returns test statistic, array of critical values, and sig values
-#        * if test statistic is larger than the critical value at the 
+#        * if test statistic is larger than the critical value at the
 #          significance value you are interested in, then the null can be
 #          rejected, i.e., not normal
 #    b. Or use Willmott's revised index of agreement
@@ -400,9 +406,9 @@
 # 4. Check for system closure (each station, each month?)
 #    --> short equation: Rn + G + LE + H = 0
 #
-################################################################################
-## IMPORT MODULES 
-################################################################################
+###############################################################################
+# IMPORT MODULES
+###############################################################################
 from sys import exit
 import datetime
 import os.path
@@ -412,13 +418,14 @@ import scipy.special
 import scipy.stats
 from scipy.optimize import curve_fit
 
-################################################################################
-## CLASSES 
-################################################################################
+
+###############################################################################
+# CLASSES
+###############################################################################
 class FLUX_PARTI:
     """
     Name:     FLUX_PARTI
-    Features: This class performs flux partitioning of monthly NEE & PPFD 
+    Features: This class performs flux partitioning of monthly NEE & PPFD
               observations
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
@@ -426,7 +433,7 @@ class FLUX_PARTI:
     # ////////////////////////////////////////////////////////////////////////
     # Flux tower name & month being processed:
     name = ""
-    month = datetime.date(1999,1,1)
+    month = datetime.date(1999, 1, 1)
     #
     # PPFD and NEE arrays:
     # "h" and "l" indicate hyperbolic and linear models
@@ -569,7 +576,7 @@ class FLUX_PARTI:
     #
     # Model selection:
     mod_select = 0
-    #
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
     # ////////////////////////////////////////////////////////////////////////
@@ -580,9 +587,9 @@ class FLUX_PARTI:
                   - list, monthly NEE observations (n)
                   - string, flux tower name (t)
                   - datetime.date, current month (m)
-        Features: Initialize the class with observation data, calculate basic 
-                  statistics, estimate model parameters, and calculate Pearson's
-                  correlation coefficient
+        Features: Initialize the class with observation data, calculate basic
+                  statistics, estimate model parameters, and calculate
+                  Pearson's correlation coefficient
         """
         # Save tower name & month being processed:
         self.name = t
@@ -594,18 +601,18 @@ class FLUX_PARTI:
         #
         # Calculate statistics for observations:
         (
-            self.max_ppfd, 
-            self.min_ppfd, 
-            self.ave_ppfd, 
-            self.std_ppfd, 
-            self.skw_ppfd, 
+            self.max_ppfd,
+            self.min_ppfd,
+            self.ave_ppfd,
+            self.std_ppfd,
+            self.skw_ppfd,
             self.krt_ppfd) = self.calc_statistics(p)
         (
-            self.max_nee, 
-            self.min_nee, 
-            self.ave_nee, 
-            self.std_nee, 
-            self.skw_nee, 
+            self.max_nee,
+            self.min_nee,
+            self.ave_nee,
+            self.std_nee,
+            self.skw_nee,
             self.krt_nee) = self.calc_statistics(n)
         self.save_stats(obs=1, h=-1)
         #
@@ -614,8 +621,8 @@ class FLUX_PARTI:
         self.save_estimates(obs=1, h=-1)
         #
         # Calculate Pearson's correlation coefficient:
-        self.r_obs = self.pearsons_r(n,p)
-    #
+        self.r_obs = self.pearsons_r(n, p)
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
     # ////////////////////////////////////////////////////////////////////////
@@ -649,11 +656,11 @@ class FLUX_PARTI:
                 std_val = 1e-4
             #
             skew_val = (
-                sum((my_array - ave_val)**3)/
+                sum((my_array - ave_val)**3) /
                 ((len(my_array) - 1)*std_val**3)
                 )
             kurt_val = (
-                sum((my_array - ave_val)**4)/
+                sum((my_array - ave_val)**4) /
                 ((len(my_array) - 1)*std_val**4) - 3
                 )
         else:
@@ -666,7 +673,7 @@ class FLUX_PARTI:
             kurt_val = 0.0
             #
         return (max_val, min_val, ave_val, std_val, skew_val, kurt_val)
-    #
+
     def pearsons_r(self, x, y):
         """
         Name:     FLUX_PARTI.pearsons_r
@@ -699,16 +706,16 @@ class FLUX_PARTI:
                 return -9999.0
             else:
                 return pearsonsr
-    #
+
     def save_stats(self, obs, h):
         """
         Name:     FLUX_PARTI.save_stats
         Inputs:   - int, observation flag (obs)
                   - int, hyperbolic model flag (h)
         Output:   None.
-        Features: Saves the current statistical parameters to either observation
-                  (obs==1) or outliers removed (obs==0) for either the 
-                  hyperbolic (h==1) or linear (h==0) model
+        Features: Saves the current statistical parameters to either
+                  observation (obs==1) or outliers removed (obs==0) for either
+                  the hyperbolic (h==1) or linear (h==0) model
         """
         if obs == 1:
             # Backup Observation Data:
@@ -754,19 +761,19 @@ class FLUX_PARTI:
                 self.std_nee_ro_l = self.std_nee
                 self.skw_nee_ro_l = self.skw_nee
                 self.krt_nee_ro_l = self.krt_nee
-    #
+
     def update_guess(self):
         """
         Name:     FLUX_PARTI.update_guess
         Input:    None.
         Output:   None.
-        Features: Updates the model parameter estimation values based on the 
+        Features: Updates the model parameter estimation values based on the
                   current data statistics
         """
         # Linear model [alpha, R]:
         try:
             self.lm_estimates[0] = (
-                0.672*(self.max_nee - self.min_nee)/
+                0.672*(self.max_nee - self.min_nee) /
                 (self.max_ppfd - self.min_ppfd)
                 )
         except ZeroDivisionError:
@@ -775,9 +782,9 @@ class FLUX_PARTI:
             if abs(self.lm_estimates[0]) <= 5.0e-4:
                 self.lm_estimates[0] = 1.0e-3
         self.lm_estimates[1] = (
-            0.899*self.std_nee 
-            + 0.827*self.ave_nee 
-            + 0.00628*self.ave_ppfd 
+            0.899*self.std_nee
+            + 0.827*self.ave_nee
+            + 0.00628*self.ave_ppfd
             - 0.008*self.std_ppfd
         )
         #
@@ -785,7 +792,7 @@ class FLUX_PARTI:
         self.hm_estimates[0] = 3.83*self.std_nee
         try:
             self.hm_estimates[1] = (
-                1.96*(self.max_nee - self.min_nee)/
+                1.96*(self.max_nee - self.min_nee) /
                 (self.max_ppfd - self.min_ppfd)
                 )
         except ZeroDivisionError:
@@ -794,7 +801,7 @@ class FLUX_PARTI:
             if abs(self.hm_estimates[1]) <= 5.0e-4:
                 self.hm_estimates[1] = 1.0e-3
         self.hm_estimates[2] = 0.69*self.std_nee
-    #
+
     def save_estimates(self, obs, h):
         """
         Name:     FLUX_PARTI.save_estimates
@@ -802,7 +809,7 @@ class FLUX_PARTI:
                   - int, hyperbolic model flag (h)
         Output:   None.
         Features: Saves the current model estimates to either observation
-                  (obs==1) or outliers removed (obs==0) for either the 
+                  (obs==1) or outliers removed (obs==0) for either the
                   hyperbolic (h==1) or linear (h==0) model
         """
         if obs == 1:
@@ -817,7 +824,7 @@ class FLUX_PARTI:
             elif h == 0:
                 # Outliers Based on Linear Model
                 self.lm_estimates_ro = self.lm_estimates
-    #
+
     def model_h(self, x, Foo, alpha, R):
         """
         Name:     FLUX_PARTI.model_h
@@ -826,7 +833,7 @@ class FLUX_PARTI:
                   - float, hyperbolic parameter (alpha)
                   - float, hyperbolic parameter (R)
         Output:   numpy.ndarray, modeled NEE
-        Features: Returns array of NEE based on the hyperbolic model in the 
+        Features: Returns array of NEE based on the hyperbolic model in the
                   form: Y = (ax+b)/(bx+c)
         Ref:      Eq. 15, GePiSaT Documentation
         """
@@ -844,7 +851,7 @@ class FLUX_PARTI:
             denominator = numpy.array(denominator)
             #
         return (numerator/denominator)
-    #
+
     def model_l(self, x, alpha, R):
         """
         Name:     FLUX_PARTI.model_l
@@ -852,26 +859,26 @@ class FLUX_PARTI:
                   - float, linear parameter (alpha)
                   - float, linear parameter (R)
         Output:   - numpy.ndarray, modeled NEE
-        Features: Returns array of NEE based on the linear model in the form: 
+        Features: Returns array of NEE based on the linear model in the form:
                   Y = ax+b
         Ref:      Eq. 14, GePiSaT Documentation
         """
         a = -1.0*alpha
         b = R
         return (a*x + b)
-    #
+
     def calc_model_h(self):
         """
         Name:     FLUX_PARTI.calc_model
         Input:    None.
         Output:   None.
-        Features: Calculates NEE and the fitness statistics using the 
-                  optimization parameters for the hyperbolic model based on the 
+        Features: Calculates NEE and the fitness statistics using the
+                  optimization parameters for the hyperbolic model based on the
                   observation data
         """
-        self.nee_model_h = self.model_h(self.ppfd_obs, 
-                                        self.hm_optimized[0], 
-                                        self.hm_optimized[1], 
+        self.nee_model_h = self.model_h(self.ppfd_obs,
+                                        self.hm_optimized[0],
+                                        self.hm_optimized[1],
                                         self.hm_optimized[2])
         #
         if -9999 in self.hm_optimized:
@@ -879,24 +886,24 @@ class FLUX_PARTI:
             self.hm_rmse = -9999.0
             self.hm_rsqr = -9999.0
         else:
-            (self.hm_mse, 
-            self.hm_rmse, 
-            self.hm_rsqr) = self.goodness_of_fit(self.nee_model_h, 
-                                                 self.nee_obs, 
-                                                 3)
-    #
+            (self.hm_mse,
+             self.hm_rmse,
+             self.hm_rsqr) = self.goodness_of_fit(self.nee_model_h,
+                                                  self.nee_obs,
+                                                  3)
+
     def calc_model_h_ro(self):
         """
         Name:     FLUX_PARTI.calc_model_h_ro
         Input:    None.
         Output:   None.
-        Features: Calculates NEE and the fitness statistics using the 
-                  optimization parameters for the hyperbolic model based on the 
+        Features: Calculates NEE and the fitness statistics using the
+                  optimization parameters for the hyperbolic model based on the
                   observation data with outliers removed
         """
-        self.nee_model_h_ro = self.model_h(self.ppfd_obs_h_ro, 
-                                           self.hm_optimized_ro[0], 
-                                           self.hm_optimized_ro[1], 
+        self.nee_model_h_ro = self.model_h(self.ppfd_obs_h_ro,
+                                           self.hm_optimized_ro[0],
+                                           self.hm_optimized_ro[1],
                                            self.hm_optimized_ro[2])
         #
         if -9999 in self.hm_optimized_ro:
@@ -904,23 +911,23 @@ class FLUX_PARTI:
             self.hm_rmse_ro = -9999.0
             self.hm_rsqr_ro = -9999.0
         else:
-            (self.hm_mse_ro, 
-            self.hm_rmse_ro, 
-            self.hm_rsqr_ro) = self.goodness_of_fit(self.nee_model_h_ro, 
-                                                    self.nee_obs_h_ro, 
-                                                    3)
-    #
+            (self.hm_mse_ro,
+             self.hm_rmse_ro,
+             self.hm_rsqr_ro) = self.goodness_of_fit(self.nee_model_h_ro,
+                                                     self.nee_obs_h_ro,
+                                                     3)
+
     def calc_model_l(self):
         """
         Name:     FLUX_PARTI.calc_model_l
         Input:    None.
         Output:   None.
-        Features: Calculates NEE and the fitness statistics using the 
-                  optimization parameters for the linear model based on the 
+        Features: Calculates NEE and the fitness statistics using the
+                  optimization parameters for the linear model based on the
                   observation data
         """
-        self.nee_model_l = self.model_l(self.ppfd_obs, 
-                                        self.lm_optimized[0], 
+        self.nee_model_l = self.model_l(self.ppfd_obs,
+                                        self.lm_optimized[0],
                                         self.lm_optimized[1])
         #
         if -9999 in self.lm_optimized:
@@ -928,23 +935,23 @@ class FLUX_PARTI:
             self.lm_rmse = -9999.0
             self.lm_rsqr = -9999.0
         else:
-            (self.lm_mse, 
-            self.lm_rmse, 
-            self.lm_rsqr) = self.goodness_of_fit(self.nee_model_l, 
-                                                 self.nee_obs, 
-                                                 2)
-    #
+            (self.lm_mse,
+             self.lm_rmse,
+             self.lm_rsqr) = self.goodness_of_fit(self.nee_model_l,
+                                                  self.nee_obs,
+                                                  2)
+
     def calc_model_l_ro(self):
         """
         Name:     FLUX_PARTI.calc_model_l_ro
         Input:    None.
         Output:   None.
-        Features: Calculates NEE and the fitness statistics using the 
-                  optimization parameters for the linear model based on the 
+        Features: Calculates NEE and the fitness statistics using the
+                  optimization parameters for the linear model based on the
                   observation data with outliers removed
         """
-        self.nee_model_l_ro = self.model_l(self.ppfd_obs_l_ro, 
-                                           self.lm_optimized_ro[0], 
+        self.nee_model_l_ro = self.model_l(self.ppfd_obs_l_ro,
+                                           self.lm_optimized_ro[0],
                                            self.lm_optimized_ro[1])
         #
         if -9999 in self.lm_optimized_ro:
@@ -952,12 +959,12 @@ class FLUX_PARTI:
             self.lm_rmse_ro = -9999.0
             self.lm_rsqr_ro = -9999.0
         else:
-            (self.lm_mse_ro, 
-            self.lm_rmse_ro, 
-            self.lm_rsqr_ro) = self.goodness_of_fit(self.nee_model_l_ro, 
-                                                    self.nee_obs_l_ro, 
-                                                    2)
-    #
+            (self.lm_mse_ro,
+             self.lm_rmse_ro,
+             self.lm_rsqr_ro) = self.goodness_of_fit(self.nee_model_l_ro,
+                                                     self.nee_obs_l_ro,
+                                                     2)
+
     def goodness_of_fit(self, modvals, obsvals, nparams):
         """
         Name:     FLUX_PARTI.goodness_of_fit
@@ -968,7 +975,7 @@ class FLUX_PARTI:
                   - float, mean squared error (mse)
                   - float, root-mean squared error (rmse)
                   - float, adjusted coefficient of determination (r2_adj)
-        Features: Returns the mean squared error, RMSE, and R-squared for  
+        Features: Returns the mean squared error, RMSE, and R-squared for
                   given modeled values
         """
         # Initialize return values:
@@ -991,7 +998,7 @@ class FLUX_PARTI:
             # R-squared:
             #r2 = 1.0 - float(sse)/sst
             r2_adj = 1.0 - (
-                float(sse)/sst*(len(obsvals) - 1.0)/
+                float(sse)/sst*(len(obsvals) - 1.0) /
                 float(len(obsvals) - nparams - 1.0)
                 )
             #
@@ -999,13 +1006,13 @@ class FLUX_PARTI:
             rmse = numpy.sqrt(float(sse)/len(obsvals))
             #
         return (mse, rmse, r2_adj)
-    #
+
     def remove_mh_outliers(self):
         """
         Name:     FLUX_PARTI.remove_mh_outliers
         Input:    None.
         Output:   int, success flag (rval)
-        Features: Returns flag indicating the successful removal of outliers 
+        Features: Returns flag indicating the successful removal of outliers
                   from the hyperbolic model observations; saves outlier-free
                   data, new statistics, and updated model estimates
         Ref:      Chapter 11.5, GePiSaT Documentation
@@ -1061,37 +1068,37 @@ class FLUX_PARTI:
         if self.ppfd_obs_h_ro.any() and self.nee_obs_h_ro.any():
             # Recalculate statistics and update guess values:
             (
-                self.max_ppfd, 
-                self.min_ppfd, 
-                self.ave_ppfd, 
-                self.std_ppfd, 
-                self.skw_ppfd, 
+                self.max_ppfd,
+                self.min_ppfd,
+                self.ave_ppfd,
+                self.std_ppfd,
+                self.skw_ppfd,
                 self.krt_ppfd) = self.calc_statistics(self.ppfd_obs_h_ro)
             (
-                self.max_nee, 
-                self.min_nee, 
-                self.ave_nee, 
-                self.std_nee, 
-                self.skw_nee, 
+                self.max_nee,
+                self.min_nee,
+                self.ave_nee,
+                self.std_nee,
+                self.skw_nee,
                 self.krt_nee) = self.calc_statistics(self.nee_obs_h_ro)
             self.save_stats(obs=0, h=1)
             self.update_guess()
             self.save_estimates(obs=0, h=1)
             self.r_ro_h = self.pearsons_r(
-                self.ppfd_obs_h_ro, 
+                self.ppfd_obs_h_ro,
                 self.nee_obs_h_ro
                 )
             rval = 1
         else:
             rval = 0
         return rval
-    #
+
     def remove_ml_outliers(self):
         """
         Name:     FLUX_PARTI.remove_ml_outliers
         Input:    None.
         Output:   int, success flag (rval)
-        Features: Returns flag indicating the successful removal of outliers 
+        Features: Returns flag indicating the successful removal of outliers
                   from the linear model observations; saves outlier-free
                   data, new statistics, and updated model estimates
         Ref:      Chapter 11.5, GePiSaT Documentation
@@ -1131,9 +1138,8 @@ class FLUX_PARTI:
             if peirce_lc_n >= peirce_cap_n:
                 peirce_lc_n = outliers_found + 1.0
             else:
-	        self.peirce_x2 = self.peirce_dev(
-	           peirce_cap_n, peirce_lc_n, peirce_m
-	           )
+                self.peirce_x2 = self.peirce_dev(
+                    peirce_cap_n, peirce_lc_n, peirce_m)
                 self.peirce_delta2 = self.hm_mse*self.peirce_x2
                 outliers_index = numpy.where(sq_errors > self.peirce_delta2)[0]
                 outliers_found = len(outliers_index)
@@ -1148,18 +1154,18 @@ class FLUX_PARTI:
         if self.ppfd_obs_l_ro.any() and self.nee_obs_l_ro.any():
             # Recalculate statistics and update guess values:
             (
-                self.max_ppfd, 
-                self.min_ppfd, 
-                self.ave_ppfd, 
-                self.std_ppfd, 
-                self.skw_ppfd, 
+                self.max_ppfd,
+                self.min_ppfd,
+                self.ave_ppfd,
+                self.std_ppfd,
+                self.skw_ppfd,
                 self.krt_ppfd) = self.calc_statistics(self.ppfd_obs_h_ro)
             (
-                self.max_nee, 
-                self.min_nee, 
-                self.ave_nee, 
-                self.std_nee, 
-                self.skw_nee, 
+                self.max_nee,
+                self.min_nee,
+                self.ave_nee,
+                self.std_nee,
+                self.skw_nee,
                 self.krt_nee) = self.calc_statistics(self.nee_obs_h_ro)
             self.save_stats(obs=0, h=0)
             self.update_guess()
@@ -1172,7 +1178,7 @@ class FLUX_PARTI:
         else:
             rval = 0
         return rval
-    #
+
     def peirce_dev(self, peirce_cap_n, peirce_lc_n, peirce_m):
         """
         Name:     FLUX_PARTI.peirce_dev
@@ -1180,7 +1186,7 @@ class FLUX_PARTI:
                   - int, number of outliers to be removed (peirce_lc_n)
                   - int, number of model unknowns (peirce_m)
         Output:   float, squared error threshold (x2)
-        Features: Returns the squared threshold error deviation for outlier 
+        Features: Returns the squared threshold error deviation for outlier
                   identification using Peirce's criterion based on Gould's
                   methodology
         Ref:      Chapter 11.5, GePiSaT Documentation
@@ -1201,7 +1207,7 @@ class FLUX_PARTI:
             Rnew = 1.0  # <- Tried values between 1 and 10 and all seem stable
             Rold = 0.0  # <- Necessary to prompt while loop
             #
-            while ( abs(Rnew - Rold) > (N*2.0e-16) ):
+            while (abs(Rnew - Rold) > (N*2.0e-16)):
                 # Calculate Lamda (1/(N-n)th root of Gould's equation A'):
                 ldiv = Rnew**n
                 if ldiv == 0:
@@ -1219,20 +1225,20 @@ class FLUX_PARTI:
                     # Use x-squared to update R (Gould's equation D):
                     Rold = Rnew
                     Rnew = (
-                        numpy.exp((x2 - 1)/2.0)*
+                        numpy.exp((x2 - 1)/2.0) *
                         scipy.special.erfc(numpy.sqrt(x2)/numpy.sqrt(2.0))
                         )
                     #
         else:
             x2 = 0.0
         return x2
-    #
+
     def summary_statistics(self):
         """
         Name:     FLUX_PARTI.summary_statistics
         Input:    None.
         Output:   string, summary of statistics (sum_stat)
-        Features: Returns output string that summarizes all variables in this 
+        Features: Returns output string that summarizes all variables in this
                   class
         """
         # Fields:
@@ -1243,39 +1249,39 @@ class FLUX_PARTI:
         # 05. n_l ........... :: outliers identified in model l
         # 06. foo_est_obs_h   :: Foo estimate for observations for model H
         # 07. foo_opt_obs_h   :: Foo optimized for observations for model H
-        # 08. foo_err_obs_h   :: Foo standard error for observations for model H
+        # 08. foo_err_obs_h   :: Foo std error for observations for model H
         # 09. foo_t_obs_h     :: Foo t-statistic for observations for model H
         # 10. foo_p_obs_h     :: Foo p-value for observations for model H
         # 11. foo_est_ro_h    :: Foo estimate for obs w/o outliers model H
-        # 12. foo_opt_ro_h .. :: Foo optimized for observations w/o outliers 
+        # 12. foo_opt_ro_h .. :: Foo optimized for observations w/o outliers
         #                        for model H
-        # 13. foo_err_ro_h .. :: Foo standard error for observations w/o 
+        # 13. foo_err_ro_h .. :: Foo standard error for observations w/o
         #                        outliers for model H
         # 14. foo_t_ro_h      :: Foo t-value for obs w/o outliers for model H
         # 15. foo_p_ro_h      :: Foo p-value for obs w/o outliers for model H
         # 16. alpha_est_obs_h :: alpha estimate for observations for model H
         # 17. alpha_opt_obs_h :: alpha optimized for observations for model H
-        # 18. alpha_err_obs_h :: alpha standard error for observations for 
+        # 18. alpha_err_obs_h :: alpha standard error for observations for
         #                        model H
         # 19. alpha_t_obs_h   :: alpha t-value for observations for model L
         # 20. alpha_p_obs_h   :: alpha p-value for observations for model L
         # 21. alpha_est_ro_h  :: alpha estimate for obs w/o outliers model H
-        # 22. alpha_opt_ro_h  :: alpha optimized for observations w/o outliers 
+        # 22. alpha_opt_ro_h  :: alpha optimized for observations w/o outliers
         #                        for model H
-        # 23. alpha_err_ro_h  :: alpha standard error for observations w/o 
+        # 23. alpha_err_ro_h  :: alpha standard error for observations w/o
         #                        outliers for model H
         # 24. alpha_t_ro_h    :: alpha t-value for observations for model L
         # 25. alpha_p_ro_h    :: alpha p-value for observations for model L
         # 26. alpha_est_obs_l :: alpha estimate for observations for model L
         # 27. alpha_opt_obs_l :: alpha optimized for observations for model L
-        # 28. alpha_err_obs_l :: alpha standard error for observations for 
+        # 28. alpha_err_obs_l :: alpha standard error for observations for
         #                        model L
         # 29. alpha_t_obs_l   :: alpha t-value for observations for model L
         # 30. alpha_p_obs_l   :: alpha p-value for observations for model L
         # 31. alpha_est_ro_l  :: alpha estimate for obs w/o outliers model L
-        # 32. alpha_opt_ro_l  :: alpha optimized for observations w/o outliers 
+        # 32. alpha_opt_ro_l  :: alpha optimized for observations w/o outliers
         #                        for model L
-        # 33. alpha_err_ro_l  :: alpha standard error for observations w/o 
+        # 33. alpha_err_ro_l  :: alpha standard error for observations w/o
         #                        outliers for model L
         # 34. alpha_t_ro_l    :: alpha t-value for obs w/o outliers model L
         # 35. alpha_p_ro_l    :: alpha p-value for obs w/o outliers model L
@@ -1285,9 +1291,9 @@ class FLUX_PARTI:
         # 39. r_t_obs_h ..... :: R t-value for observations for model H
         # 40. r_p_obs_h ..... :: R p-value for observations for model H
         # 41. r_est_ro_h .... :: R estimate for obs w/o outliers model H
-        # 42. r_opt_ro_h .... :: R optimized for observations w/o outliers for 
+        # 42. r_opt_ro_h .... :: R optimized for observations w/o outliers for
         #                        model H
-        # 43. r_err_ro_h .... :: R standard error for observations w/o outliers 
+        # 43. r_err_ro_h .... :: R standard error for observations w/o outliers
         #                        for model H
         # 44. r_t_ro_h ...... :: R t-value for obs w/o outliers for model H
         # 45. r_p_ro_h ...... :: R p-value for obs w/o outliers for model H
@@ -1297,25 +1303,25 @@ class FLUX_PARTI:
         # 49. r_t_obs_l ..... :: R t-value for observations for model L
         # 50. r_p_obs_l ..... :: R p-value for observations for model L
         # 51. r_est_ro_l .... :: R estimate for obs w/o outliers model L
-        # 52. r_opt_ro_l .... :: R optimized for observations w/o outliers for 
+        # 52. r_opt_ro_l .... :: R optimized for observations w/o outliers for
         #                        model L
-        # 53. r_err_ro_l .... :: R standard error for observations w/o outliers 
+        # 53. r_err_ro_l .... :: R standard error for observations w/o outliers
         #                        for model L
         # 54. r_t_ro_l ...... :: R t-value for obs w/o outliers for model L
         # 55. r_p_ro_l ...... :: R p-value for obs w/o outliers for model L
         # 56. r2_obs_h ...... :: r-squared for observations for model H
-        # 57. r2_ro_h ....... :: r-squared for observations w/o outliers for 
+        # 57. r2_ro_h ....... :: r-squared for observations w/o outliers for
         #                        model H
         # 58. rmse_obs_h .... :: RMSE for observations for model H
         # 59. rmse_ro_h ..... :: RMSE for observations w/o outliers for model H
         # 60. r2_obs_l ...... :: r-squared for observations for model L
-        # 61. r2_ro_l ....... :: r-squared for observations w/o outliers for 
+        # 61. r2_ro_l ....... :: r-squared for observations w/o outliers for
         #                        model L
         # 62. rmse_obs_l .... :: RMSE for observations for model L
         # 63. rmse_ro_l ..... :: RMSE for observations w/o outliers for model L
-        # 64. min_ppfd_obs .. :: minimum of PPFD observations 
-        # 65. max_ppfd_obs .. :: maximum of PPFD observations 
-        # 66. ave_ppfd_obs .. :: average of PPFD observations 
+        # 64. min_ppfd_obs .. :: minimum of PPFD observations
+        # 65. max_ppfd_obs .. :: maximum of PPFD observations
+        # 66. ave_ppfd_obs .. :: average of PPFD observations
         # 67. std_ppfd_obs .. :: standard deviation of PPFD observations
         # 68. skw_ppfd_obs .. :: skew of PPFD observations
         # 69. krt_ppfd_obs .. :: kurtosis of PPFD observations
@@ -1376,69 +1382,69 @@ class FLUX_PARTI:
             "%0.2f,%0.2f,%0.2f,%0.2f,%0.2f,%0.2f,"        # 94--99
             "%0.3f,%0.3f,%0.3f,%d\n"                      # 100--103
             ) % (
-                self.name, self.month,                                 # 01--02
-                len(self.nee_obs), self.hm_outliers, self.lm_outliers, # 03--05
-                self.hm_estimates_obs[0], self.hm_optimized[0],        # 06--07
-                self.hm_optim_err[0],     self.hm_optim_t[0],          # 08--09
-                self.hm_optim_p[0],       self.hm_estimates_ro[0],     # 10--11
-                self.hm_optimized_ro[0],  self.hm_optim_err_ro[0],     # 12--13
-                self.hm_optim_t_ro[0],    self.hm_optim_p_ro[0],       # 14--15
-                self.hm_estimates_obs[1], self.hm_optimized[1],        # 16--17
-                self.hm_optim_err[1],     self.hm_optim_t[1],          # 18--19
-                self.hm_optim_p[1],       self.hm_estimates_ro[1],     # 20--21
-                self.hm_optimized_ro[1],  self.hm_optim_err_ro[1],     # 22--23
-                self.hm_optim_t_ro[1],    self.hm_optim_p_ro[1],       # 24--25
-                self.lm_estimates_obs[0], self.lm_optimized[0],        # 26--27
-                self.lm_optim_err[0],     self.lm_optim_t[0],          # 28--29
-                self.lm_optim_p[0],       self.lm_estimates_ro[0],     # 30--31
-                self.lm_optimized_ro[0],  self.lm_optim_err_ro[0],     # 32--33
-                self.lm_optim_t_ro[0],    self.lm_optim_p_ro[0],       # 34--35
-                self.hm_estimates_obs[2], self.hm_optimized[2],        # 36--37
-                self.hm_optim_err[2],     self.hm_optim_t[2],          # 38--39
-                self.hm_optim_p[2],       self.hm_estimates_ro[2],     # 40--41
-                self.hm_optimized_ro[2],  self.hm_optim_err_ro[2],     # 42--43
-                self.hm_optim_t_ro[2],    self.hm_optim_p_ro[2],       # 44--45
-                self.lm_estimates_obs[1], self.lm_optimized[1],        # 46--47
-                self.lm_optim_err[1],     self.lm_optim_t[1],          # 48--49
-                self.lm_optim_p[1],       self.lm_estimates_ro[1],     # 50--51
-                self.lm_optimized_ro[1],  self.lm_optim_err_ro[1],     # 52--53
-                self.lm_optim_t_ro[1],    self.lm_optim_p_ro[1],       # 54--55
-                self.hm_rsqr,             self.hm_rsqr_ro,             # 56--57
-                self.hm_rmse,             self.hm_rmse_ro,             # 58--59
-                self.lm_rsqr,             self.lm_rsqr_ro,             # 60--61
-                self.lm_rmse,             self.lm_rmse_ro,             # 62--63
-                self.min_ppfd_obs,        self.max_ppfd_obs,           # 64--65
-                self.ave_ppfd_obs,        self.std_ppfd_obs,           # 66--67
-                self.skw_ppfd_obs,        self.krt_ppfd_obs,           # 68--69
-                self.min_ppfd_ro_h,       self.max_ppfd_ro_h,          # 70--71
-                self.ave_ppfd_ro_h,       self.std_ppfd_ro_h,          # 72--73
-                self.skw_ppfd_ro_h,       self.krt_ppfd_ro_h,          # 74--75
-                self.min_ppfd_ro_l,       self.max_ppfd_ro_l,          # 76--77
-                self.ave_ppfd_ro_l,       self.std_ppfd_ro_l,          # 78--79
-                self.skw_ppfd_ro_l,       self.krt_ppfd_ro_l,          # 80--81
-                self.min_nee_obs,         self.max_nee_obs,            # 82--83
-                self.ave_nee_obs,         self.std_nee_obs,            # 84--85
-                self.skw_nee_obs,         self.krt_nee_obs,            # 86--87
-                self.min_nee_ro_h,        self.max_nee_ro_h,           # 88--89
-                self.ave_nee_ro_h,        self.std_nee_ro_h,           # 90--91
-                self.skw_nee_ro_h,        self.krt_nee_ro_h,           # 92--93
-                self.min_nee_ro_l,        self.max_nee_ro_l,           # 94--95
-                self.ave_nee_ro_l,        self.std_nee_ro_l,           # 96--97
-                self.skw_nee_ro_l,        self.krt_nee_ro_l,           # 98--99
-                self.r_obs,               self.r_ro_h,               # 100--101
-                self.r_ro_l,              self.mod_select            # 102--103
-                )
+            self.name, self.month,                                   # 01--02
+            len(self.nee_obs), self.hm_outliers, self.lm_outliers,   # 03--05
+            self.hm_estimates_obs[0], self.hm_optimized[0],          # 06--07
+            self.hm_optim_err[0],     self.hm_optim_t[0],            # 08--09
+            self.hm_optim_p[0],       self.hm_estimates_ro[0],       # 10--11
+            self.hm_optimized_ro[0],  self.hm_optim_err_ro[0],       # 12--13
+            self.hm_optim_t_ro[0],    self.hm_optim_p_ro[0],         # 14--15
+            self.hm_estimates_obs[1], self.hm_optimized[1],          # 16--17
+            self.hm_optim_err[1],     self.hm_optim_t[1],            # 18--19
+            self.hm_optim_p[1],       self.hm_estimates_ro[1],       # 20--21
+            self.hm_optimized_ro[1],  self.hm_optim_err_ro[1],       # 22--23
+            self.hm_optim_t_ro[1],    self.hm_optim_p_ro[1],         # 24--25
+            self.lm_estimates_obs[0], self.lm_optimized[0],          # 26--27
+            self.lm_optim_err[0],     self.lm_optim_t[0],            # 28--29
+            self.lm_optim_p[0],       self.lm_estimates_ro[0],       # 30--31
+            self.lm_optimized_ro[0],  self.lm_optim_err_ro[0],       # 32--33
+            self.lm_optim_t_ro[0],    self.lm_optim_p_ro[0],         # 34--35
+            self.hm_estimates_obs[2], self.hm_optimized[2],          # 36--37
+            self.hm_optim_err[2],     self.hm_optim_t[2],            # 38--39
+            self.hm_optim_p[2],       self.hm_estimates_ro[2],       # 40--41
+            self.hm_optimized_ro[2],  self.hm_optim_err_ro[2],       # 42--43
+            self.hm_optim_t_ro[2],    self.hm_optim_p_ro[2],         # 44--45
+            self.lm_estimates_obs[1], self.lm_optimized[1],          # 46--47
+            self.lm_optim_err[1],     self.lm_optim_t[1],            # 48--49
+            self.lm_optim_p[1],       self.lm_estimates_ro[1],       # 50--51
+            self.lm_optimized_ro[1],  self.lm_optim_err_ro[1],       # 52--53
+            self.lm_optim_t_ro[1],    self.lm_optim_p_ro[1],         # 54--55
+            self.hm_rsqr,             self.hm_rsqr_ro,               # 56--57
+            self.hm_rmse,             self.hm_rmse_ro,               # 58--59
+            self.lm_rsqr,             self.lm_rsqr_ro,               # 60--61
+            self.lm_rmse,             self.lm_rmse_ro,               # 62--63
+            self.min_ppfd_obs,        self.max_ppfd_obs,             # 64--65
+            self.ave_ppfd_obs,        self.std_ppfd_obs,             # 66--67
+            self.skw_ppfd_obs,        self.krt_ppfd_obs,             # 68--69
+            self.min_ppfd_ro_h,       self.max_ppfd_ro_h,            # 70--71
+            self.ave_ppfd_ro_h,       self.std_ppfd_ro_h,            # 72--73
+            self.skw_ppfd_ro_h,       self.krt_ppfd_ro_h,            # 74--75
+            self.min_ppfd_ro_l,       self.max_ppfd_ro_l,            # 76--77
+            self.ave_ppfd_ro_l,       self.std_ppfd_ro_l,            # 78--79
+            self.skw_ppfd_ro_l,       self.krt_ppfd_ro_l,            # 80--81
+            self.min_nee_obs,         self.max_nee_obs,              # 82--83
+            self.ave_nee_obs,         self.std_nee_obs,              # 84--85
+            self.skw_nee_obs,         self.krt_nee_obs,              # 86--87
+            self.min_nee_ro_h,        self.max_nee_ro_h,             # 88--89
+            self.ave_nee_ro_h,        self.std_nee_ro_h,             # 90--91
+            self.skw_nee_ro_h,        self.krt_nee_ro_h,             # 92--93
+            self.min_nee_ro_l,        self.max_nee_ro_l,             # 94--95
+            self.ave_nee_ro_l,        self.std_nee_ro_l,             # 96--97
+            self.skw_nee_ro_l,        self.krt_nee_ro_l,             # 98--99
+            self.r_obs,               self.r_ro_h,                  # 100--101
+            self.r_ro_l,              self.mod_select              # 102--103
+            )
         #
         return sum_stat
-    #
+
     def model_selection(self):
         """
         Name:     FLUX_PARTI.model_selection
         Input:    None.
         Output:   None.
-        Features: Saves the model (i.e., none, hyperbolic with 
-                  observations, hyperbolic with outliers removed, linear with 
-                  observations, linear with outliers removed) that ``best'' 
+        Features: Saves the model (i.e., none, hyperbolic with
+                  observations, hyperbolic with outliers removed, linear with
+                  observations, linear with outliers removed) that ``best''
                   represents the data based on thesholds of fitness, validity
                   of parameter values, and parameter significance
         """
@@ -1447,53 +1453,45 @@ class FLUX_PARTI:
         p_thresh = 0.05       # minimum parameter significance (95%)
         #
         # Initialize selection dictionary:
-        select_dict = {
-            'obs_h' : 1,
-            'ro_h'  : 2,
-            'obs_l' : 3,
-            'ro_l'  : 4
-            }
+        select_dict = {'obs_h': 1,
+                       'ro_h': 2,
+                       'obs_l': 3,
+                       'ro_l': 4}
         #
         # Initialize model failure dictionary:
-        model_dict = {
-            'obs_h' : 0,
-            'ro_h'  : 0,
-            'obs_l' : 0,
-            'ro_l'  : 0
-            }
+        model_dict = {'obs_h': 0,
+                      'ro_h': 0,
+                      'obs_l': 0,
+                      'ro_l': 0}
         #
         # Initialize R-squared dictionary:
-        r2_dict = {
-            'obs_h' : self.hm_rsqr,
-            'obs_l' : self.lm_rsqr,
-            'ro_h'  : self.hm_rsqr_ro,
-            'ro_l'  : self.lm_rsqr_ro
-            }
+        r2_dict = {'obs_h': self.hm_rsqr,
+                   'obs_l': self.lm_rsqr,
+                   'ro_h': self.hm_rsqr_ro,
+                   'ro_l': self.lm_rsqr_ro}
         #
         # Initialize P-value dictionary:
-        p_dict = {
-            'obs_h' : numpy.array(self.hm_optim_p),
-            'ro_h'  : numpy.array(self.hm_optim_p_ro),
-            'obs_l' : numpy.array(self.lm_optim_p),
-            'ro_l'  : numpy.array(self.lm_optim_p_ro)
-        }
+        p_dict = {'obs_h': numpy.array(self.hm_optim_p),
+                  'ro_h': numpy.array(self.hm_optim_p_ro),
+                  'obs_l': numpy.array(self.lm_optim_p),
+                  'ro_l': numpy.array(self.lm_optim_p_ro)}
         #
         # Initialize parameter value dictionary:
         value_dict = {
-            'obs_h' : {'foo'   : self.hm_optimized[0],
-                       'alpha' : self.hm_optimized[1],
-                       'r'     : self.hm_optimized[2]
-                       },
-            'ro_h'  : {'foo'   : self.hm_optimized_ro[0],
-                       'alpha' : self.hm_optimized_ro[1],
-                       'r'     : self.hm_optimized_ro[2]
-                       },
-            'obs_l' : {'alpha' : self.lm_optimized[0],
-                       'r'     : self.lm_optimized[1]
-                       },
-            'ro_l'  : {'alpha' : self.lm_optimized_ro[0],
-                       'r'     : self.lm_optimized_ro[1]
-                       }
+            'obs_h': {'foo': self.hm_optimized[0],
+                      'alpha': self.hm_optimized[1],
+                      'r': self.hm_optimized[2]
+                      },
+            'ro_h': {'foo': self.hm_optimized_ro[0],
+                     'alpha': self.hm_optimized_ro[1],
+                     'r': self.hm_optimized_ro[2]
+                     },
+            'obs_l': {'alpha': self.lm_optimized[0],
+                      'r': self.lm_optimized[1]
+                      },
+            'ro_l': {'alpha': self.lm_optimized_ro[0],
+                     'r': self.lm_optimized_ro[1]
+                     }
         }
         # Initialize model selection:
         best_model = 0
@@ -1503,7 +1501,7 @@ class FLUX_PARTI:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         if (numpy.array(r2_dict.values()) < r2_thresh).any():
             # Eliminate those with poor R2:
-            m_failed = [k for k,v in r2_dict.items() if v < r2_thresh]
+            m_failed = [k for k, v in r2_dict.items() if v < r2_thresh]
             for m in m_failed:
                 model_dict[m] = 1
         #
@@ -1511,22 +1509,22 @@ class FLUX_PARTI:
         # SECOND CRITERIA--- PARAMETER RANGE OF VALIDITY
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # -- rectangular hypberbola:
-        if (value_dict['obs_h']['foo'] > 100 or 
-            value_dict['obs_h']['foo'] < 0 or
-            value_dict['obs_h']['alpha'] > 1 or
-            value_dict['obs_h']['alpha'] < 0):
+        if (value_dict['obs_h']['foo'] > 100 or
+                value_dict['obs_h']['foo'] < 0 or
+                value_dict['obs_h']['alpha'] > 1 or
+                value_dict['obs_h']['alpha'] < 0):
             model_dict['obs_h'] = 1
-        if (value_dict['ro_h']['foo'] > 100 or 
-            value_dict['ro_h']['foo'] < 0 or
-            value_dict['ro_h']['alpha'] > 1 or
-            value_dict['ro_h']['alpha'] < 0):
+        if (value_dict['ro_h']['foo'] > 100 or
+                value_dict['ro_h']['foo'] < 0 or
+                value_dict['ro_h']['alpha'] > 1 or
+                value_dict['ro_h']['alpha'] < 0):
             model_dict['ro_h'] = 1
         # -- linear:
         if (value_dict['obs_l']['alpha'] > 1 or
-            value_dict['obs_l']['alpha'] < 0):
+                value_dict['obs_l']['alpha'] < 0):
             model_dict['obs_l'] = 1
         if (value_dict['ro_l']['alpha'] > 1 or
-            value_dict['ro_l']['alpha'] < 0):
+                value_dict['ro_l']['alpha'] < 0):
             model_dict['ro_l'] = 1
         #
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1546,7 +1544,7 @@ class FLUX_PARTI:
         # Let's see which models passed the selection criteria and how many
         # of them there are
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        mods = [k for k,v in model_dict.items() if v == 0]
+        mods = [k for k, v in model_dict.items() if v == 0]
         howmany = len(mods)
         #
         if howmany > 0:
@@ -1571,9 +1569,9 @@ class FLUX_PARTI:
                 #
                 # How many models meet this criteria:
                 mods_temp = [
-                    m for m in mods if 
+                    m for m in mods if
                     mods_rs[mods.index(m)] == max_rs and
-                    mods_ps[mods.index(m)] == min_ps 
+                    mods_ps[mods.index(m)] == min_ps
                     ]
                 n_temp = len(mods_temp)
                 #
@@ -1592,13 +1590,14 @@ class FLUX_PARTI:
                     best_model = select_dict[mods_temp[0]]
                 elif n_temp == 2:
                     # Choose the better of the two:
-                    if 1.01*r2_dict[mods_temp[1]] >= 0.99*r2_dict[mods_temp[0]]:
+                    if (1.01*r2_dict[mods_temp[1]] >=
+                            0.99*r2_dict[mods_temp[0]]):
                         best_model = select_dict[mods_temp[1]]
                     else:
                         best_model = select_dict[mods_temp[0]]
                 else:
-                    # There are 3 or 4 models 
-                    # that all having the same max R2 and min p-value.  
+                    # There are 3 or 4 models
+                    # that all having the same max R2 and min p-value.
                     # Default choices: ro_h, ro_l, obs_l, obs_h
                     if 'ro_h' in mods_temp:
                         best_model = select_dict['ro_h']
@@ -1611,7 +1610,7 @@ class FLUX_PARTI:
         #
         # Save model selection:
         self.mod_select = best_model
-    #
+
     def calc_gpp(self, ppfd):
         """
         Name:     FLUX_PARTI.calc_gpp
@@ -1619,7 +1618,7 @@ class FLUX_PARTI:
         Output:   tuple, modeled GPP and associated error
                   - numpy.ndarray, modeled GPP (gpp)
                   - numpy.ndarray, associated error (gpp_err)
-        Features: Returns GPP (umol m-2 s-1) and associated error based on the 
+        Features: Returns GPP (umol m-2 s-1) and associated error based on the
                   best model
         Ref:      Chapters 11.2 & 11.3, GePiSaT Documentation
         """
@@ -1658,7 +1657,7 @@ class FLUX_PARTI:
                 # Calculate GPP and its associated error:
                 gpp = afp/apf
                 gpp_err = numpy.sqrt(
-                    (alpha_err**2)*((foo*ppfd*apf - afpp)/(apf**2))**2 + 
+                    (alpha_err**2)*((foo*ppfd*apf - afpp)/(apf**2))**2 +
                     (foo_err**2)*((alpha*ppfd*apf - afp)/(apf**2))**2
                 )
             #
@@ -1682,7 +1681,7 @@ class FLUX_PARTI:
             # Calculate GPP and its associated error:
             gpp = afp/apf
             gpp_err = numpy.sqrt(
-                (alpha_err**2)*((foo*ppfd*apf - afpp)/(apf**2))**2 + 
+                (alpha_err**2)*((foo*ppfd*apf - afpp)/(apf**2))**2 +
                 (foo_err**2)*((alpha*ppfd*apf - afp)/(apf**2))**2
             )
             #
@@ -1701,25 +1700,26 @@ class FLUX_PARTI:
             #
         # Return GPP
         return (gpp, gpp_err)
-#
+
+
 class SOLAR:
     """
     Name:     SOLAR
-    Features: This class calculates the half-hourly extraterrestrial PPFD 
+    Features: This class calculates the half-hourly extraterrestrial PPFD
               [umol m-2 s-1], and the daily solar irradiation Ho [J m-2]
               based on the STASH 2.0 methodology
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Variable Definitions
     # ////////////////////////////////////////////////////////////////////////
-    ke = 0.0167   # eccentricity for 2000 CE (Berger, 1978)
-    keps = 23.44  # obliquity for 2000 CE, degrees (Berger, 1978)
-    kfFEC = 2.04  # From flux to energy conversion, umol/J (Meek et al., 1984)
-    kGsc = 1360.8 # Solar constant, W/m^2 (Kopp & Lean, 2011)
-    komega = 283. # longitude of perihelion for 2000 CE, degrees (Berger, 1978)
-    #
+    ke = 0.0167    # eccentricity for 2000 CE (Berger, 1978)
+    keps = 23.44   # obliquity for 2000 CE, degrees (Berger, 1978)
+    kfFEC = 2.04   # From flux to energy conversion, umol/J (Meek et al., 1984)
+    kGsc = 1360.8  # Solar constant, W/m^2 (Kopp & Lean, 2011)
+    komega = 283.  # longitude of perihelion for 2000 CE, deg (Berger, 1978)
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-    # Class Initialization 
+    # Class Initialization
     # ////////////////////////////////////////////////////////////////////////
     def __init__(self, lon, lat, n, y=0):
         """
@@ -1755,8 +1755,8 @@ class SOLAR:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         local_hh = numpy.array([0.5*i for i in xrange(48)])
         self.local_time = numpy.array([
-            datetime.datetime(self.year, 1 ,1 ,0, 0, 0) + 
-            datetime.timedelta(days=(n-1)) + 
+            datetime.datetime(self.year, 1, 1, 0, 0, 0) +
+            datetime.timedelta(days=(n-1)) +
             datetime.timedelta(hours=i) for i in local_hh
         ])
         #
@@ -1766,10 +1766,7 @@ class SOLAR:
         if y == 0:
             self.kN = 365.
         else:
-            self.kN = (
-                self.julian_day((y + 1), 1, 1) - 
-                self.julian_day(y, 1, 1)
-            )
+            self.kN = self.julian_day((y + 1), 1, 1) - self.julian_day(y, 1, 1)
         #
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 2. Calculate heliocentric longitudes (nu and lambda), degrees
@@ -1873,7 +1870,7 @@ class SOLAR:
         # Eq. 1.10.3, Duffy & Beckman (1993)
         ho = (86400.0/numpy.pi)*self.kGsc*dr*(ru*pir*hs + rv*self.dsin(hs))
         self.ho_jm2 = ho
-    #
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
     # ////////////////////////////////////////////////////////////////////////
@@ -1881,7 +1878,7 @@ class SOLAR:
         """
         Name:     SOLAR.berger_tls
         Input:    int, day of year
-        Output:   tuple, 
+        Output:   tuple,
                   - true anomaly, degrees
                   - true longitude, degrees
         Features: Returns true anomaly and true longitude for a given day
@@ -1889,12 +1886,12 @@ class SOLAR:
                   - komega
                   - kN
                   - dsin()
-        Ref:      Berger, A. L. (1978), Long term variations of daily insolation
-                  and quaternary climatic changes, J. Atmos. Sci., 35, 2362-
-                  2367.
+        Ref:      Berger, A. L. (1978), Long term variations of daily
+                  insolation and quaternary climatic changes, J. Atmos. Sci.,
+                  35, 2362-2367.
         """
         # Variable substitutes:
-        xee = self.ke**2 
+        xee = self.ke**2
         xec = self.ke**3
         xse = numpy.sqrt(1.0 - xee)
         pir = numpy.pi/180.0
@@ -1933,7 +1930,7 @@ class SOLAR:
             my_nu += 360.0
         #
         return(my_nu, my_tls)
-    #
+
     def dcos(self, x):
         """
         Name:     SOLAR.dcos
@@ -1942,7 +1939,7 @@ class SOLAR:
         Features: Calculates the cosine of an angle given in degrees
         """
         return numpy.cos(x*numpy.pi/180.0)
-    #
+
     def dsin(self, x):
         """
         Name:     SOLAR.dsin
@@ -1951,7 +1948,7 @@ class SOLAR:
         Features: Calculates the sine of an angle given in degrees
         """
         return numpy.sin(x*numpy.pi/180.0)
-    #
+
     def julian_day(self, y, m, i):
         """
         Name:     SOLAR.julian_day
@@ -1959,9 +1956,9 @@ class SOLAR:
                   - int, month (m)
                   - int, day of month (i)
         Output:   float, Julian Ephemeris Day
-        Features: Converts Gregorian date (year, month, day) to Julian 
+        Features: Converts Gregorian date (year, month, day) to Julian
                   Ephemeris Day
-        Ref:      Eq. 7.1, Meeus, J. (1991), Ch.7 "Julian Day," Astronomical 
+        Ref:      Eq. 7.1, Meeus, J. (1991), Ch.7 "Julian Day," Astronomical
                   Algorithms
         """
         if m <= 2.0:
@@ -1973,15 +1970,15 @@ class SOLAR:
         #
         jde = int(365.25*(y + 4716)) + int(30.6001*(m + 1)) + i + b - 1524.5
         return jde
-    #
+
     def spencer_eot(self, n):
         """
         Name:     SOLAR.spencer_eot
         Input:    int, day of the year (n)
         Output:   float, equation of time, hours
         Features: Returns the equation of time
-        Ref:      Spencer, J.W. (1971), Fourier series representation of the 
-                  position of the sun, Search, 2 (5), p. 172. 
+        Ref:      Spencer, J.W. (1971), Fourier series representation of the
+                  position of the sun, Search, 2 (5), p. 172.
         """
         B = 2.0*numpy.pi*(n - 1.0)/self.kN
         my_eot = (7.5e-6)
@@ -1991,7 +1988,8 @@ class SOLAR:
         my_eot -= (4.0849e-2)*self.dsin(2.0*B)
         my_eot *= (12.0/numpy.pi)
         return(my_eot)
-#
+
+
 class LUE:
     """
     Name:     LUE
@@ -2005,7 +2003,7 @@ class LUE:
     kphio = 0.093      # quantum efficiency (Long et al., 1993)
     kPo = 101325.      # standard atmosphere, Pa (Allen, 1973)
     kTo = 25.          # base temperature, deg C (Prentice, unpublished)
-    #
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
     # ////////////////////////////////////////////////////////////////////////
@@ -2017,32 +2015,32 @@ class LUE:
         # Dictionary of stations' monthly values & their units:
         # * this is for printing to file
         self.station_vals = {}
-        self.station_units = {'Timestamp' : 'NA', 
-                              'GPP' : 'mol_m2', 
-                              'GPP_err' : 'mol_m2', 
-                              'fPAR' : 'NA', 
-                              'PPFD' : 'mol_m2', 
-                              'VPD' : 'kPa', 
-                              'CPA' : 'NA', 
-                              'Tair' : 'degC', 
-                              'CO2' : 'ppm', 
-                              'Patm' : 'Pa',
-                              'elv' : 'm',
-                              'Iabs' : 'mol_m2', 
-                              'ca' : 'Pa',
-                              'Gs' : 'Pa', 
-                              'D' : 'Pa', 
-                              'K' : 'Pa', 
-                              'ns' : 'NA', 
-                              'fa' : 'NA',
-                              'beta1' : 'NA',
-                              'beta2' : 'NA',
-                              'GPP_hat1' : 'mol_m2',
-                              'GPP_hat2' : 'mol_m2'}
+        self.station_units = {'Timestamp': 'NA',
+                              'GPP': 'mol_m2',
+                              'GPP_err': 'mol_m2',
+                              'fPAR': 'NA',
+                              'PPFD': 'mol_m2',
+                              'VPD': 'kPa',
+                              'CPA': 'NA',
+                              'Tair': 'degC',
+                              'CO2': 'ppm',
+                              'Patm': 'Pa',
+                              'elv': 'm',
+                              'Iabs': 'mol_m2',
+                              'ca': 'Pa',
+                              'Gs': 'Pa',
+                              'D': 'Pa',
+                              'K': 'Pa',
+                              'ns': 'NA',
+                              'fa': 'NA',
+                              'beta1': 'NA',
+                              'beta2': 'NA',
+                              'GPP_hat1': 'mol_m2',
+                              'GPP_hat2': 'mol_m2'}
         #
         # Define station value header line:
-        header_vals = ['Timestamp', 'GPP', 'GPP_err', 'fPAR', 'PPFD',  
-                       'VPD', 'CPA', 'Tair', 'CO2', 'Patm', 'elv', 'Iabs', 
+        header_vals = ['Timestamp', 'GPP', 'GPP_err', 'fPAR', 'PPFD',
+                       'VPD', 'CPA', 'Tair', 'CO2', 'Patm', 'elv', 'Iabs',
                        'ca', 'Gs', 'D', 'K', 'ns', 'fa', 'beta1', 'beta2',
                        'GPP_hat1', 'GPP_hat2']
         header = ''
@@ -2062,17 +2060,17 @@ class LUE:
         # Dictionary of stations' light-use efficiency model variables
         # * this is for modeling
         self.st_lue_vars = {}
-        self.lue_var_units = {'GPP' : 'mol_m2',
-                              'GPP_err' : 'mol_m2',
-                              'Iabs' : 'mol_m2', 
-                              'ca' : 'Pa',
-                              'Gs' : 'Pa', 
-                              'D' : 'Pa', 
-                              'K' : 'Pa', 
-                              'ns' : 'NA', 
-                              'fa' : 'NA',
-                              'beta1' : 'NA',
-                              'beta2' : 'NA'}
+        self.lue_var_units = {'GPP': 'mol_m2',
+                              'GPP_err': 'mol_m2',
+                              'Iabs': 'mol_m2',
+                              'ca': 'Pa',
+                              'Gs': 'Pa',
+                              'D': 'Pa',
+                              'K': 'Pa',
+                              'ns': 'NA',
+                              'fa': 'NA',
+                              'beta1': 'NA',
+                              'beta2': 'NA'}
         #
         # Dictionary of stations' light-use efficiency model fit/fitness:
         # * this is for model results
@@ -2080,11 +2078,11 @@ class LUE:
         #
         # Define standard viscosity of water, Pa s
         self.n25 = self.viscosity_h2o(self.kTo, self.kPo)
-    #
+
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
     # ////////////////////////////////////////////////////////////////////////
-    def add_station_val(self, station, month, gpp, gpp_err, 
+    def add_station_val(self, station, month, gpp, gpp_err,
                         fpar, ppfd, vpd, alpha, tair, co2, patm, elv):
         """
         Name:     LUE.add_station_val
@@ -2113,20 +2111,20 @@ class LUE:
             alpha = -9999.0
         #
         # Calculate lue variables & place into tuple:
-        iabs = fpar*ppfd                    # mol/m2, abs. PPFD
-        ca = (1.e-6)*co2*patm               # Pa, atms. CO2
-        gs = self.calc_gstar(tair)          # Pa, photores. comp. point
-        d = (1e3)*vpd                       # Pa, vapor pressure deficit
-        k = self.calc_k(tair, patm)         # Pa, Michaelis-Menten coef.
-        ns = self.viscosity_h2o(tair, patm) # Pa s, viscosity
-        ns /= self.n25                      # unitless, water viscosity
-        fa = (alpha/1.26)**(0.25)           # unitless, func. of alpha
+        iabs = fpar*ppfd                     # mol/m2, abs. PPFD
+        ca = (1.e-6)*co2*patm                # Pa, atms. CO2
+        gs = self.calc_gstar(tair)           # Pa, photores. comp. point
+        d = (1e3)*vpd                        # Pa, vapor pressure deficit
+        k = self.calc_k(tair, patm)          # Pa, Michaelis-Menten coef.
+        ns = self.viscosity_h2o(tair, patm)  # Pa s, viscosity
+        ns /= self.n25                       # unitless, water viscosity
+        fa = (alpha/1.26)**(0.25)            # unitless, func. of alpha
         beta1, beta2 = self.beta_estimate(ca, d, k, gs, ns, tair, elv)
         yhat1 = self.nxtgn(iabs, ca, gs, d, k, ns, fa, beta1)
         yhat2 = self.nxtgn(iabs, ca, gs, d, k, ns, fa, beta2)
         #
         # Place value parameters into tuples:
-        val_params = (month, gpp, gpp_err, fpar, ppfd, vpd, alpha, tair, co2, 
+        val_params = (month, gpp, gpp_err, fpar, ppfd, vpd, alpha, tair, co2,
                       patm, elv, iabs, ca, gs, d, k, ns, fa, beta1, beta2,
                       yhat1, yhat2)
         var_params = (gpp, gpp_err, iabs, ca, gs, d, k, ns, fa, beta1, beta2)
@@ -2138,51 +2136,51 @@ class LUE:
         if station not in self.station_vals.keys():
             self.station_vals[station] = numpy.array(
                 val_params,
-                dtype={'names' : ('Timestamp', 'GPP', 'GPP_err', 
-                                  'fPAR', 'PPFD', 'VPD', 
-                                  'CPA', 'Tair', 'CO2', 
-                                  'Patm', 'elv', 'Iabs', 
-                                  'ca', 'Gs', 'D', 
-                                  'K', 'ns', 'fa', 
-                                  'beta1', 'beta2',
-                                  'GPP_hat1', 'GPP_hat2'),
-                       'formats' : ('O', 'f4', 'f4', 
-                                    'f4', 'f4', 'f4', 
-                                    'f4', 'f4', 'f4', 
-                                    'f4', 'f4', 'f4',
-                                    'f4', 'f4', 'f4',
-                                    'f4', 'f4', 'f4',
-                                    'f4', 'f4',
-                                    'f4', 'f4')},
-                        ndmin=1
-                )
+                dtype={'names': ('Timestamp', 'GPP', 'GPP_err',
+                                 'fPAR', 'PPFD', 'VPD',
+                                 'CPA', 'Tair', 'CO2',
+                                 'Patm', 'elv', 'Iabs',
+                                 'ca', 'Gs', 'D',
+                                 'K', 'ns', 'fa',
+                                 'beta1', 'beta2',
+                                 'GPP_hat1', 'GPP_hat2'),
+                       'formats': ('O', 'f4', 'f4',
+                                   'f4', 'f4', 'f4',
+                                   'f4', 'f4', 'f4',
+                                   'f4', 'f4', 'f4',
+                                   'f4', 'f4', 'f4',
+                                   'f4', 'f4', 'f4',
+                                   'f4', 'f4',
+                                   'f4', 'f4')},
+                ndmin=1
+            )
         else:
             # Add new parameters to list:
             temp_array = numpy.array(
                 val_params,
-                dtype={'names' : ('Timestamp', 'GPP', 'GPP_err', 
-                                  'fPAR', 'PPFD', 'VPD', 
-                                  'CPA', 'Tair', 'CO2', 
-                                  'Patm', 'elv', 'Iabs', 
-                                  'ca', 'Gs', 'D', 
-                                  'K', 'ns', 'fa', 
-                                  'beta1', 'beta2',
-                                  'GPP_hat1', 'GPP_hat2'),
-                       'formats' : ('O', 'f4', 'f4', 
-                                    'f4', 'f4', 'f4', 
-                                    'f4', 'f4', 'f4', 
-                                    'f4', 'f4', 'f4',
-                                    'f4', 'f4', 'f4',
-                                    'f4', 'f4', 'f4',
-                                    'f4', 'f4',
-                                    'f4', 'f4')},
-                        ndmin=1
-                )
+                dtype={'names': ('Timestamp', 'GPP', 'GPP_err',
+                                 'fPAR', 'PPFD', 'VPD',
+                                 'CPA', 'Tair', 'CO2',
+                                 'Patm', 'elv', 'Iabs',
+                                 'ca', 'Gs', 'D',
+                                 'K', 'ns', 'fa',
+                                 'beta1', 'beta2',
+                                 'GPP_hat1', 'GPP_hat2'),
+                       'formats': ('O', 'f4', 'f4',
+                                   'f4', 'f4', 'f4',
+                                   'f4', 'f4', 'f4',
+                                   'f4', 'f4', 'f4',
+                                   'f4', 'f4', 'f4',
+                                   'f4', 'f4', 'f4',
+                                   'f4', 'f4',
+                                   'f4', 'f4')},
+                ndmin=1
+            )
             self.station_vals[station] = numpy.append(
-                self.station_vals[station], 
-                temp_array, 
+                self.station_vals[station],
+                temp_array,
                 axis=0
-                )
+            )
         #
         # ~~~~~~~~~~~~~~~~~~~~~~~
         # Station Variables
@@ -2194,38 +2192,38 @@ class LUE:
                 self.st_lue_vars[station] = numpy.array(
                     var_params,
                     dtype={
-                        'names' : ('GPP', 'GPP_err', 'Iabs', 
-                                   'ca', 'Gs', 'D', 
-                                   'K', 'ns', 'fa', 
-                                   'beta1', 'beta2'),
-                        'formats' : ('f4', 'f4', 'f4', 
-                                     'f4', 'f4', 'f4', 
-                                     'f4', 'f4', 'f4',
-                                     'f4', 'f4')
+                        'names': ('GPP', 'GPP_err', 'Iabs',
+                                  'ca', 'Gs', 'D',
+                                  'K', 'ns', 'fa',
+                                  'beta1', 'beta2'),
+                        'formats': ('f4', 'f4', 'f4',
+                                    'f4', 'f4', 'f4',
+                                    'f4', 'f4', 'f4',
+                                    'f4', 'f4')
                         },
                     ndmin=1
-                    )
+                )
             else:
                 temp_array = numpy.array(
                     var_params,
                     dtype={
-                        'names' : ('GPP', 'GPP_err', 'Iabs', 
-                                   'ca', 'Gs', 'D', 
-                                   'K', 'ns', 'fa',
-                                   'beta1', 'beta2'),
-                        'formats' : ('f4', 'f4', 'f4', 
-                                     'f4', 'f4', 'f4', 
-                                     'f4', 'f4', 'f4',
-                                     'f4', 'f4')
+                        'names': ('GPP', 'GPP_err', 'Iabs',
+                                  'ca', 'Gs', 'D',
+                                  'K', 'ns', 'fa',
+                                  'beta1', 'beta2'),
+                        'formats': ('f4', 'f4', 'f4',
+                                    'f4', 'f4', 'f4',
+                                    'f4', 'f4', 'f4',
+                                    'f4', 'f4')
                         },
                     ndmin=1
-                    )
+                )
                 self.st_lue_vars[station] = numpy.append(
-                    self.st_lue_vars[station], 
-                    temp_array, 
+                    self.st_lue_vars[station],
+                    temp_array,
                     axis=0
                     )
-    #
+
     def beta_estimate(self, my_ca, my_d, my_k, my_gs, my_ns, my_t, my_z):
         """
         Name:     LUE.beta_estimate
@@ -2236,16 +2234,16 @@ class LUE:
                   - float, viscosity, unitless (my_ns)
                   - float, air temperature, deg C (my_t)
                   - float, elevation, m (my_z)
-        Output:   tuple 
+        Output:   tuple
                   - float, predicted beta from simple expression (beta_p1)
-                  - float, predicted beta from 
+                  - float, predicted beta from
         Features: Returns an estimate for beta based on the Wang Han equation
         """
         if not numpy.isfinite(my_z):
             my_z = 0.
         #
         whe = numpy.exp(
-            1.19 
+            1.19
             + 0.0545*(my_t - 25.)        # T in deg C
             - 0.5*numpy.log(1e-3*my_d)   # D in kPa
             - 0.0815*(1e-3*my_z)         # z in km
@@ -2263,17 +2261,17 @@ class LUE:
         beta_p2 /= (chi - 1.)**2
         #
         return (beta_p1, beta_p2)
-    #
+
     def calc_gstar(self, tc):
         """
         Name:     LUE.calc_gstar
         Input:    float, air temperature, degrees C (tc)
         Output:   float, gamma-star, Pa (gs)
-        Features: Returns the temperature-dependent photorespiratory 
-                  compensation point, Gamma star (Pascals), based on constants 
+        Features: Returns the temperature-dependent photorespiratory
+                  compensation point, Gamma star (Pascals), based on constants
                   derived from Bernacchi et al. (2001) study.
-        Ref:      Bernacchi et al. (2001), Improved temperature response 
-                  functions for models of Rubisco-limited photosynthesis, 
+        Ref:      Bernacchi et al. (2001), Improved temperature response
+                  functions for models of Rubisco-limited photosynthesis,
                   Plant, Cell and Environment, 24, 253--259.
         """
         # Define constants
@@ -2283,7 +2281,7 @@ class LUE:
         #
         gs = gs25*numpy.exp(dha*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
         return gs
-    #
+
     def calc_k(self, tc, patm):
         """
         Name:     LUE.calc_k
@@ -2292,33 +2290,33 @@ class LUE:
         Output:   float (mmk)
         Features: Returns the temperature & pressure dependent Michaelis-Menten
                   coefficient, K (Pascals).
-        Ref:      Bernacchi et al. (2001), Improved temperature response 
-                  functions for models of Rubisco-limited photosynthesis, 
+        Ref:      Bernacchi et al. (2001), Improved temperature response
+                  functions for models of Rubisco-limited photosynthesis,
                   Plant, Cell and Environment, 24, 253--259.
         """
         # Define constants
-        kc25 = 39.97     # Pa, assuming 25 deg C & 98.716 kPa
-        ko25 = (2.748e4) # Pa, assuming 25 deg C & 98.716 kPa
-        dhac = 79430     # J/mol
-        dhao = 36380     # J/mol
-        kR = 8.3145      # J/mol/K
-        kco = 2.09476e5  # ppm, US Standard Atmosphere
+        kc25 = 39.97      # Pa, assuming 25 deg C & 98.716 kPa
+        ko25 = (2.748e4)  # Pa, assuming 25 deg C & 98.716 kPa
+        dhac = 79430      # J/mol
+        dhao = 36380      # J/mol
+        kR = 8.3145       # J/mol/K
+        kco = 2.09476e5   # ppm, US Standard Atmosphere
         #
         vc = kc25*numpy.exp(dhac*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
         vo = ko25*numpy.exp(dhao*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
         k = vc*(1 + kco*(1e-6)*patm/vo)
         return k
-    #
+
     def density_h2o(self, tc, p):
         """
         Name:     LUE.density_h2o
         Input:    - float, air temperature (tc), degrees C
                   - float, atmospheric pressure (p), Pa
         Output:   float, density of water, kg/m^3
-        Features: Calculates density of water at a given temperature and 
+        Features: Calculates density of water at a given temperature and
                   pressure using the Tumlirz Equation
-        Ref:      F.H. Fisher and O.E Dial, Jr. (1975) Equation of state of 
-                  pure water and sea water, Tech. Rept., Marine Physical 
+        Ref:      F.H. Fisher and O.E Dial, Jr. (1975) Equation of state of
+                  pure water and sea water, Tech. Rept., Marine Physical
                   Laboratory, San Diego, CA.
         """
         # Calculate lambda, (bar cm^3)/g:
@@ -2353,11 +2351,11 @@ class LUE:
         # Calculate the specific volume (cm^3 g^-1):
         v = vinf + my_lambda/(po + pbar)
         #
-        # Convert to density (g cm^-3) -> 1000 g/kg; 1000000 cm^3/m^3 -> kg/m^3:
+        # Convert to density (g cm^-3) -> 1000 g/kg; 1e6 cm^3/m^3 -> kg/m^3:
         rho = (1e3/v)
         #
         return rho
-    #
+
     def nxtgn(self, iabs, ca, gs, d, k, ns, fa, beta):
         """
         Name:     LUE.nxtgn
@@ -2370,7 +2368,7 @@ class LUE:
                   - float, 'fa' : unitless, function of alpha
                   - float, beta parameter (beta)
         Output:   float, estimate of GPP (gpp)
-        Features: Returns an estimate of GPP based on the next-generation light 
+        Features: Returns an estimate of GPP based on the next-generation light
                   and water use efficiency model.
         Depends:  - kc
                   - kphio
@@ -2390,26 +2388,26 @@ class LUE:
             # Based on the m' formulation (see Regressing_LUE.pdf)
             m = vdcg/(vacg + 3.*gs*vsr)
             mpi = m**2 - self.kc**(2./3.)*(m**(4./3.))
-            # 
+            #
             # Check for negatives:
             if mpi > 0:
                 mp = numpy.sqrt(mpi)
                 gpp = self.kphio*iabs*fa*mp
         #
         return gpp
-    #
+
     def viscosity_h2o(self, tc, p):
         """
         Name:     LUE.viscosity_h2o
         Input:    - float, ambient temperature (tc), degrees C
                   - float, ambient pressure (p), Pa
         Return:   float, viscosity of water (mu), Pa s
-        Features: Calculates viscosity of water at a given temperature and 
+        Features: Calculates viscosity of water at a given temperature and
                   pressure.
         Depends:  density_h2o
-        Ref:      Huber, M. L., R. A. Perkins, A. Laesecke, D. G. Friend, J. V. 
-                  Sengers, M. J. Assael, ..., K. Miyagawa (2009) New 
-                  international formulation for the viscosity of H2O, J. Phys. 
+        Ref:      Huber, M. L., R. A. Perkins, A. Laesecke, D. G. Friend, J. V.
+                  Sengers, M. J. Assael, ..., K. Miyagawa (2009) New
+                  international formulation for the viscosity of H2O, J. Phys.
                   Chem. Ref. Data, Vol. 38(2), pp. 101-125.
         """
         # Define reference temperature, density, and pressure values:
@@ -2428,9 +2426,9 @@ class LUE:
         rbar = rho/rho_ast
         #
         # Calculate mu0 (Eq. 11 & Table 2, Huber et al., 2009):
-        mu0 = 1.67752 
-        mu0 += 2.20462/tbar 
-        mu0 += 0.6366564/tbar2 
+        mu0 = 1.67752
+        mu0 += 2.20462/tbar
+        mu0 += 0.6366564/tbar2
         mu0 += -0.241605/tbar3
         mu0 = 1e2*tbarx/mu0
         #
@@ -2443,7 +2441,7 @@ class LUE:
         hj5 = (0., 0., 0., 0., 0.00872102, 0.)
         hj6 = (0., 0., 0., -0.00435673, 0., -0.000593264)
         h = hj0 + hj1 + hj2 + hj3 + hj4 + hj5 + hj6
-        h_array = numpy.reshape(numpy.array(h), (7,6))
+        h_array = numpy.reshape(numpy.array(h), (7, 6))
         #
         # Calculate mu1 (Eq. 12 & Table 3, Huber et al., 2009):
         mu1 = 0.
@@ -2464,14 +2462,14 @@ class LUE:
         mu = mu_bar*mu_ast    # Pa s
         #
         return mu
-    #
+
     def write_out_val(self, station, out_file):
         """
         Name:     LUE.write_out_val
         Input:    - string, station name (station)
                   - string, output file (out_file)
         Output:   None.
-        Features: Writes to file the monthly values associated with the light 
+        Features: Writes to file the monthly values associated with the light
                   use efficiency equation for a given station
         """
         # Create file if it doesn't exist:
@@ -2499,9 +2497,10 @@ class LUE:
                              "%f,%f\n") % tuple(t))
                     f.close()
 
-################################################################################
-## FUNCTIONS 
-################################################################################
+
+###############################################################################
+# FUNCTIONS
+###############################################################################
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #                         Base Functions:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2515,6 +2514,7 @@ def add_one_day(dt0):
     dt1 = dt0 + datetime.timedelta(days=1)
     return dt1
 
+
 def add_one_month(dt0):
     """
     Name:     add_one_month
@@ -2526,9 +2526,10 @@ def add_one_month(dt0):
               month-to-a-datetimedate-or-datet/
     """
     dt1 = dt0.replace(day=1)
-    dt2 = dt1 + datetime.timedelta(days=32) 
+    dt2 = dt1 + datetime.timedelta(days=32)
     dt3 = dt2.replace(day=1)
     return dt3
+
 
 def connect_sql():
     """
@@ -2554,10 +2555,10 @@ def connect_sql():
     # Test database connection:
     try:
         con = psycopg2.connect(
-            database='gepisat', 
+            database='gepisat',
             #database='flux_test',
-            user=my_user, 
-            host='localhost', 
+            user=my_user,
+            host='localhost',
             password=my_pass
             )
     #
@@ -2567,6 +2568,7 @@ def connect_sql():
     #
     return con
 
+
 def grid_centroid(my_lon, my_lat):
     """
     Name:     grid_centroid
@@ -2574,7 +2576,7 @@ def grid_centroid(my_lon, my_lat):
               - float, latitude (my_lat)
     Output:   tuple, longitude latitude pair (my_centroid)
     Features: Returns the nearest 0.5 deg. grid centroid per given coordinates
-              based on the Euclidean distance to each of the four surrounding 
+              based on the Euclidean distance to each of the four surrounding
               grids; if any distances are equivalent, the pixel north and east
               is selected by default
     """
@@ -2616,7 +2618,7 @@ def grid_centroid(my_lon, my_lat):
             bb_lat_max = lats[-1] + grid_res
         #
     # Determine nearest centroid:
-    # NOTE: if dist_A equals dist_B, then centroid defaults positively 
+    # NOTE: if dist_A equals dist_B, then centroid defaults positively
     #       i.e., north / east
     if centroid_lon and centroid_lat:
         my_centroid = (centroid_lon, centroid_lat)
@@ -2668,12 +2670,13 @@ def grid_centroid(my_lon, my_lat):
     # Return nearest centroid:
     return my_centroid
 
+
 def simpson(my_array, h):
     """
     Name:     simpson
     Input:    - numpy.ndarray (my_array)
               - int, step-length (h)
-    Features: Returns the numerical integration over an array by applying 
+    Features: Returns the numerical integration over an array by applying
               Simpson's (composite) rule for numerical integration, i.e.
               int(fx) = (h/3)*[f(x0) + 4f(x1) + 2f(x2) + 4f(x3) ... f(xn)]
     Note:     n should be even, but if it is not, the first and last values of
@@ -2688,6 +2691,7 @@ def simpson(my_array, h):
         s += 2.0*my_array[j]
     s = (s*h)/3.0
     return s
+
 
 def summary_file_init(summary_file):
     """
@@ -2717,47 +2721,47 @@ def summary_file_init(summary_file):
         "%s,%s,%s,%s,%s,%s,"     # 88--93
         "%s,%s,%s,%s,%s,%s,"     # 94--99
         "%s,%s,%s,%s\n"          # 100--103
-        )  % (
-            "name", "month",   "n_obs", "n_h",    "n_l",               # 01--05
-            "foo_est_obs_h",   "foo_opt_obs_h",   "foo_err_obs_h",     # 06--08
-            "foo_t_obs_h",     "foo_p_obs_h",                          # 09--10
-            "foo_est_ro_h",    "foo_opt_ro_h",    "foo_err_ro_h",      # 11--13
-            "foo_t_ro_h",      "foo_p_ro_h",                           # 14--15
-            "alpha_est_obs_h", "alpha_opt_obs_h", "alpha_err_obs_h",   # 16--18
-            "alpha_t_obs_h",   "alpha_p_obs_h",                        # 19--20
-            "alpha_est_ro_h",  "alpha_opt_ro_h",  "alpha_err_ro_h",    # 21--23
-            "alpha_t_ro_h",    "alpha_p_ro_h",                         # 24--25
-            "alpha_est_obs_l", "alpha_opt_obs_l", "alpha_err_obs_l",   # 26--28
-            "alpha_t_obs_l",   "alpha_p_obs_l",                        # 29--30
-            "alpha_est_ro_l",  "alpha_opt_ro_l",  "alpha_err_ro_l",    # 31--33
-            "alpha_t_ro_l",    "alpha_p_ro_l",                         # 34--35
-            "r_est_obs_h",     "r_opt_obs_h",     "r_err_obs_h",       # 36--38
-            "r_t_obs_h",       "r_p_obs_h",                            # 39--40
-            "r_est_ro_h",      "r_opt_ro_h",      "r_err_ro_h",        # 41--43
-            "r_t_ro_h",        "r_p_ro_h",                             # 44--45
-            "r_est_obs_l",     "r_opt_obs_l",     "r_err_obs_l",       # 46--48
-            "r_t_obs_l",       "r_p_obs_l",                            # 49--50
-            "r_est_ro_l",      "r_opt_ro_l",      "r_err_ro_l",        # 51--53
-            "r_t_ro_l",        "r_p_ro_l",                             # 54--55
-            "r2_obs_h",        "r2_ro_h",                              # 56--57
-            "rmse_obs_h",      "rmse_ro_h",                            # 58--59
-            "r2_obs_l",        "r2_ro_l",                              # 60--61
-            "rmse_obs_l",      "rmse_ro_l",                            # 62--63
-            "min_ppfd_obs",    "max_ppfd_obs",    "ave_ppfd_obs",      # 64--66
-            "std_ppfd_obs",    "skw_ppfd_obs",    "krt_ppfd_obs",      # 67--69
-            "min_ppfd_ro_h",   "max_ppfd_ro_h",   "ave_ppfd_ro_h",     # 70--72
-            "std_ppfd_ro_h",   "skw_ppfd_ro_h",   "krt_ppfd_ro_h",     # 73--75
-            "min_ppfd_ro_l",   "max_ppfd_ro_l",   "ave_ppfd_ro_l",     # 76--78
-            "std_ppfd_ro_l",   "skw_ppfd_ro_l",   "krt_ppfd_ro_l",     # 79--81
-            "min_nee_obs",     "max_nee_obs",     "ave_nee_obs",       # 82--84
-            "std_nee_obs",     "skw_nee_obs",     "krt_nee_obs",       # 85--87
-            "min_nee_ro_h",    "max_nee_ro_h",    "ave_nee_ro_h",      # 88--90
-            "std_nee_ro_h",    "skw_nee_ro_h",    "krt_nee_ro_h",      # 91--93
-            "min_nee_ro_l",    "max_nee_ro_l",    "ave_nee_ro_l",      # 94--96
-            "std_nee_ro_l",    "skw_nee_ro_l",    "krt_nee_ro_l",      # 97--99
-            "pearson_r_obs",   "pearson_r_ro_h",  "pearson_r_ro_l",  # 100--102
-            "model_select"                                           # 103
-            )
+        ) % (
+        "name", "month",   "n_obs", "n_h",    "n_l",               # 01--05
+        "foo_est_obs_h",   "foo_opt_obs_h",   "foo_err_obs_h",     # 06--08
+        "foo_t_obs_h",     "foo_p_obs_h",                          # 09--10
+        "foo_est_ro_h",    "foo_opt_ro_h",    "foo_err_ro_h",      # 11--13
+        "foo_t_ro_h",      "foo_p_ro_h",                           # 14--15
+        "alpha_est_obs_h", "alpha_opt_obs_h", "alpha_err_obs_h",   # 16--18
+        "alpha_t_obs_h",   "alpha_p_obs_h",                        # 19--20
+        "alpha_est_ro_h",  "alpha_opt_ro_h",  "alpha_err_ro_h",    # 21--23
+        "alpha_t_ro_h",    "alpha_p_ro_h",                         # 24--25
+        "alpha_est_obs_l", "alpha_opt_obs_l", "alpha_err_obs_l",   # 26--28
+        "alpha_t_obs_l",   "alpha_p_obs_l",                        # 29--30
+        "alpha_est_ro_l",  "alpha_opt_ro_l",  "alpha_err_ro_l",    # 31--33
+        "alpha_t_ro_l",    "alpha_p_ro_l",                         # 34--35
+        "r_est_obs_h",     "r_opt_obs_h",     "r_err_obs_h",       # 36--38
+        "r_t_obs_h",       "r_p_obs_h",                            # 39--40
+        "r_est_ro_h",      "r_opt_ro_h",      "r_err_ro_h",        # 41--43
+        "r_t_ro_h",        "r_p_ro_h",                             # 44--45
+        "r_est_obs_l",     "r_opt_obs_l",     "r_err_obs_l",       # 46--48
+        "r_t_obs_l",       "r_p_obs_l",                            # 49--50
+        "r_est_ro_l",      "r_opt_ro_l",      "r_err_ro_l",        # 51--53
+        "r_t_ro_l",        "r_p_ro_l",                             # 54--55
+        "r2_obs_h",        "r2_ro_h",                              # 56--57
+        "rmse_obs_h",      "rmse_ro_h",                            # 58--59
+        "r2_obs_l",        "r2_ro_l",                              # 60--61
+        "rmse_obs_l",      "rmse_ro_l",                            # 62--63
+        "min_ppfd_obs",    "max_ppfd_obs",    "ave_ppfd_obs",      # 64--66
+        "std_ppfd_obs",    "skw_ppfd_obs",    "krt_ppfd_obs",      # 67--69
+        "min_ppfd_ro_h",   "max_ppfd_ro_h",   "ave_ppfd_ro_h",     # 70--72
+        "std_ppfd_ro_h",   "skw_ppfd_ro_h",   "krt_ppfd_ro_h",     # 73--75
+        "min_ppfd_ro_l",   "max_ppfd_ro_l",   "ave_ppfd_ro_l",     # 76--78
+        "std_ppfd_ro_l",   "skw_ppfd_ro_l",   "krt_ppfd_ro_l",     # 79--81
+        "min_nee_obs",     "max_nee_obs",     "ave_nee_obs",       # 82--84
+        "std_nee_obs",     "skw_nee_obs",     "krt_nee_obs",       # 85--87
+        "min_nee_ro_h",    "max_nee_ro_h",    "ave_nee_ro_h",      # 88--90
+        "std_nee_ro_h",    "skw_nee_ro_h",    "krt_nee_ro_h",      # 91--93
+        "min_nee_ro_l",    "max_nee_ro_l",    "ave_nee_ro_l",      # 94--96
+        "std_nee_ro_l",    "skw_nee_ro_l",    "krt_nee_ro_l",      # 97--99
+        "pearson_r_obs",   "pearson_r_ro_h",  "pearson_r_ro_l",  # 100--102
+        "model_select"                                           # 103
+        )
     # Open file for writing:
     try:
         SFILE = open(summary_file, 'w')
@@ -2766,6 +2770,7 @@ def summary_file_init(summary_file):
     else:
         SFILE.write(summary_header)
         SFILE.close()
+
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #                         Dependant Functions:
@@ -2783,7 +2788,7 @@ def calc_daily_gpp(ts, gpp, gpp_err):
     Features: Returns time stamped daily GPP and its associated errors
     Depends:  - add_one_day
               - simpson
-    
+
     @TODO: write to file option?
     """
     # Get starting and ending dates:
@@ -2794,7 +2799,8 @@ def calc_daily_gpp(ts, gpp, gpp_err):
     cur_date = starting_date
     while (cur_date < ending_date):
         # Find GPP values associated with current day:
-        my_idx = numpy.where((ts >= cur_date) & (ts < add_one_day(cur_date)))[0]
+        my_idx = numpy.where(
+            (ts >= cur_date) & (ts < add_one_day(cur_date)))[0]
         my_gpp = [gpp[i] for i in my_idx]
         my_gpp_err = [gpp_err[i] for i in my_idx]
         #
@@ -2811,17 +2817,17 @@ def calc_daily_gpp(ts, gpp, gpp_err):
         if cur_date == starting_date:
             gpp_daily = numpy.array(
                 (cur_date.date(), day_gpp, day_gpp_err),
-                dtype={'names' : ('Timestamp', 'GPP', 'GPP_err'),
-                       'formats' : ('O', 'f4', 'f4')},
+                dtype={'names': ('Timestamp', 'GPP', 'GPP_err'),
+                       'formats': ('O', 'f4', 'f4')},
                 ndmin=1
-                )
+            )
         else:
             temp_array = numpy.array(
                 (cur_date.date(), day_gpp, day_gpp_err),
-                dtype={'names' : ('Timestamp', 'GPP', 'GPP_err'),
-                       'formats' : ('O', 'f4', 'f4')},
+                dtype={'names': ('Timestamp', 'GPP', 'GPP_err'),
+                       'formats': ('O', 'f4', 'f4')},
                 ndmin=1
-                )
+            )
             gpp_daily = numpy.append(gpp_daily, temp_array, axis=0)
         #
         # Increment current day:
@@ -2829,14 +2835,15 @@ def calc_daily_gpp(ts, gpp, gpp_err):
     #
     return gpp_daily
 
+
 def daily_gpp(station, cur_date):
     """
     Name:     daily_gpp
     Inputs:   - str, flux station name (station)
               - datetime.date, current date (cur_date)
     Output:   float, daily GPP, mol/m^2
-              > 'nan' for months without observations (i.e., no partitioning) 
-    Features: Calculates the GPP and associated error for a given day and 
+              > 'nan' for months without observations (i.e., no partitioning)
+    Features: Calculates the GPP and associated error for a given day and
               station
     Depends:  - monthly_ppfd_nee
               - partition
@@ -2854,23 +2861,23 @@ def daily_gpp(station, cur_date):
     #
     # Calculate partitioning parameters:
     if mo_nee and mo_ppfd:
-        mo_parti = partition(mo_nee, mo_ppfd, to_write=False, rm_out=True, 
+        mo_parti = partition(mo_nee, mo_ppfd, to_write=False, rm_out=True,
                              tower=station, month=month_date)
         #
         # ~~~~~~~~~~~~~~~~~~~
         # Calculate daily GPP
         # ~~~~~~~~~~~~~~~~~~~
         # Get gapfilled PPFD [umol m^-2 m^-1]:
-        (hh_ts, hh_ppfd) = gapfill_ppfd_day(station=station, 
-                                            cur_date=cur_date, 
-                                            to_write=False, 
+        (hh_ts, hh_ppfd) = gapfill_ppfd_day(station=station,
+                                            cur_date=cur_date,
+                                            to_write=False,
                                             out_file='/dev/null')
         #
         # Convert PPFD to GPP [umol m^-2 s^-1]:
         hh_gpp, hh_gpp_err = mo_parti.calc_gpp(hh_ppfd)
         #
         # Calculate daily GPP (mol/m2):
-        day_ts, day_gpp, day_gpp_err = calc_daily_gpp(hh_ts, hh_gpp, 
+        day_ts, day_gpp, day_gpp_err = calc_daily_gpp(hh_ts, hh_gpp,
                                                       hh_gpp_err)[0]
     else:
         day_gpp = numpy.nan
@@ -2878,12 +2885,13 @@ def daily_gpp(station, cur_date):
     #
     return (day_gpp, day_gpp_err)
 
+
 def flux_to_grid(flux_station):
     """
     Name:     flux_to_grid
     Input:    str, station name (flux_station)
     Output:   int, grid station ID (grid_station)
-    Features: Returns grid station ID based on the location of a given flux 
+    Features: Returns grid station ID based on the location of a given flux
               tower
     Depends:  - connect_sql
               - get_lon_lat
@@ -2915,6 +2923,7 @@ def flux_to_grid(flux_station):
     con.close()
     return grid_station
 
+
 def gapfill_ppfd_day(station, cur_date, to_write, out_file):
     """
     Name:     gapfill_ppfd_day
@@ -2924,8 +2933,8 @@ def gapfill_ppfd_day(station, cur_date, to_write, out_file):
               - str, output file name (out_file)
     Output:   - numpy.ndarray of datetime objects (monthly_timestamp_hh)
               - numpy.ndarray of gapfilled PPFD (monthly_ppfd_gapless)
-    Features: Returns array of half-hourly gapless PPFD (umol m-2 s-1) for a 
-              given station and day and associated timestamps; prints 
+    Features: Returns array of half-hourly gapless PPFD (umol m-2 s-1) for a
+              given station and day and associated timestamps; prints
               observations and gapfilled PPFD to file
     Depends:  - flux_to_grid
               - get_daily_ppfd
@@ -2960,14 +2969,14 @@ def gapfill_ppfd_day(station, cur_date, to_write, out_file):
         gapfill_dict = {}
         #
         # Create start and end datetime objects for this day:
-        start_time = datetime.datetime(cur_date.year, 
-                                       cur_date.month, 
-                                       cur_date.day, 
+        start_time = datetime.datetime(cur_date.year,
+                                       cur_date.month,
+                                       cur_date.day,
                                        0, 0, 0)
         #
-        end_time = datetime.datetime(cur_date.year, 
-                                     cur_date.month, 
-                                     cur_date.day, 
+        end_time = datetime.datetime(cur_date.year,
+                                     cur_date.month,
+                                     cur_date.day,
                                      23, 59, 59)
         #
         # Initialize dictionary values with half-hourly timestamp keys:
@@ -2977,7 +2986,7 @@ def gapfill_ppfd_day(station, cur_date, to_write, out_file):
             gapfill_dict[my_time] = 0.0
             #
             # Add datetime object to array of monthly timestamps:
-            daily_timestamp_hh = numpy.append(daily_timestamp_hh, [cur_time,])
+            daily_timestamp_hh = numpy.append(daily_timestamp_hh, [cur_time, ])
             #
             cur_time = cur_time + datetime.timedelta(minutes=30)
         #
@@ -3012,7 +3021,7 @@ def gapfill_ppfd_day(station, cur_date, to_write, out_file):
             my_time = "%s" % et_solar.local_time[i].time()
             gapfill_dict[my_time] = sfactor*val
         #
-        # Add observations to gapfill dictionary & save observations for output:
+        # Add observations to gapfill dictionary & save for output:
         ppfd_obs = {}
         for i in xrange(number_obs):
             my_time = "%s" % daily_ts[i].time()
@@ -3021,7 +3030,7 @@ def gapfill_ppfd_day(station, cur_date, to_write, out_file):
         #
         # Save to PPFD time series:
         daily_ppfd_gapless = numpy.append(
-            daily_ppfd_gapless, 
+            daily_ppfd_gapless,
             [gapfill_dict[x] for x in sorted(gapfill_dict.keys())]
         )
         #
@@ -3046,7 +3055,7 @@ def gapfill_ppfd_day(station, cur_date, to_write, out_file):
         #   NOTE: drop last entry from daily_ppfd (midnight next day)
         daily_ppfd_gapless = daily_ppfd[0:-1]
         daily_timestamp_hh = daily_ts[0:-1]
-        # 
+        #
         # Write to file:
         if to_write:
             for i in xrange(len(daily_ts) - 1):
@@ -3062,6 +3071,7 @@ def gapfill_ppfd_day(station, cur_date, to_write, out_file):
     #
     return (daily_timestamp_hh, daily_ppfd_gapless)
 
+
 def gapfill_ppfd_month(station, start_date, to_write):
     """
     Name:     gapfill_ppfd_month
@@ -3070,8 +3080,8 @@ def gapfill_ppfd_month(station, start_date, to_write):
               - int, write to file boolean (to_write)
     Output:   - numpy.ndarray of datetime objects (monthly_timestamp_hh)
               - numpy.ndarray of gapfilled PPFD (monthly_ppfd_gapless)
-    Features: Returns array of half-hourly gapless PPFD (umol m-2 s-1) for a 
-              given station and month and associated timestamps; prints 
+    Features: Returns array of half-hourly gapless PPFD (umol m-2 s-1) for a
+              given station and month and associated timestamps; prints
               gap-filled PPFD to file
     Depends:  - add_one_day
               - add_one_month
@@ -3096,13 +3106,16 @@ def gapfill_ppfd_month(station, start_date, to_write):
                                                           to_write=to_write,
                                                           out_file=out_file)
         # Append data to monthly arrays:
-        monthly_timestamp_hh = numpy.append(monthly_timestamp_hh, gf_daily_time)
-        monthly_ppfd_gapless = numpy.append(monthly_ppfd_gapless, gf_daily_ppfd)
+        monthly_timestamp_hh = numpy.append(monthly_timestamp_hh,
+                                            gf_daily_time)
+        monthly_ppfd_gapless = numpy.append(monthly_ppfd_gapless,
+                                            gf_daily_ppfd)
         #
         # Increment day
         cur_date = add_one_day(cur_date)
         #
     return (monthly_timestamp_hh, monthly_ppfd_gapless)
+
 
 def get_daily_ppfd(station, start_date):
     """
@@ -3112,7 +3125,7 @@ def get_daily_ppfd(station, start_date):
     Output:   tuple, arrays of time stamps and PPFD data
               - numpy.ndarray, timestamps (time_vals)
               - numpy.ndarray, associated PPFD (ppfd_vals)
-    Features: Returns the half-hourly timestamps and PPFD observations for a 
+    Features: Returns the half-hourly timestamps and PPFD observations for a
               given day
     Depends:  - add_one_day
               - connect_sql
@@ -3150,13 +3163,14 @@ def get_daily_ppfd(station, start_date):
     con.close()
     return (time_vals, ppfd_vals)
 
+
 def get_data_point(msvidx, time_point):
     """
     Name:     get_data_points
     Input:    - str, msvidx (msvidx)
               - datetime.date (time_point)
     Output:   float/numpy.ndarray (my_result)
-    Features: Returns data point or array of data for a given msvidx (i.e., 
+    Features: Returns data point or array of data for a given msvidx (i.e.,
               station and variable) and time
     Depends:  connect_sql
     """
@@ -3188,6 +3202,7 @@ def get_data_point(msvidx, time_point):
         print "No data found in function get_data_point"
     return my_result
 
+
 def get_dates(station):
     """
     Name:     get_dates
@@ -3195,7 +3210,7 @@ def get_dates(station):
     Output:   tuple, starting and ending dates
               - datetime.date, starting date (sd)
               - datetime.date, ending date (ed)
-    Features: Returns the starting and ending dates of NEE-PPFD data pairs for 
+    Features: Returns the starting and ending dates of NEE-PPFD data pairs for
               a given station
     Depends:  - connect_sql
               - get_msvidx
@@ -3243,6 +3258,7 @@ def get_dates(station):
     con.close()
     return (sd, ed)
 
+
 def get_lon_lat(station):
     """
     Name:     get_lon_lat
@@ -3250,7 +3266,7 @@ def get_lon_lat(station):
     Output:   tuple, lon-lat pair
               - float, longitude (my_lon)
               - float, latitude (my_lat)
-    Features: Return longitude and latitude pair for a given station based on 
+    Features: Return longitude and latitude pair for a given station based on
               the GePiSaT database meta-data table
     Depends:  connect_sql
     """
@@ -3273,6 +3289,7 @@ def get_lon_lat(station):
     my_lon, my_lat = cur.fetchone()
     con.close()
     return (my_lon, my_lat)
+
 
 def get_msvidx(station, variable):
     """
@@ -3304,12 +3321,13 @@ def get_msvidx(station, variable):
     try:
         result = cur.fetchone()[0]
     except:
-        print "Could not return an msvidx value for station", 
+        print "Could not return an msvidx value for station",
         print station, "and variable", variable
         result = ""
     finally:
         con.close()
         return result
+
 
 def get_pressure(s):
     """
@@ -3317,7 +3335,7 @@ def get_pressure(s):
     Input:    str, station name (s)
     Output:   - float, elevation, m (z)
               - float, atmospheric pressure, Pa (patm)
-    Features: Returns the atmospheric pressure based on the elevation of a 
+    Features: Returns the atmospheric pressure based on the elevation of a
               given station
     Depends:  - connect_sql
               - flux_to_grid
@@ -3326,12 +3344,12 @@ def get_pressure(s):
     Ref:      Allen et al. (1998)
     """
     # Define constants:
-    kPo = 101325   # standard atmosphere, Pa (Allen, 1973)
-    kTo = 298.15   # base temperature, K (Prentice, unpublished)
-    kL = 0.0065    # temperature lapse rate, K/m (Allen, 1973)
-    kG = 9.80665   # gravitational acceleration, m/s^2 (Allen, 1973)
-    kR = 8.3143    # universal gas constant, J/mol/K (Allen, 1973)
-    kMa = 0.028963 # molecular weight of dry air, kg/mol (Tsilingiris, 2008)
+    kPo = 101325    # standard atmosphere, Pa (Allen, 1973)
+    kTo = 298.15    # base temperature, K (Prentice, unpublished)
+    kL = 0.0065     # temperature lapse rate, K/m (Allen, 1973)
+    kG = 9.80665    # gravitational acceleration, m/s^2 (Allen, 1973)
+    kR = 8.3143     # universal gas constant, J/mol/K (Allen, 1973)
+    kMa = 0.028963  # molecular weight of dry air, kg/mol (Tsilingiris, 2008)
     #
     # Define query w/ parameters:
     params = (s,)
@@ -3365,6 +3383,7 @@ def get_pressure(s):
     #
     return (z, patm)
 
+
 def get_stations():
     """
     Name:     get_stations
@@ -3389,13 +3408,14 @@ def get_stations():
     cur = con.cursor()
     #
     # Execute query and fetch results:
-    cur.execute(q,params)
+    cur.execute(q, params)
     results = []
     for record in cur:
         results.append(record[0])  # <- extract record from tuple
         #
     con.close()
     return results
+
 
 def monthly_ppfd_nee(station, start_date):
     """
@@ -3405,7 +3425,7 @@ def monthly_ppfd_nee(station, start_date):
     Output:   tuple, PPFD and NEE observations
               - numpy.ndarray, PPFD (ppfd_vals)
               - numpy.ndarray, NEE (nee_vals)
-    Features: Returns one month of PPFD-NEE observation pairs for a given 
+    Features: Returns one month of PPFD-NEE observation pairs for a given
               station and month
     Depends:  - add_one_month
               - connect_sql
@@ -3421,8 +3441,8 @@ def monthly_ppfd_nee(station, start_date):
     # SQL query parameters:
     params = (ppfd_idx, nee_idx, start_date, end_date, ppfd_idx, nee_idx)
     #
-    # Define query 
-    # NOTE: okay to use string concatenation % because ppfd and nee are 
+    # Define query
+    # NOTE: okay to use string concatenation % because ppfd and nee are
     # function return values:
     q = (
         "SELECT * "
@@ -3459,6 +3479,7 @@ def monthly_ppfd_nee(station, start_date):
     con.close()
     return (ppfd_vals, nee_vals)
 
+
 def partition(nee, ppfd, to_write, rm_out, tower, month):
     """
     Name:     partition
@@ -3470,7 +3491,7 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
               - datetime.date (month)
     Output:   FLUX_PARTI class object (my_class)
     Features: Returns a class with flux partitioning results based on NEE-PPFD
-              observations; processes outliers (optional); saves results to 
+              observations; processes outliers (optional); saves results to
               file (optional)
     Depends:  FLUX_PARTI
     """
@@ -3483,30 +3504,30 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
     # ---------------------
     try:
         mh_opt, mh_cov = curve_fit(
-            my_class.model_h, 
-            my_class.ppfd_obs, 
-            my_class.nee_obs, 
-            p0 = my_class.hm_estimates
+            my_class.model_h,
+            my_class.ppfd_obs,
+            my_class.nee_obs,
+            p0=my_class.hm_estimates
             )
     except:
         my_class.hm_optimized = [-9999.0, -9999.0, -9999.0]
         my_class.hm_optim_err = [-9999.0, -9999.0, -9999.0]
     else:
         (
-            my_class.hm_optimized[0], 
-            my_class.hm_optimized[1], 
+            my_class.hm_optimized[0],
+            my_class.hm_optimized[1],
             my_class.hm_optimized[2]) = mh_opt
         #
         # Extract variance values from matrix:
         try:
             mh_var = numpy.diag(mh_cov)
         except ValueError:
-            mh_var = [0,0,0]
+            mh_var = [0, 0, 0]
         else:
             if numpy.isfinite(mh_var).all() and not (mh_var < 0).any():
                 (
-                    my_class.hm_optim_err[0], 
-                    my_class.hm_optim_err[1], 
+                    my_class.hm_optim_err[0],
+                    my_class.hm_optim_err[1],
                     my_class.hm_optim_err[2]
                     ) = numpy.sqrt(mh_var)
                 #
@@ -3515,20 +3536,15 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
                     my_class.hm_optim_t[0],
                     my_class.hm_optim_t[1],
                     my_class.hm_optim_t[2]
-                    ) = (
-                        numpy.array(my_class.hm_optimized)/
-                        numpy.array(my_class.hm_optim_err)
-                        )
+                    ) = (numpy.array(my_class.hm_optimized) /
+                         numpy.array(my_class.hm_optim_err))
                 #
                 # Calculate the p-value:
                 hm_df = len(my_class.nee_obs) - 3.0  # degrees of freedom
-                (
-                    my_class.hm_optim_p[0],
-                    my_class.hm_optim_p[1],
-                    my_class.hm_optim_p[2]
-                    ) = scipy.stats.t.pdf(
-                        -abs(numpy.array(my_class.hm_optim_t)),
-                        hm_df)
+                (my_class.hm_optim_p[0],
+                 my_class.hm_optim_p[1],
+                 my_class.hm_optim_p[2]) = scipy.stats.t.pdf(
+                    -abs(numpy.array(my_class.hm_optim_t)), hm_df)
             else:
                 my_class.hm_optim_err[0] = 0.0
                 my_class.hm_optim_err[1] = 0.0
@@ -3541,28 +3557,28 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
     # ---------------------
     try:
         ml_opt, ml_cov = curve_fit(
-            my_class.model_l, 
-            my_class.ppfd_obs, 
-            my_class.nee_obs, 
-            p0 = my_class.lm_estimates
+            my_class.model_l,
+            my_class.ppfd_obs,
+            my_class.nee_obs,
+            p0=my_class.lm_estimates
             )
     except:
         my_class.lm_optimized = [-9999.0, -9999.0]
         my_class.lm_optim_err = [-9999.0, -9999.0]
     else:
         (
-            my_class.lm_optimized[0], 
+            my_class.lm_optimized[0],
             my_class.lm_optimized[1]) = ml_opt
         #
         # Extract variance values from matrix:
         try:
             ml_var = numpy.diag(ml_cov)
         except ValueError:
-            ml_var = [0,0]
+            ml_var = [0, 0]
         else:
             if numpy.isfinite(ml_var).all() and not (ml_var < 0).any():
                 (
-                    my_class.lm_optim_err[0], 
+                    my_class.lm_optim_err[0],
                     my_class.lm_optim_err[1]
                     ) = numpy.sqrt(ml_var)
                 #
@@ -3570,19 +3586,14 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
                 (
                     my_class.lm_optim_t[0],
                     my_class.lm_optim_t[1]
-                    ) = (
-                        numpy.array(my_class.lm_optimized)/
-                        numpy.array(my_class.lm_optim_err)
-                        )
+                    ) = (numpy.array(my_class.lm_optimized) /
+                         numpy.array(my_class.lm_optim_err))
                 #
                 # Calculate the p-value:
-                lm_df = len(my_class.nee_obs) - 2 # degrees of freedom
-                (
-                    my_class.lm_optim_p[0],
-                    my_class.lm_optim_p[1]
-                    ) = scipy.stats.t.pdf(
-                        -abs(numpy.array(my_class.lm_optim_t)),
-                        lm_df)
+                lm_df = len(my_class.nee_obs) - 2  # degrees of freedom
+                (my_class.lm_optim_p[0],
+                 my_class.lm_optim_p[1]) = scipy.stats.t.pdf(
+                    -abs(numpy.array(my_class.lm_optim_t)), lm_df)
             else:
                 my_class.lm_optim_err[0] = 0.0
                 my_class.lm_optim_err[1] = 0.0
@@ -3593,25 +3604,25 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
     if to_write:
         output_file = "out/%s_%s.txt" % (tower, month)
         header0 = "MH_guess,%f,%f,%f\n" % (
-            my_class.hm_estimates[1], 
-            my_class.hm_estimates[2], 
+            my_class.hm_estimates[1],
+            my_class.hm_estimates[2],
             my_class.hm_estimates[0]
             )
         header1 = "ML_guess,%f,%f\n" % (
-            my_class.lm_estimates[0], 
+            my_class.lm_estimates[0],
             my_class.lm_estimates[1]
             )
         header2 = "MH_opt,%f,%f,%f,%f,%f\n" % (
-            my_class.hm_optimized[1], 
-            my_class.hm_optimized[2], 
-            my_class.hm_optimized[0], 
-            my_class.hm_rmse, 
+            my_class.hm_optimized[1],
+            my_class.hm_optimized[2],
+            my_class.hm_optimized[0],
+            my_class.hm_rmse,
             my_class.hm_rsqr
             )
         header3 = "ML_opt,%f,%f,,%f,%f\n" % (
-            my_class.lm_optimized[0], 
-            my_class.lm_optimized[1], 
-            my_class.lm_rmse, 
+            my_class.lm_optimized[0],
+            my_class.lm_optimized[1],
+            my_class.lm_rmse,
             my_class.lm_rsqr
             )
         OUTFILE = open(output_file, 'w')
@@ -3620,9 +3631,9 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
         OUTFILE.write(header2)
         OUTFILE.write(header3)
         OUTFILE.write("ppfd_obs,nee_obs,nee_mh,nee_ml\n")
-        for po, no, nh, nl in map(None, my_class.ppfd_obs, 
-                                  my_class.nee_obs, 
-                                  my_class.nee_model_h, 
+        for po, no, nh, nl in map(None, my_class.ppfd_obs,
+                                  my_class.nee_obs,
+                                  my_class.nee_model_h,
                                   my_class.nee_model_l):
             outline = "%s,%s,%s,%s\n" % (po, no, nh, nl)
             OUTFILE.write(outline)
@@ -3630,35 +3641,36 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
     ## ~~~~~~~~~~ REMOVE OUTLIERS AND RE-ANALYZE ~~~~~~~~~~ ##
     if rm_out:
         # ---------------------
-        # Model H optimization: 
+        # Model H optimization:
         # ---------------------
         my_class.remove_mh_outliers()
         try:
             mh_opt_ro, mh_cov_ro = curve_fit(
-                my_class.model_h, 
-                my_class.ppfd_obs_h_ro, 
-                my_class.nee_obs_h_ro, 
-                p0 = my_class.hm_estimates
+                my_class.model_h,
+                my_class.ppfd_obs_h_ro,
+                my_class.nee_obs_h_ro,
+                p0=my_class.hm_estimates
                 )
         except:
             my_class.hm_optimized_ro = [-9999.0, -9999.0, -9999.0]
             my_class.hm_optim_err_ro = [-9999.0, -9999.0, -9999.0]
         else:
             (
-                my_class.hm_optimized_ro[0], 
-                my_class.hm_optimized_ro[1], 
+                my_class.hm_optimized_ro[0],
+                my_class.hm_optimized_ro[1],
                 my_class.hm_optimized_ro[2]) = mh_opt_ro
             #
             # Extract variance values from matrix:
             try:
                 mh_var_ro = numpy.diag(mh_cov_ro)
             except ValueError:
-                mh_var_ro = [0,0,0]
+                mh_var_ro = [0, 0, 0]
             else:
-                if numpy.isfinite(mh_var_ro).all() and not (mh_var_ro < 0).any():
+                if (numpy.isfinite(mh_var_ro).all() and not
+                        (mh_var_ro < 0).any()):
                     (
-                        my_class.hm_optim_err_ro[0], 
-                        my_class.hm_optim_err_ro[1], 
+                        my_class.hm_optim_err_ro[0],
+                        my_class.hm_optim_err_ro[1],
                         my_class.hm_optim_err_ro[2]
                         ) = numpy.sqrt(mh_var_ro)
                     #
@@ -3667,20 +3679,15 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
                         my_class.hm_optim_t_ro[0],
                         my_class.hm_optim_t_ro[1],
                         my_class.hm_optim_t_ro[2]
-                        ) = (
-                            numpy.array(my_class.hm_optimized_ro)/
-                            numpy.array(my_class.hm_optim_err_ro)
-                            )
+                        ) = (numpy.array(my_class.hm_optimized_ro) /
+                             numpy.array(my_class.hm_optim_err_ro))
                     #
                     # Calculate the p-value:
                     hm_df_ro = len(my_class.nee_obs) - my_class.hm_outliers - 3
-                    (
-                        my_class.hm_optim_p_ro[0],
-                        my_class.hm_optim_p_ro[1],
-                        my_class.hm_optim_p_ro[2]
-                        ) = scipy.stats.t.pdf(
-                            -abs(numpy.array(my_class.hm_optim_t_ro)),
-                            hm_df_ro)
+                    (my_class.hm_optim_p_ro[0],
+                     my_class.hm_optim_p_ro[1],
+                     my_class.hm_optim_p_ro[2]) = scipy.stats.t.pdf(
+                        -abs(numpy.array(my_class.hm_optim_t_ro)), hm_df_ro)
                 else:
                     my_class.hm_optim_err_ro[0] = 0.0
                     my_class.hm_optim_err_ro[1] = 0.0
@@ -3690,32 +3697,33 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
             #
         # ---------------------
         # Model L optimization:
-        # --------------------- 
+        # ---------------------
         my_class.remove_ml_outliers()
         try:
             ml_opt_ro, ml_cov_ro = curve_fit(
-                my_class.model_l, 
-                my_class.ppfd_obs_l_ro, 
-                my_class.nee_obs_l_ro, 
-                p0 = my_class.lm_estimates
+                my_class.model_l,
+                my_class.ppfd_obs_l_ro,
+                my_class.nee_obs_l_ro,
+                p0=my_class.lm_estimates
                 )
         except:
             my_class.lm_optimized_ro = [-9999.0, -9999.0]
             my_class.lm_optim_err_ro = [-9999.0, -9999.0]
         else:
             (
-                my_class.lm_optimized_ro[0], 
+                my_class.lm_optimized_ro[0],
                 my_class.lm_optimized_ro[1]) = ml_opt_ro
             #
             # Extract variance values from matrix:
             try:
                 ml_var_ro = numpy.diag(ml_cov_ro)
             except ValueError:
-                ml_var_ro = [0,0]
+                ml_var_ro = [0, 0]
             else:
-                if numpy.isfinite(ml_var_ro).all() and not (ml_var_ro < 0).any():
+                if (numpy.isfinite(ml_var_ro).all() and not
+                        (ml_var_ro < 0).any()):
                     (
-                        my_class.lm_optim_err_ro[0], 
+                        my_class.lm_optim_err_ro[0],
                         my_class.lm_optim_err_ro[1]
                         ) = numpy.sqrt(ml_var_ro)
                     #
@@ -3723,19 +3731,14 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
                     (
                         my_class.lm_optim_t_ro[0],
                         my_class.lm_optim_t_ro[1]
-                        ) = (
-                            numpy.array(my_class.lm_optimized_ro)/
-                            numpy.array(my_class.lm_optim_err_ro)
-                            )
+                        ) = (numpy.array(my_class.lm_optimized_ro) /
+                             numpy.array(my_class.lm_optim_err_ro))
                     #
                     # Calculate the p-value:
                     lm_df_ro = len(my_class.nee_obs) - my_class.lm_outliers - 2
-                    (
-                        my_class.lm_optim_p_ro[0],
-                        my_class.lm_optim_p_ro[1]
-                        ) = scipy.stats.t.pdf(
-                            -abs(numpy.array(my_class.lm_optim_t_ro)),
-                            lm_df_ro)
+                    (my_class.lm_optim_p_ro[0],
+                     my_class.lm_optim_p_ro[1]) = scipy.stats.t.pdf(
+                        -abs(numpy.array(my_class.lm_optim_t_ro)), lm_df_ro)
                 else:
                     my_class.lm_optim_err_ro[0] = 0.0
                     my_class.lm_optim_err_ro[1] = 0.0
@@ -3746,22 +3749,22 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
         if to_write:
             output_file = "out/%s_%s_ro.txt" % (tower, month)
             header0 = "MH_guess,%0.5f,%0.2f,%0.2f\n" % (
-                my_class.hm_estimates[1], 
-                my_class.hm_estimates[2], 
+                my_class.hm_estimates[1],
+                my_class.hm_estimates[2],
                 my_class.hm_estimates[0])
             header1 = "ML_guess,%0.5f,%0.2f\n" % (
-                my_class.lm_estimates[0], 
+                my_class.lm_estimates[0],
                 my_class.lm_estimates[1])
             header2 = "MH_opt,%0.5f,%0.2f,%0.2f,%0.2f,%0.3f\n" % (
-                my_class.hm_optimized_ro[1], 
-                my_class.hm_optimized_ro[2], 
-                my_class.hm_optimized_ro[0], 
-                my_class.hm_rmse_ro, 
+                my_class.hm_optimized_ro[1],
+                my_class.hm_optimized_ro[2],
+                my_class.hm_optimized_ro[0],
+                my_class.hm_rmse_ro,
                 my_class.hm_rsqr_ro)
             header3 = "ML_opt,%0.5f,%0.2f,,%0.2f,%0.3f\n" % (
-                my_class.lm_optimized_ro[0], 
-                my_class.lm_optimized_ro[1], 
-                my_class.lm_rmse_ro, 
+                my_class.lm_optimized_ro[0],
+                my_class.lm_optimized_ro[1],
+                my_class.lm_rmse_ro,
                 my_class.lm_rsqr_ro)
             OUTFILE = open(output_file, 'w')
             OUTFILE.write(header0)
@@ -3774,14 +3777,14 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
                 )
             for (
                     poh, noh, nhh, pol, nol, nll
-                    ) in map(None, my_class.ppfd_obs_h_ro, 
-                             my_class.nee_obs_h_ro, 
-                             my_class.nee_model_h_ro, 
-                             my_class.ppfd_obs_l_ro, 
-                             my_class.nee_obs_l_ro, 
+                    ) in map(None, my_class.ppfd_obs_h_ro,
+                             my_class.nee_obs_h_ro,
+                             my_class.nee_model_h_ro,
+                             my_class.ppfd_obs_l_ro,
+                             my_class.nee_obs_l_ro,
                              my_class.nee_model_l_ro):
                 outline = "%s,%s,%s,%s,%s,%s\n" % (
-                    poh, noh, nhh, 
+                    poh, noh, nhh,
                     pol, nol, nll
                     )
                 OUTFILE.write(outline)
@@ -3793,12 +3796,12 @@ def partition(nee, ppfd, to_write, rm_out, tower, month):
     # Return the FLUX_PARTI class object:
     return my_class
 
-################################################################################
-## MAIN PROGRAM
-################################################################################
+###############################################################################
+# MAIN PROGRAM
+###############################################################################
 # Get list of all flux station names:
 #stations = get_stations()
-stations = ['CZ-wet',]
+stations = ['CZ-wet', ]
 
 # Initialize summary statistics file:
 summary_file = "out/summary_statistics.txt"
@@ -3839,15 +3842,16 @@ for station in stations:
         # Process if enough data was found:
         if (len(monthly_ppfd) > 3 and len(monthly_nee) > 3):
             # Perform GPP partitioning (returns FLUX_PARTI class object):
-            monthly_parti = partition(monthly_nee, 
-                                      monthly_ppfd, 
-                                      to_write=False, 
+            monthly_parti = partition(monthly_nee,
+                                      monthly_ppfd,
+                                      to_write=False,
                                       rm_out=True,
                                       tower=station,
                                       month=sd)
             #
             # Perform half-hourly PPFD gapfilling (umol m-2 s-1):
-            (gf_time, gf_ppfd) = gapfill_ppfd_month(station, sd, to_write=False)
+            (gf_time, gf_ppfd) = gapfill_ppfd_month(
+                station, sd, to_write=False)
             #
             # Calculate half-hourly GPP (umol m-2 s-1)
             gf_gpp, gf_gpp_err = monthly_parti.calc_gpp(gf_ppfd)
@@ -3876,27 +3880,27 @@ for station in stations:
                 #
                 # Retrieve annual CO2:
                 annual_sd = sd.replace(month=1)
-                co2_annual = get_data_point(co2_msvidx, annual_sd) # ppm
+                co2_annual = get_data_point(co2_msvidx, annual_sd)  # ppm
                 #
                 # Retrieve monthly gridded data:
-                cpa_month = get_data_point(cpa_msvidx, sd)         # unitless
-                fpar_month = get_data_point(fpar_msvidx, sd)       # unitless
-                tair_month = get_data_point(tair_msvidx, sd)       # deg C
-                vpd_month = get_data_point(vpd_msvidx, sd)         # kPa
+                cpa_month = get_data_point(cpa_msvidx, sd)          # unitless
+                fpar_month = get_data_point(fpar_msvidx, sd)        # unitless
+                tair_month = get_data_point(tair_msvidx, sd)        # deg C
+                vpd_month = get_data_point(vpd_msvidx, sd)          # kPa
                 #
                 # Add LUE parameters to LUE class:
-                my_lue.add_station_val(station, 
-                                       sd, 
-                                       gpp_month,                  # mol/m2
-                                       gpp_month_err,              # mol/m2
-                                       fpar_month,                 # unitless
-                                       ppfd_month,                 # mol/m2
-                                       vpd_month,                  # kPa
-                                       cpa_month,                  # unitless
-                                       tair_month,                 # degC
-                                       co2_annual,                 # ppm
-                                       patm,                       # Pa
-                                       elv)                        # m
+                my_lue.add_station_val(station,
+                                       sd,
+                                       gpp_month,                   # mol/m2
+                                       gpp_month_err,               # mol/m2
+                                       fpar_month,                  # unitless
+                                       ppfd_month,                  # mol/m2
+                                       vpd_month,                   # kPa
+                                       cpa_month,                   # unitless
+                                       tair_month,                  # degC
+                                       co2_annual,                  # ppm
+                                       patm,                        # Pa
+                                       elv)                         # m
             #
         else:
             # Create an 'empty' class:

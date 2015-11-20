@@ -4,7 +4,7 @@
 % Imperial College London
 %
 % 2014-10-29 -- created
-% 2014-10-29 -- last updated
+% 2015-03-18 -- last updated
 %
 % ------------
 % description:
@@ -17,6 +17,7 @@
 % 01. modularized chapter [14.10.29]
 % 02. newline for each sentence [14.10.29]
 % --> simpler for Git version control
+% 03. minor text update [15.03.18]
 %
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 2.3 -- SETUP
@@ -87,10 +88,11 @@ available\textunderscore extensions table in the database.
                   2.0.1 and postgis\textunderscore topology v. 2.0.1 or similar
             \item Enable users to alter the spatial tables:\\
                   $\#$~\texttt{GRANT ALL ON geometry\textunderscore columns TO 
-                  PUBLIC;\\
-                  GRANT ALL ON geography\textunderscore columns TO PUBLIC;\\
-                  GRANT ALL ON spatial\textunderscore ref\textunderscore sys 
-                  TO PUBLIC;}
+                  PUBLIC;}\\
+                  $\#$~\texttt{GRANT ALL ON geography\textunderscore columns TO 
+                  PUBLIC;}\\
+                  $\#$~\texttt{GRANT ALL ON spatial\textunderscore 
+                  ref\textunderscore sys TO PUBLIC;}
             \item Log out of PostgreSQL:\\
                   $\#$~\texttt{\textbackslash q;}
             \item Check that everything is installed correctly:\\

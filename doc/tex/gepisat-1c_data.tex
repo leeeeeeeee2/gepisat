@@ -1,0 +1,323 @@
+% gepisat-1_data.tex
+%
+% written by Tyler W. Davis
+% Imperial College London
+%
+% 2014-10-29 -- created
+% 2015-03-19 -- last updated
+%
+% ------------
+% description:
+% ------------
+% This TEX file contains Part 1 model data for the GePiSaT model documentation.
+%
+% ----------
+% changelog:
+% ----------
+% 01. modularized chapter [14.10.29]
+% 02. newline for each sentence [14.10.29]
+% --> simpler for Git version control
+% 03. edited Cramer-Prentice section [14.10.29]
+% --> added three new references
+% --> added figure
+% 04. updated data to represent the varnames in the GePiSaT database [15.03.18]
+% 05. updated equations and nomenclature [15.03.19]
+%
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.4 -- OBSERVATION DATA
+%%///////////////////////////////////////////////////////////////////////// %%
+\section{Observation Data}
+\label{sec:obsdata}
+This section reviews the various observation data used in the GePiSaT model, as shown in the following table.  
+Note that not all of the observation data listed in Table \ref{tab:gepisatobs} is stored in the GePiSaT database (see Table \ref{tab:varname}).
+%% ------------------------------------------------------------------------ %%
+%% tab:gepisatobs | Observation data used in the GePiSaT model
+%% ------------------------------------------------------------------------ %%
+\begin{table}[h]
+    \caption{Observation variables used in the GePiSaT model.}
+    \label{tab:gepisatobs}
+    \centering
+    \begin{tabular}{l l l}
+        \hline
+        \bf{Observation} & \bf{Description} & \bf{Source} \\
+        \hline
+         NEE & Net Ecosystem Exchange (CO$_2$ flux) & fluxdata.org \\ 
+         PPFD & Photosynthetic photon flux density & fluxdata.org \\ 
+         EVI & Enhanced Vegetation Index & lpdaac.usgs.gov \\ 
+         $SW_{down}$ & Shortwave solar radiation &  eu-watch.org \\
+         vap & Actual vapor pressure & badc.nerc.ac.uk \\
+         tmp & Mean air temperature & badc.nerc.ac.uk \\
+         pre & Precipitation & badc.nerc.ac.uk \\
+         elv & Land surface elevation & badc.nerc.ac.uk \\
+         $c_a$ & Atmospheric CO$_2$ concentration & esrl.noaa.gov \\
+        \hline
+    \end{tabular}
+\end{table}
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.4.1 -- NEE & PPFD
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsection{NEE \& PPFD}
+\label{sec:gepfluxd}
+The high temporal resolution eddy covariance CO$_2$ flux data is available via flux tower organizations networked around the world.  
+FLUXNET\footnotemark \footnotetext{\url{http://fluxnet.ornl.gov}} is a universal network for the numerous regional networks, such as:
+
+\begin{itemize} \itemsep1pt
+    \item AmeriFlux (\url{http://ameriflux.lbl.gov/})
+    \item AsiaFlux (\url{http://www.asiaflux.net/})
+    \item CarboEurope IP (\url{http://www.carboeurope.org})
+    \item Fluxnet-Canada (\url{http://fluxnet.ccrp.ec.gc.ca})
+    \item LBA (\url{http://daac.ornl.gov/LBA/lba.shtml})
+    \item OzFlux (\url{http://www.ozflux.org.au})
+    \item TCOS-Siberia (\url{www.bgc.mpg.de/public/carboeur/web_TCOS/})
+\end{itemize}
+
+Figure \ref{fig:fluxmap} shows the locations of the more than 500 flux towers distributed over the world, color-coded by their associated regional networks. 
+Despite the numerous flux tower networks in the FLUXNET archives, not all tower data is openly accessible to researchers.
+%% ------------------------------------------------------------------------ %%
+%% fig:fluxmap | Map of the global FLUXNET towers
+%% ------------------------------------------------------------------------ %%
+\begin{figure}[ht!]
+    \includegraphics[width=\textwidth]{fluxnet_map.eps}
+    \caption{Map of FLUXNET station locations and their associated networks.  Source: \url{http://fluxnet.ornl.gov/introduction}}
+    \label{fig:fluxmap}
+\end{figure}
+
+For the purposes of the GePiSaT model, flux tower data (i.e., NEE and PPFD in Table \ref{tab:gepisatobs}) were acquired from the FLUXNET Synthesis Dataset\footnotemark \footnotetext{\url{http://www.fluxdata.org}} listed under the Free Fair-Use data policy.  
+In order to obtain this data, an account was created for the Free Fair-Use data\footnotemark \footnotetext{\url{https://roz.lbl.gov:31633/default.aspx}}.  
+As a registered user, access to the Free Fair-Use flux tower data becomes available.  
+There are 153 flux towers with at least one annual data file available between 1991 and 2007 under the Free Fair-Use data policy.  
+Note that some flux towers have multiple years of data available. 
+Table \ref{tab:freefairuse} shows the distribution of flux towers available for different countries (currently dominated by towers located in Europe and North America). 
+%% ------------------------------------------------------------------------ %%
+%% tab:gepisatobs | Observation data used in the GePiSaT model
+%% ------------------------------------------------------------------------ %%
+\begin{table}[h]
+    \caption{The number of Free Fair-Use flux towers by location.}
+    \label{tab:freefairuse}
+    \centering
+    \begin{tabular}{l l r c l l r}
+        \hline
+        \multicolumn{2}{l}{\bf Country} & {\bf \#} & ~ & \multicolumn{2}{l}{\bf Country} & {\bf \#}\\
+        \hline
+         \multicolumn{2}{l}{\emph{Africa}} & {\bf 4} & ~ & \multicolumn{2}{l}{\emph{Europe}}  & {\bf 83}\\ 
+         ~ & Botswana & 3 & ~ & ~ & Austria & 1\\ 
+         ~ & South Africa & 1 & ~ & ~ & Belgium & 4\\ 
+         ~ & ~ & ~ & ~ & ~ & Czech Republic & 2\\
+         \multicolumn{2}{l}{\emph{Asia}} &  {\bf 8} & ~ & ~ & Denmark & 4\\
+         ~ & Indonesia & 1 & ~ & ~ & Finland & 3\\
+         ~ & Israel & 1 & ~ & ~ & France & 7 \\
+         ~ & Russia & 6 & ~ & ~ & Germany & 8\\
+         ~ & ~ & ~ & ~ & ~ & Hungary & 2 \\
+         \multicolumn{2}{l}{\emph{Australia}} & {\bf 4} & ~ & ~ & Iceland & 1 \\
+          ~ & ~ & ~ & ~ & ~ & Ireland & 2\\
+           \multicolumn{2}{l}{\emph{North America}} & {\bf 53} & ~ & ~ & Italy & 17\\
+         ~ & Canada & 14 & ~ & ~ & Netherlands & 7\\
+         ~ & United States & 39 & ~ & ~ & Poland & 1\\
+         ~ & ~ & ~ & ~ & ~ & Portugal & 3\\
+         \multicolumn{2}{l}{\emph{South America}} & {\bf 1} & ~ & ~ & Slovak Republic & 1\\
+         ~ & Brazil & 1 & ~ & ~ & Spain & 4 \\
+         ~ & ~ & ~ & ~ & ~ & Sweden & 6\\
+         ~ & ~ & ~ & ~ & ~ & Switzerland & 2 \\
+         ~ & ~ & ~ & ~ & ~ & United Kingdom & 8\\
+        \hline
+    \end{tabular}
+\end{table}
+
+The data are stored in comma-separated file format (CSV) for each year of available data by individual stations.  
+For completeness, the half-hourly synthetic all-variable data files (i.e., ``synth.hourly.allvars.csv'' file extension) were downloaded.  
+For the 153 flux towers with Free Fair-Use data, 663 files were downloaded.  
+
+The synthesis data for each flux tower provide a complete half-hourly time series of all core and ancillary variables.  
+Gap-filling products are used in places where observations are missing or poor.  
+The use of quality flags for each observation of each variable provides a convenient way of filtering out all non-observed data.  
+For example, accompanying each NEE value is a quality flag that is given a value of `$-9999$' if the NEE value is missing, `$1$' or `$2$' if the NEE value is an observation, and `$3$' through `$5$' if the NEE value is gap-filled. 
+Similar quality flags are given to the PPFD values.  
+Missing and gap-filled values are filtered from the synthesis datasets leaving only the observation data.  
+It is these observations that are stored in the GePiSaT database (see NEE\textunderscore f and PPFD\textunderscore f in Table \ref{tab:varname}).
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.4.2 -- SWdown
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsection{SWdown}
+\label{sec:gepwatch}
+The gap-filling of the high-resolution PPFD (see \S \ref{sec:mst2gfppfd} for methodology) requires high resolution solar radiation data.  
+Daily downwelling shortwave solar radiation data (global coverage at 0.5$^{\circ}\times$0.5$^\circ$ resolution, W m$^{-2}$) can be acquired from the Integrated Project for Water and Global Change (WATCH\footnotemark \footnotetext{\url{http://www.eu-watch.org/data\textunderscore availability}}), which may be acquired through the WATCH project's FTP server hosted at the International Institute for Applied Systems Analysis (IIASA) in Austria\footnotemark \footnotetext{\url{ftp://rfdata:forceDATA@ftp.iiasa.ac.at/WFDEI/SWdown\textunderscore daily\textunderscore WFDEI/}}.
+The most recent data files are provided under the WATCH Forcing Data for the ERA Interim (WFDEI) \parencite{weedon12}.  
+The ERA Interim has recently been extended to include the time period between 1 January 1979 through 31 December 2012.
+See Figure \ref{fig:watchswd} for an example of daily $SW_{down}$ for 1 July 2002.
+The daily $SW_{down}$ is stored in the GePiSaT database (see Table \ref{tab:varname}).
+
+The data is organized in monthly netCDF files.  
+The data within the netCDF files can be accessed via Python's \texttt{netcdf} method in the \texttt{scipy.io} module.  
+An example of reading WATCH netCDF files using Python is given in Appendix \ref{app:netcdfpy}.
+%% ------------------------------------------------------------------------ %%
+%% fig:watchswd | WATCH SWdown 2002-07-01
+%% ------------------------------------------------------------------------ %%
+\begin{figure}[h!]
+    \includegraphics[width=\textwidth]{swd_2002-07-01.eps}
+    \caption{WATCH $SW_{down}$ at 0.5$^{\circ}$ resolution for 1 July 
+    2002.}
+    \label{fig:watchswd}
+\end{figure}
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.4.3 -- fPAR
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsection{fPAR}
+\label{sec:gepmodis}
+During photosynthesis, pigments within plant leaves (e.g., chlorophyll and carotenoids) absorb solar radiation particularly well the wavelengths within the blue and red visible spectrum (i.e., 0.40--0.51~$\mathrm{\mu}$m and 0.61--0.70~$\mathrm{\mu}$m, respectively).  
+Light energy within this range (i.e., 0.40--0.70~$\mathrm{\mu}$m) has come to be known as photosynthetically active radiation (PAR) \parencite{oke87}.  
+Not all of the energy available within the PAR waveband is absorbed by the vegetation canopy.  
+Therefore, it is often considered more important to investigate the fraction of absorbed PAR (fPAR).  
+Process-based methods of estimating fPAR often rely on some type of vegetation index (e.g., leaf area or satellite-derived index).
+
+The GePiSaT model implements a diagnostic approach to vegetation greenness by relying on remotely-sensed green vegetation as a model input (as opposed to attempting its own vegetation simulation).  
+There are a variety of remotely-sensed vegetation greenness indexes based on the moderate-resolution imaging spectrometer (MODIS) spectral bands.
+For our purposes, the enhanced vegetation index (EVI) is used to estimate vegetation greenness.
+
+EVI uses near-infrared (NIR) and visible red and blue MODIS spectral bands.  
+The calculation is as follows \parencite[Eq. 2]{huete02}:
+%% ---------------------------------------------------------------%%
+%% eq:evi | EVI calculation
+%% ---------------------------------------------------------------%%
+\nomenclature{$\text{EVI}$}{enhanced vegetation index [unitless]}
+\begin{equation}
+\label{eq:evi}
+    \text{EVI} = G\; \frac{\rho_{nir} - \rho_{red}}{\rho_{nir} + 
+                 C_{1}\; \rho_{red} - C_{2}\; \rho_{blue} + L_{bg}}
+\end{equation}
+
+\noindent where:\\
+\indent $G$ = gain factor (i.e., 2.5);\\
+\indent $L_{bg}$ = canopy background adjustment factor (i.e., 1.0);\\
+\indent $C_{1}$ = aerosol resistance coefficient (i.e., 6.0);\\
+\indent $C_{2}$ = aerosol resistance coefficient (i.e., 7.5);\\
+\indent $\rho$ = corrected (or partially corrected) surface reflectances.\\
+
+\noindent The calculation to convert EVI to fPAR is expressed as \parencite[Eq. 11]{xiao05}:
+%% ---------------------------------------------------------------%%
+%% eq:fapar | FAPAR based on EVI calculation
+%% ---------------------------------------------------------------%%
+\nomenclature{$\text{fPAR}$}{absorbed fraction of PAR [unitless]}%
+\begin{equation}
+\label{eq:fapar}
+    \text{fPAR} = a\; \text{EVI}
+\end{equation}
+
+\noindent where: \\
+\indent $a$ = 1.0;\\
+\indent fPAR = absorbed fraction of PAR;\\
+\indent EVI = MODIS-derived enhanced vegetation index.\\
+
+\noindent The fPAR data calculated from the upscaled MODIS-based EVI, by Eq. \ref{eq:fapar}, is stored in the GePiSaT database (see FAPAR in Table \ref{tab:varname}).
+%% ------------------------------------------------------------------------ %%
+%% fig:modisevi | MODIS EVI 2002-06
+%% ------------------------------------------------------------------------ %%
+\begin{figure}[ht!]
+    \includegraphics[width=\textwidth]{evi_2002-06.eps}
+    \caption{MODIS EVI at 0.5$^{\circ}$ resolution for the month of June 
+    2002.}
+    \label{fig:modisevi}
+\end{figure}
+
+MODIS is a satellite-borne sensor that captures 36 spectral bands ($\rho$) of reflected/emitted energy from the Earth at various spatial resolutions.  
+The MODIS sensor-array is onboard two National Aeronautics and Space Administration (NASA) Earth observation satellites: Aqua and Terra.  
+These satellites have slightly different paths over the planet; however, the same spectral bands are collected by both satellites.  
+Data is available from the Terra satellite starting in February 2000, while data from the Aqua satellite are available starting in July 2002.  
+The moderate-resolution of this sensor is 0.05$^{\circ}$ (i.e., 1/10$^{\text{th}}$ the 0.5$^{\circ}$ GePiSaT model resolution).
+Because MODIS data is at 1/10$^{\text{th}}$ the model resolution, MODIS EVI products are resampled to 0.5$^{\circ}$ resolution to match the gridded data used in GePiSaT, see Appendix \ref{app:modis} for the resampling methodology.
+Figure \ref{fig:modisevi} shows an example of monthly EVI at 0.5$^{\circ}$ resolution for June 2002. 
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.4.4 -- VPD
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsection{VPD}
+\label{sec:gepvpd}
+It has long been known that evapotranspiration is affected by atmospheric vapor pressure, or the amount of moisture in the air. 
+Vapor pressure deficit (VPD) is a common metric used to describe the driving force for evapotranspiration.  
+VPD is defined as the difference between the saturation vapor pressure, $e_s$, which varies with ambient temperature, and the actual vapor pressure, $e_d$:
+%% ---------------------------------------------------------------%%
+%% eq:vpd_basic | Basic vapor pressure deficit equation
+%% ---------------------------------------------------------------%%
+\begin{equation}
+\label{eq:vpd_basic}
+    \text{VPD} = e_s - e_d
+\end{equation} 
+
+In order to estimate VPD, the saturation vapor pressure can be calculated from the air temperature \parencite[Eq. 5.1]{abtew13}:
+%% ---------------------------------------------------------------%%
+%% eq:es | Saturation vapor pressure
+%% ---------------------------------------------------------------%%
+\nomenclature{$e_s$}{saturation vapor pressure [kPa]}%
+\begin{equation}
+\label{eq:es}
+    e_s = 0.611 \exp \left( \frac{17.27\; T_{air}}{T_{air} + 237.3} \right)
+\end{equation}
+
+\noindent where:\\
+\indent $e_s$ = saturation vapor pressure [kPa];\\
+\indent $T_{air}$ = air temperature [$^{\circ}$C].\\
+
+\noindent The air temperature in Eq. \ref{eq:es}, $T_{air}$, may reflect a variety of quantities, such as the 24-hour mean air temperature, the daily maximum air temperature, the daily minimum air temperature, or the average air temperature.  
+The latter quantity is used in the calculation of VPD by means of CRU TS 3.21 monthly average daily temperature, tmp, which is the also the average of the monthly average maximum and minimum daily temperatures (tmx and tmn, respectively).  
+The CRU TS 3.21 dataset also includes a measure of monthly vapor pressure, vap, in units of hectopascals (hPa).
+The full expression for calculating VPD based on CRU TS 3.21 datasets is then:
+%% ---------------------------------------------------------------%%
+%% eq:vpd | Vapor pressure deficit
+%% ---------------------------------------------------------------%%
+\nomenclature{$\text{VPD}$}{vapor pressure deficit [kPa]}
+\begin{equation}
+\label{eq:vpd}
+    \text{VPD} = 0.611 \exp \left( \frac{17.27\; \text{tmp}}
+                 {0.5\; \text{tmp} + 237.3} \right) - 0.10\; \text{vap}
+\end{equation}
+
+\noindent where:\\
+\indent VPD = monthly average vapor pressure deficit [kPa];\\
+\indent tmp = monthly average daily mean temperature [$^{\circ}$C];\\
+\indent vap = monthly average vapor pressure [hPa].\\
+
+The monthly VPD data calculated from Eq. \ref{eq:vpd} is stored in the GePiSaT database (see VPD in Table \ref{tab:varname}).
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.4.5 -- Tc
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsection{Tc, Pre and Elv}
+\label{sec:gepcru}
+The CRU TS3.10 (currently at version 3.22) monthly 0.5$^{\circ}\times$0.5$^{\circ}$ resolution netCDF climatic data sets provide the mean daily air temperature and precipitation data \parencite{harris14}, which is saved to the GePiSaT database (Tc and Pre in Table \ref{tab:varname}, respectively).
+
+The 0.5$^{\circ}\times$0.5$^{\circ}$ ground surface elevation data is from the CRU TS3.0 data archives and saved in the GePiSaT database (see Elv in Table \ref{tab:varname}).
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.4.6 -- CO2
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsection{CO2}
+\label{sec:gepnoaa}
+Mean annual atmospheric CO$_2$ concentrations are available from the Global Monitoring Division of the National Oceanic and Atmospheric Association (NOAA) / Earth System Research Laboratory (ESRL)\footnotemark \footnotetext{\url{http://www.esrl.noaa.gov/gmd/ccgg/trends/global.html}}.  
+
+The mean annual global data provides a representative quantification for the various flux towers located around the world without superposing the issue of dealing with seasonality in the data.
+The same annual value is therefore used for each month of a particular year.
+
+The data are based on averages taken over marine surface sites and are given in units of parts-per-million (ppm). 
+The annual atmospheric CO$_2$ concentration data are saved in the GePiSaT database (see CO2 in Table \ref{tab:varname}).
+
+%% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
+%% PART 1.4.7 -- Alpha
+%%///////////////////////////////////////////////////////////////////////// %%
+\subsection{Alpha}
+\label{sec:gepcp}
+%% ------------------------------------------------------------------------ %%
+%% fig:cpa | Cramer-Prentice alpha 2002-06
+%% ------------------------------------------------------------------------ %%
+\begin{figure}[h!]
+    \includegraphics[width=\textwidth]{cpa_2002-06.eps}
+    \caption{Cramer-Prentice $\alpha^{\star}$ at 0.5$^{\circ}$ resolution for June 
+    2002.}
+    \label{fig:cpa}
+\end{figure}
+In order to account for soil moisture affects on GPP, the Cramer-Prentice bioclimatic moisture index, $\alpha^{\star}$ (i.e., the ratio of monthly actual to equilibrium evapotranspiration), is incorporated into the GePiSaT model \parencite{cramer88,gallego-sala10}. 
+To alleviate the burden of modeling soil moisture in GePiSaT, monthly estimates of $\alpha^{\star}$ are calculated \textit{a priori} based on the STASH (STAtic SHell) model \parencite{sykesprent95,sykesprent96,sykes96}.
+Allowing for the fact that the actual evapotranspiration follows the potential values, $\alpha^{\star}$ is expected to range between 0 and 1.26 \parencite{lhomme97,priestley72}.
+The monthly $\alpha^{\star}$ calculated using the STASH code are saved in the GePiSaT database (see alpha in Table \ref{tab:varname}).
+Figure \ref{fig:cpa} shows an example of $\alpha^{\star}$, calculated from CRU TS climatology, distributed over the terrestrial landscape for June 2002.

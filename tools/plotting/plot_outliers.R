@@ -1,0 +1,355 @@
+# RStudio 0.97
+#
+# plot_outliers.R
+#
+# written by Tyler W. Davis
+# Imperial College London
+#
+# 2012-10-10 -- created
+# 2014-03-18 -- last updated
+#
+# ------------
+# description:
+# ------------
+# This script reads the observation and outlier-free datasets output by
+# model.py, plots them and highlights the observation pairs identified
+# as outliers.
+#
+# NOTE: observation and outlier files are organized into their own separate
+# station folders by using either file_handler-osx .pl or file_handler-win.pl
+# located in Dropbox (../GePPiSaT/gepisat/code/current/perl)
+#
+# ----------
+# changelog:
+# ----------
+# 1. Created separate functions for plotting linear and hyperbolic plots
+# 2. Addressed the "None" in read.csv by replacing them with NAs
+# 3. Addressed NAs in function calls (na.rm=TRUE)
+# 4. Added list.dirs function [14.03.18]
+# 5. Added optim_params() function [14.03.18]
+#
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+#### FUNCTIONS ################################################################
+# /////////////////////////////////////////////////////////////////////////////
+modelH <- function(x, foo, alpha, r) {
+  # Define linear arguments:
+  a <- (1.0*alpha*r - 1.0*alpha*foo);
+  b <- 1.0*foo*r;
+  c <- alpha;
+  d <- foo;
+  #
+  y = (a*x+b)/(c*x+d);
+}
+modelL <- function(x, alpha, r) {
+	# Define linear arguments:
+	a <- -1.0*alpha;
+	b <- r;
+	#
+	y = a*x + b
+}
+plot_outlier_modelL <- function(obs, ro, alpha, r, year.month){
+  # Plotting extents:
+  max.y <- max(obs$nee_obs, ro$nee_obs_l, na.rm=TRUE)
+  min.y <- min(obs$nee_obs, ro$nee_obs_l, na.rm=TRUE)
+  max.x <- max(obs$ppfd_obs, ro$ppfd_obs_l, na.rm=TRUE)
+  min.x <- 0
+  #
+  # Save fitting line:
+  x <- seq(
+    min(obs$ppfd_obs, na.rm=TRUE), 
+    max(obs$ppfd_obs, na.rm=TRUE), 
+    length=100
+    )
+  y <- modelL(x, alpha, r)
+  #
+  # Plot
+  par(mar=c(5.5,4.75,1,1))
+  plot(
+    obs$ppfd_obs, 
+    obs$nee_obs, 
+    type = "p",
+    pch = 20,
+    col = "red",
+    main = NULL,
+    sub = year.month,
+    xlab = expression(paste("PPFD (", mu, mol%.%m^{-2}%.%s^{-1},")")),
+    ylab = expression(paste("NEE (", mu, mol%.%m^{-2}%.%s^{-1},")")),
+    #xlab = "",
+    #ylab = "",
+    #axes = FALSE,
+    #frame.plot = TRUE,
+    xlim=c(min.x,max.x), 
+    ylim=c(min.y,max.y)
+  )
+  box(lwd=2)
+  points(
+    ro$ppfd_obs_l,
+    ro$nee_obs_l,
+    pch = 20,
+    col = "gray"
+  )
+  #points(
+  #  obs$ppfd_obs,
+  #  obs$nee_obs,
+  #  pch = 1,
+  #  col = "black"
+  #)
+  lines(
+    x,
+    y, 
+    lty=2, 
+    col="blue", 
+    lwd=3
+  )
+}
+plot_outlier_modelH <- function(obs, ro, alpha, r, foo, year.month){
+  # Save plotting extents:
+  max.y <- max(obs$nee_obs, ro$nee_obs_h, na.rm=TRUE)
+  min.y <- min(obs$nee_obs, ro$nee_obs_h, na.rm=TRUE)
+  max.x <- max(obs$ppfd_obs, ro$ppfd_obs_h, na.rm=TRUE)
+  min.x <- 0
+  #
+  # Save fitting line:
+  x <- seq(
+    min(obs$ppfd_obs, na.rm=TRUE), 
+    max(obs$ppfd_obs, na.rm=TRUE), 
+    length=100
+    )
+  y <- modelH(x, foo, alpha, r)
+  #
+  # Plot:
+  par(mar=c(5.5,4.75,1,1))
+  plot(
+    obs$ppfd_obs, 
+    obs$nee_obs, 
+    type = "p",
+    pch = 20,
+    col = "red",
+    main = NULL,
+    sub = year.month,
+    xlab = expression(paste("PPFD (", mu, mol%.%m^{-2}%.%s^{-1},")")),
+    ylab = expression(paste("NEE (", mu, mol%.%m^{-2}%.%s^{-1},")")),
+    #xlab = "",
+    #ylab = "",
+    #axes = FALSE,
+    #frame.plot = TRUE,
+    xlim=c(min.x,max.x), 
+    ylim=c(min.y,max.y)
+  )
+  box(lwd=2)
+  points(
+    ro$ppfd_obs_h,
+    ro$nee_obs_h,
+    pch = 20,
+    col = "gray"
+  )
+  #points(
+  #  obs$ppfd_obs,
+  #  obs$nee_obs,
+  #  pch = 1,
+  #  col = "black"
+  #)
+  lines(
+    x,
+    y, 
+    lty=2, 
+    col="blue", 
+    lwd=3
+  )
+}
+list.dirs <- function(path=".", pattern=NULL, all.dirs=FALSE,
+                      full.names=FALSE, ignore.case=FALSE) {
+  # Code written by J. Ulrich
+  # http://stackoverflow.com/questions/4749783/how-to-obtain-a-list-of
+  # -directories-within-a-directory-like-list-files-but-i
+  #
+  all <- list.files(path, pattern, all.dirs,
+                    full.names, recursive=FALSE, ignore.case)
+  all
+}
+optim_params <- function(my.path, my.file){
+  # Returns optimization params table
+  #
+  headerparts <- read.csv(
+    paste(my.path, my.file, sep=""), 
+    header=F)[1:4,1:6]
+  #
+  colnames(headerparts) <- c("names", "alpha", "R", "Foo", "RMSE", "R2")
+  myvars = setNames(data.frame(t(headerparts[,-1])), headerparts[,1])
+  #
+  # Retrieve optimization parameters:
+  mh.alpha <- as.numeric(
+    levels(myvars$MH_opt)[as.numeric(myvars$MH_opt['alpha'])]);
+  mh.guess.alpha <- as.numeric(
+    levels(myvars$MH_guess)[as.numeric(myvars$MH_guess['alpha'])]);
+  #
+  mh.guess.r <- as.numeric(
+    levels(myvars$MH_guess)[as.numeric(myvars$MH_guess['R'])]);
+  mh.r <- as.numeric(
+    levels(myvars$MH_opt)[as.numeric(myvars$MH_opt['R'])]);
+  #
+  mh.guess.foo <- as.numeric(
+    levels(myvars$MH_guess)[as.numeric(myvars$MH_guess['Foo'])]);
+  mh.foo <- as.numeric(
+    levels(myvars$MH_opt)[as.numeric(myvars$MH_opt['Foo'])]);
+  #
+  ml.guess.alpha <- as.numeric(
+    levels(myvars$ML_guess)[as.numeric(myvars$ML_guess['alpha'])]);
+  ml.alpha <- as.numeric(
+    levels(myvars$ML_opt)[as.numeric(myvars$ML_opt['alpha'])]);
+  #
+  ml.guess.r <- as.numeric(
+    levels(myvars$ML_guess)[as.numeric(myvars$ML_guess['R'])]);
+  ml.r <- as.numeric(
+    levels(myvars$ML_opt)[as.numeric(myvars$ML_opt['R'])]);
+  #
+  mh.r2 <- as.numeric(
+    levels(myvars$MH_opt)[as.numeric(myvars$MH_opt['R2'])]);
+  ml.r2 <- as.numeric(
+    levels(myvars$ML_opt)[as.numeric(myvars$ML_opt['R2'])]);
+  #
+  mh.rmse <- as.numeric(
+    levels(myvars$MH_opt)[as.numeric(myvars$MH_opt['RMSE'])]);
+  ml.rmse <- as.numeric(
+    levels(myvars$ML_opt)[as.numeric(myvars$ML_opt['RMSE'])]);
+  #
+  # Make a table:
+  optimization.params <- matrix(c(mh.alpha,       ml.alpha,
+                                  mh.guess.alpha, ml.guess.alpha,
+                                  mh.r,           ml.r,
+                                  mh.guess.r,     ml.guess.r,
+                                  mh.foo,         NA,
+                                  mh.guess.foo,   NA,
+                                  mh.rmse,        ml.rmse,
+                                  mh.r2,          ml.r2),ncol=2,byrow=T);
+  optimization.params <- as.data.frame(optimization.params)
+  colnames(optimization.params) <- c("model_h","model_l")
+  rownames(optimization.params) <- c(
+    "alpha","alpha_est",
+    "r","r_est",
+    "foo","foo_est",
+    "rmse","r2"
+  )
+  #
+  optimization.params
+}
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+#### DEFINITIONS ##############################################################
+# /////////////////////////////////////////////////////////////////////////////
+obs.station.dir = paste(
+  "/home/user/Projects/gepisat/results/2002-06/",
+  "attempt22b/partitioning/obs/", sep="")
+ro.station.dir = paste(
+  "/home/user/Projects/gepisat/results/2002-06/",
+  "attempt21/partitioning/ro/", sep="")
+stations <- list.dirs(path=obs.station.dir, pattern="*-*")
+out.file.path=paste(
+  "/home/user/Projects/gepisat/results/2002-06/",
+  "attempt22b/outliers/", sep="")
+
+# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+#### MAIN #####################################################################
+# /////////////////////////////////////////////////////////////////////////////
+# Step through each directory:
+for (st.id in stations){
+	obs.file.path=paste(
+    obs.station.dir,
+		st.id,
+		"/",
+		sep=""
+		)
+	ro.file.path=paste(
+    ro.station.dir,
+		st.id,
+		"/", 
+		sep=""
+		)
+	# \\\\\\\\\\\\\\\\\\\\\\\\\\\
+	# Find files in subdirectory:
+	# ///////////////////////////
+	obs.files.all = list.files(path = obs.file.path, pattern = "*[:1:].txt$");
+	ro.files.all = list.files(path = ro.file.path, pattern = "*_ro.txt$");
+	obs.num.files <- length(obs.files.all)
+  ro.num.files <- length(ro.files.all)
+  if (obs.num.files == ro.num.files){
+    num.files = obs.num.files
+  } else {
+    cat(
+      paste("Error with number of files in station", st.id)
+      )
+    num.files = 0
+  }
+	#
+	#\\\\\\\\\\\\\\\\\\\\\\\\\\\
+	# Create postscript outfile:
+	#///////////////////////////
+	#ps.file.name.l <- paste(toupper(st.id), "_modL-outliers.ps", sep="")
+  ps.file.name.h <- paste(toupper(st.id), "_modH-outliers.ps", sep="")
+  #
+	postscript(
+		file = paste(out.file.path, ps.file.name.h, sep=""), 
+		width = 6, 
+		height = 6, 
+		paper = "special", 
+		horizontal = FALSE,
+		onefile = TRUE
+		)
+	#
+	# \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+	# Step through each file in subdirectory:
+	# ///////////////////////////////////////
+	for(i in seq(num.files)){
+		# Obs and ro file names:
+		obs.file <- obs.files.all[i]
+		ro.file <- ro.files.all[i]
+		#
+		# Save station info:
+		station.name <- gsub("_.*$", "", obs.file)
+		year.month <- gsub("(^.*_)(.*-.*)(-.*\\.txt$)", "\\2", obs.file)
+		#
+		# Get obs/ro params from file headers:
+    obs.params <- optim_params(obs.file.path, obs.file)
+		ro.params <- optim_params(ro.file.path, ro.file)
+		#
+		# Read contents:
+		obs.contents <- read.csv(
+			paste(obs.file.path,obs.file,sep=""), 
+      header=T, 
+      skip=4,
+      na.strings="None"
+      )
+		ro.contents <- read.csv(
+			paste(ro.file.path,ro.file,sep=""), 
+      header=T, 
+      skip=4,
+      na.strings="None"
+      )
+		#
+		# Plot LINEAR:
+    #plot_outlier_modelL(
+    #  obs.contents, 
+    #  ro.contents, 
+    #  ro.params['alpha','model_l'],
+    #  ro.params['r','model_l'],
+    #  year.month
+    #  )
+    #
+    # Plot HYPER:
+    plot_outlier_modelH(
+      obs.contents,
+      ro.contents,
+      ro.params['alpha','model_h'],
+      ro.params['r','model_h'],
+      ro.params['foo','model_h'],
+      year.month
+      )
+		#
+		rm(
+      obs.contents, ro.contents,
+			obs.params,   ro.params
+			)
+	}
+	# Close postscript file:
+	dev.off()
+}
+

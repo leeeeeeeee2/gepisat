@@ -4,7 +4,7 @@
 % Imperial College London
 %
 % 2014-10-29 -- created
-% 2014-10-29 -- last updated
+% 2015-03-18 -- last updated
 %
 % ------------
 % description:
@@ -17,6 +17,7 @@
 % 01. modularized chapter [14.10.29]
 % 02. newline for each sentence [14.10.29]
 % --> simpler for Git version control
+% 03. added new text [15.03.18]
 %
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 1.1 -- INTRODUCTION
@@ -25,8 +26,16 @@
 \label{sec:intro}
 This project is aimed to develop a modeling system for global hindcasting and analysis of spatial and temporal patterns in terrestrial gross primary production (GPP).  
 This system takes a simplistic approach which makes the best use of observational data (from flux towers, meteorological stations, and remote-sensing satellites) while defensibly representing the principal eco-physiological processes that govern GPP.  
-The modeling system is divided into three stages.  
-The basis of the system is an efficient database structure designed to hold the variety of observational data necessary to complete each stage of the modeling.  
+
+The modeling work is divided into stages to assess the next-generation GPP model from the ground up.
+The first stage is the acquisition and decomposition of high-resolution CO$_2$ eddy flux, $F$ (i.e., net ecosystem exchange), and photosynthetic photon flux density, $Q$, into ecosystem respiration and GPP.
+The high-resolution data was acquired from eddy covariance flux towers (e.g., public FLUXNET data) across the world.
+The regression of $Q$ versus $F$ into flux partitioning parameters is based on the work of \cite{ruimy95}.
+The second stage is to integrate the high-resolution $Q$ and estimated GPP into monthly totals.
+The integration requires gap-filling of the monthly time series of $Q$, due to missing or errant observations.
+The third stage is the analysis and fitting of the light-use efficiency quasi-theoretical model to the observed monthly GPP.
+ 
+The basis of the modeling system is an efficient database structure designed to hold the variety of observational data necessary to complete each stage of the modeling.  
 This modeling work strives for clarity and uniformity so that it may be used by researchers across disciplines.  
 The use of open-source software (i.e., PostgreSQL) and programming languages (e.g., Python and R) allows for portability and transparency.  
 The model will invite a range of applications to the analysis of climate and CO$_{2}$ change impacts on ecosystem processes.

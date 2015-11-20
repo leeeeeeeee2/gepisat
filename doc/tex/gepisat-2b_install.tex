@@ -4,7 +4,7 @@
 % Imperial College London
 %
 % 2014-10-29 -- created
-% 2014-10-29 -- last updated
+% 2015-03-18 -- last updated
 %
 % ------------
 % description:
@@ -17,6 +17,7 @@
 % 01. modularized chapter [14.10.29]
 % 02. newline for each sentence [14.10.29]
 % --> simpler for Git version control
+% 03. new text, minor update [15.03.18]
 %
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 2.2 -- INSTALLATION
@@ -24,10 +25,12 @@
 \section{Installation}
 \label{sec:dbinstall}
 PostgreSQL can be installed on a variety of operating systems. 
-A popular alternative to installing PostgreSQL directly onto your computer is to use a virtual computer which operates independently and can be easily ported from one machine to another.  
-BitNami\footnotemark \footnotetext{\url{http://bitnami.com}} is a provider of  pre-packaged virtual computers with applications already configured for software development. 
-The database for this modeling system was tested on both a native PostgreSQL installation and on the BitNami Linux Application (LAPP) stack. 
+A popular alternative to installing PostgreSQL directly onto your computer is to use a virtual computer which operates independent of your main computer's operating system and can be easily ported from one machine to another.  
+BitNami\footnotemark \footnotetext{\url{http://bitnami.com}} is one such provider of  pre-packaged virtual computers with applications already configured for software development. 
+
+The database for this modeling system was tested on both a native PostgreSQL installation (on Linux Mint Maya) and on the BitNami Linux Application (LAPP) stack. 
 The LAPP stack provides a complete PostgreSQL development environment which also includes the PostGIS extensions.  
+
 In order to run a virtual machine, virtualization software is required.  
 There are numerous virtualization software providers, however, the most common are VirtualBox\footnotemark \footnotetext{\url{https://www.virtualbox.org}} and VMWare\footnotemark \footnotetext{\url{http://www.vmware.com}}.  
 
@@ -61,8 +64,8 @@ The following instructions give a step by step overview on how to install the LA
 		\end{enumerate}
 	\item If you are using a \textbf{wifi connection}:
 		\begin{enumerate}
-		\item Once the BitNami is installed (you should get an installation report with confirmation of success, partition size, etc.), click on ``Configuration''.
-		\item Select ``Network interface controller''.
+		\item Once the BitNami is installed (you should get an installation report with confirmation of success, partition size, etc.), click on ``Configuration.''
+		\item Select ``Network interface controller.''
 		\item Tick ``wifi'' and make sure the ``Network interface controller'' is activated. You will be prompted for your \textbf{OSX} admin password.
 		\item Close the window and start BitNami.\\
 		\textbf{NOTE}: If you forgot to activate the wifi as described above just after the installation process, BitNami configuration will fail on starting up. Run the command: \texttt{sudo poweroff} to power down BitNami.  Go to \texttt{Virtual machine} $\rightarrow$ Configuration... $\rightarrow$ ``Network interface controller'' and repeat the procedure described above. Keyboard shortcut: \textbf{cmd + E}. 

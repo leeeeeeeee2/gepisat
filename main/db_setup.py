@@ -1,12 +1,18 @@
 #!/usr/bin/python
 #
-# db_setup.py (BITNAMI version)
+# db_setup.py
 #
-# written by Tyler W. Davis
-# Imperial College London
+# VERSION 2.0
 #
 # 2013-05-15 -- created (as postgreSQL.py)
-# 2014-10-22 -- last updated
+# 2015-11-18 -- last updated
+#
+# ---------
+# citation:
+# ---------
+# I. C. Prentice, T. W. Davis, X. M. P. Gilbert, B. D. Stocker, B. J. Evans,
+# H. Wang, and T. F. Keenan, "The Global ecosystem in Space and Time (GePiSaT)
+# Model of the Terrestrial Biosphere," (in progress).
 #
 # ------------
 # description:
@@ -25,7 +31,7 @@
 # ----------
 # 01. Added check for table existance [13.05.28]
 # 02. Changed varchar(n) datatype to text [13.06.17]
-#     http://www.depesz.com/2010/03/02/charx-vs-varcharx-vs-varchar-vs-text/ 
+#     http://www.depesz.com/2010/03/02/charx-vs-varcharx-vs-varchar-vs-text/
 # 03. Added popdataset() function now that we have fluxtower data
 # 04. Abstracted user name and password to file; defaults to user postgres
 #     and pass bitnami (update as necessary) [13.08.27]
@@ -41,7 +47,7 @@
 # 11. Updated popmeta, popvar, and popdata functions [13.09.12]
 #     * check for t
 #     * else print errors
-# 12. Gridded data station ids have 9 characters; update database definition of 
+# 12. Gridded data station ids have 9 characters; update database definition of
 #     stationid and msvidx [13.09.12]
 #     * stationid varchar(12)
 #     * msvidx varchar(15)
@@ -51,6 +57,7 @@
 # 16. Added get_var|data_files() functions [14.01.10]
 # 17. Added BITNAMI directory structure to get data functions [14.02.05]
 # 18. General housekeeping [14.09.02]
+# 19. PEP8 style fixes [15.11.18]
 #
 # -----
 # todo:
@@ -60,15 +67,16 @@
 # 02. Add database name (e.g. 'gepisat') to the user.txt file
 #
 ###############################################################################
-## IMPORT MODULES:
+# IMPORT MODULES:
 ###############################################################################
 import glob
 import os.path
 import sys
 import psycopg2
 
+
 ###############################################################################
-## DEFINE FUNCTIONS ###########################################################
+# DEFINE FUNCTIONS:
 ###############################################################################
 def connectSQL():
     """
@@ -94,10 +102,10 @@ def connectSQL():
     # Test database connection:
     try:
         con = psycopg2.connect(
-            database='gepisat', 
+            database='gepisat',
             #database='test',
-            user=my_user, 
-            host='localhost', 
+            user=my_user,
+            host='localhost',
             password=my_pass
             )
     #
@@ -106,6 +114,7 @@ def connectSQL():
         sys.exit(1)
     #
     return con
+
 
 def getversion():
     """
@@ -128,6 +137,7 @@ def getversion():
     #
     # Close connection
     con.close()
+
 
 def getdata(myfile):
     """
@@ -153,6 +163,7 @@ def getdata(myfile):
             t = tuple(content)
         return t
 
+
 def droptable(tname):
     """
     Name:     droptable
@@ -164,7 +175,7 @@ def droptable(tname):
     """
     # Define querry:
     q = "DROP TABLE IF EXISTS " + tname
-    # 
+    #
     # Check dependencies:
     if (tname == "met_data"):
         # Check to see if var_list exists:
@@ -172,7 +183,7 @@ def droptable(tname):
         #
         # Warn and drop dependent table:
         if (isvarlist):
-            print "Warning, dropping dependent table var_list"				
+            print "Warning, dropping dependent table var_list"
             droptable("var_list")
     elif (tname == "var_list"):
         # Check to see if data_set exists:
@@ -193,6 +204,7 @@ def droptable(tname):
     # Commit changes to database and close:
     con.commit()
     con.close()
+
 
 def createmetdata():
     """
@@ -246,6 +258,7 @@ def createmetdata():
     con.commit()
     con.close()
 
+
 def createvarlist():
     """
     Name:     createvarlist
@@ -292,12 +305,13 @@ def createvarlist():
     else:
         print "Cannot proceed, missing dependency 'met_data' table"
 
+
 def createdataset():
     """
     Name:     createdataset
     Input:    None.
     Output:   None.
-    Features: Creates the data_set table, dropping an existing table if it 
+    Features: Creates the data_set table, dropping an existing table if it
               exists and checking that necessary dependency tables exist
     Depends:  - droptable
               - existsSQL
@@ -331,6 +345,7 @@ def createdataset():
         cur.execute(q)
         con.commit()
         con.close()
+
 
 def popmetdata(filename):
     """
@@ -375,6 +390,7 @@ def popmetdata(filename):
     else:
         print "No data read from file", filename
 
+
 def popvarlist(filename):
     """
     Name:     popvarlist
@@ -416,6 +432,7 @@ def popvarlist(filename):
     else:
         print "No data read from file", filename
 
+
 def popdataset(filename):
     """
     Name:     popdataset
@@ -455,6 +472,7 @@ def popdataset(filename):
     else:
         print "No data read from file", filename
 
+
 def existsSQL(tname):
     """
     Name:     existsSQL
@@ -485,12 +503,13 @@ def existsSQL(tname):
     # Return boolean:
     return myresult
 
+
 def reset_db():
     """
     Name:     reset_db
     Input:    None.
     Output:   None.
-    Features: Deletes existing and creates the met_data, var_list, and data_set 
+    Features: Deletes existing and creates the met_data, var_list, and data_set
               postgreSQL tables
     Depends:  - existsSQL
               - droptable
@@ -522,12 +541,13 @@ def reset_db():
     print "Creating 'data_set'..."
     createdataset()
 
+
 def clean_db():
     """
     Name:     clean_db
     Input:    None.
     Output:   None.
-    Features: Deletes all rows (data) from met_data, var_list, and data_set 
+    Features: Deletes all rows (data) from met_data, var_list, and data_set
               tables if they exist (does not drop tables)
     Depends:  - existsSQL
               - connectSQL
@@ -546,7 +566,7 @@ def clean_db():
     #
     # Clean tables:
     if isds:
-        q = "DELETE FROM %s;" % ("data_set") 
+        q = "DELETE FROM %s;" % ("data_set")
         cur.execute(q)
     if isvl:
         q = "DELETE FROM %s;" % ("var_list")
@@ -558,6 +578,7 @@ def clean_db():
     # Commit changes and close:
     con.commit()
     con.close()
+
 
 def clean_table(tname):
     """
@@ -588,6 +609,7 @@ def clean_table(tname):
     con.commit()
     con.close()
 
+
 def db_size():
     """
     Name:     db_size
@@ -617,6 +639,7 @@ def db_size():
     con.close()
     #
     return my_result[0]
+
 
 def get_var_files():
     """
@@ -652,6 +675,7 @@ def get_var_files():
         files_list = files_list + tmp_list
         #
     return files_list
+
 
 def get_data_files():
     """
@@ -690,46 +714,47 @@ def get_data_files():
     return files_list
 
 ###############################################################################
-## MAIN PROGRAM ###############################################################
+# MAIN PROGRAM:
 ###############################################################################
 # Test database connection:
-#getversion()
+getversion()
 
 # Reset or clean database:
-#reset_db()
-#clean_db()
-#clean_table("data_set")
+reset_db()
+# clean_db()
+# clean_table("data_set")
 
 # Check database size:
-#my_dbsize = db_size()
-#print "Start,%s" % my_dbsize
+my_dbsize = db_size()
+print("Start,%s" % my_dbsize)
 
 # Create and populate met_data table:
-#met_dir = "/database/files/met_data/point/"
-#print "Processing 'met_data'"
-#md_files = glob.glob(met_dir + "*Met-Data*")
-#for x in sorted(md_files):
-#    #print os.path.basename(x)
-#    popmetdata(x)
-#    print "%s,%s" % (os.path.basename(x), db_size())
+met_dir = "/database/files/met_data/point/"
+print("Processing 'met_data'")
+md_files = glob.glob(met_dir + "*Met-Data*")
+for x in sorted(md_files):
+    #print os.path.basename(x)
+    popmetdata(x)
+    print("%s,%s" % (os.path.basename(x), db_size()))
 
 # Create and populate var_list table :
 # * NOTE: some cols depend on met_data, so create/pop it first
-#print "Processing 'var_list'"
-#vl_files = get_var_files()
-#for y in sorted(vl_files):
-#    #print " ...", os.path.basename(y) 
-#    popvarlist(y)
-#    print "%s,%s" % (os.path.basename(y), db_size())
-#
+print("Processing 'var_list'")
+vl_files = get_var_files()
+for y in sorted(vl_files):
+    print(" ...", os.path.basename(y))
+    popvarlist(y)
+    print "%s,%s" % (os.path.basename(y), db_size())
+
 # Create and populate data_set table
-#print "Processing 'data_set'"
+print "Processing 'data_set'"
 ds_files = get_data_files()
 for z in sorted(ds_files):
-    #print "%s" % os.path.basename(z)
+    print("%s" % os.path.basename(z))
     popdataset(z)
-    print "%s,%s" % (os.path.basename(z), db_size())
-#
-#print "met: %s" % existsSQL('met_data')
-#print "var: %s" % existsSQL('var_list')
-#print "dat: %s" % existsSQL('data_set')
+    print("%s,%s" % (os.path.basename(z), db_size()))
+
+# Debug: check if tables exist:
+print "met: %s" % existsSQL('met_data')
+print "var: %s" % existsSQL('var_list')
+print "dat: %s" % existsSQL('data_set')

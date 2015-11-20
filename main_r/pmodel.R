@@ -88,6 +88,9 @@ pmodel <- function( fpar, ppfd, co2, tc, cpalpha, vpd, elv, method="full" ){
   # Metabolic N ratio (mol N s (mol CO2)-1 )
   n_v <- mol_weight_rubisco * n_conc_rubisco / ( cat_turnover_per_site * cat_sites_per_mol_R )
 
+  # Ratio of Rdark to Vcmax25, number from Atkin et al., 2015 for C3 herbaceous
+  rd_to_vcmax <- 0.015
+
   ## parameters for Narea -- under construction
   # sla <- 0.0014       # specific leaf area (m2/gC)
 
@@ -98,11 +101,6 @@ pmodel <- function( fpar, ppfd, co2, tc, cpalpha, vpd, elv, method="full" ){
   # n_v  <- 1.0/40.96    # gN µmol-1 s-1. Value 40.96 is 'sv' in Table 2 in Kattge et al., 2009, GCB, C3 herbaceous
   ## -- under construction
 
-  # Ratio of Rdark to Vcmax25, number from Atkin et al., 2015 for C3 herbaceous
-  # (0.015 was before)
-  # rd_to_vcmax <- 0.078
-  rd_to_vcmax <- 0.015
-  # rd_to_vcmax <- 0.04
 
   ## absorbed photosynthetically active radiation (mol/m2)
   iabs <- fpar * ppfd
@@ -119,6 +117,14 @@ pmodel <- function( fpar, ppfd, co2, tc, cpalpha, vpd, elv, method="full" ){
   ## function of alpha to reduce GPP in strongly water-stressed months (unitless)
   fa   <- calc_fa( cpalpha )
 
+  ## Michaelis-Menten coef. (Pa)
+  kmm  <- calc_k( tc, patm )
+
+  ## viscosity correction factor = viscosity( temp, press )/viscosity( 25 degC, 1013.25 Pa) 
+  ns      <- viscosity_h2o( tc, patm )  # Pa s 
+  ns25    <- viscosity_h2o( kTo, kPo )  # Pa s 
+  ns_star <- ns / ns25  # (unitless)
+
 
   if (method=="approx"){
     ##-----------------------------------------------------------------------
@@ -131,15 +137,6 @@ pmodel <- function( fpar, ppfd, co2, tc, cpalpha, vpd, elv, method="full" ){
     ##-----------------------------------------------------------------------
     ## B. THEORETICAL METHOD
     ##-----------------------------------------------------------------------
-
-    ## Michaelis-Menten coef. (Pa)
-    kmm  <- calc_k( tc, patm )
-
-    ## viscosity correction factor = viscosity( temp, press )/viscosity( 25 degC, 1013.25 Pa) 
-    ns      <- viscosity_h2o( tc, patm )  # Pa s 
-    ns25    <- viscosity_h2o( kTo, kPo )  # Pa s 
-    ns_star <- ns / ns25  # (unitless)
-
     if (method=="simpl") {
 
       ## B.1 SIMPLIFIED FORMULATION 
@@ -157,8 +154,9 @@ pmodel <- function( fpar, ppfd, co2, tc, cpalpha, vpd, elv, method="full" ){
   }
 
   ## LUE-functions return m, n, and chi
-  m <- lue.out$m
-  n <- lue.out$n
+  m   <- lue.out$m
+  n   <- lue.out$n
+  chi <- lue.out$chi
 
   ##-----------------------------------------------------------------------
   ## Calculate function return variables
@@ -172,6 +170,12 @@ pmodel <- function( fpar, ppfd, co2, tc, cpalpha, vpd, elv, method="full" ){
 
   ## Light use efficiency (gpp per unit iabs)
   lue <- kphio * fa * m
+
+  ## leaf-internal CO2 partial pressure (Pa)
+  ci <- chi * ca
+
+  ## stomatal conductance
+  gs <- gpp  / ( ca - ci )
 
   ## Vcmax per unit ground area is the product of the intrinsic quantum 
   ## efficiency, the absorbed PAR, and 'n'
@@ -203,22 +207,102 @@ pmodel <- function( fpar, ppfd, co2, tc, cpalpha, vpd, elv, method="full" ){
   actnv_unitfapar <- vcmax25_unitfapar * n_v
   actnv_unitiabs  <- vcmax25_unitiabs  * n_v
 
+  ## Transpiration (E)
+  ## Using 
+  ## - E = 1.6 gs D
+  ## - gs = A / (ca (1-chi))
+  ## (- chi = ci / ca)
+  ## => E = (1.6 A D) / (ca - ci)
+  transp           <- (1.6 * iabs * kphio * fa * m * vpd) / (ca * (1.0 - chi))   # gpp <- iabs * kphio * fa * m
+  transp_unitfapar <- (1.6 * ppfd * kphio * fa * m * vpd) / (ca * (1.0 - chi))
+  transp_unitiabs  <- (1.6 * 1.0  * kphio * fa * m * vpd) / (ca * (1.0 - chi))
+
+  ## construct list for output
   out <- list( 
-              gpp=gpp,                       # mol C   m-2 s-1 (given that ppfd is provided in units of s-1)
+              gpp=gpp,                       # mol CO2 m-2 s-1 (given that ppfd is provided in units of s-1)
+              gs=gs,
+              ci=ci,
               vcmax=vcmax,                   # mol CO2 m-2 s-1 (given that ppfd is provided in units of s-1)
               vcmax25=vcmax25,               # mol CO2 m-2 s-1 (given that ppfd is provided in units of s-1)
               vcmax_unitfapar=vcmax_unitfapar,
               vcmax_unitiabs=vcmax_unitiabs,
               factor25_vcmax=factor25_vcmax, # unitless
-              rd=rd, 
-              rd_unitfapar=rd_unitfapar, 
+              rd=rd,                         # mol CO2 m-2 s-1 
+              rd_unitfapar=rd_unitfapar,     # mol CO2 m-2 s-1 
               rd_unitiabs=rd_unitiabs, 
-              actnv=actnv, 
+              actnv=actnv,                   # mol N/m2 ground area (canopy-level)
               actnv_unitfapar=actnv_unitfapar, 
               actnv_unitiabs=actnv_unitiabs, 
-              lue=lue
+              lue=lue,
+              transp=transp,
+              transp_unitfapar=transp_unitfapar,
+              transp_unitiabs=transp_unitiabs
               )
   return( out )
+}
+
+
+calc_dgpp <- function( fapar, dppfd, mlue ) {
+  ##//////////////////////////////////////////////////////////////////
+  ## Calculates daily GPP (mol CO2)
+  ##------------------------------------------------------------------
+  ## GPP is light use efficiency multiplied by absorbed light and C-P-alpha
+  dgpp <- fapar * dppfd * mlue
+
+  return( dgpp )
+}
+
+
+calc_drd <- function( fapar, meanmppfd, mrd_unitiabs ){
+  ##//////////////////////////////////////////////////////////////////
+  ## Calculates daily dark respiration (Rd) based on monthly mean 
+  ## PPFD (assumes acclimation on a monthly time scale) (mol CO2).
+  ## meanmppfd is monthly mean PPFD, averaged over daylight seconds (mol m-2 s-1)
+  ##------------------------------------------------------------------
+  ## Dark respiration takes place during night and day (24 hours)
+  drd <- fapar * meanmppfd * mrd_unitiabs * 60.0 * 60.0 * 24.0
+
+  return( drd )
+}
+
+
+calc_dtransp <- function( fapar, dppfd, transp_unitiabs ) {
+  ##//////////////////////////////////////////////////////////////////
+  ## Calculates daily GPP (mol H2O).
+  ##------------------------------------------------------------------
+  ## GPP is light use efficiency multiplied by absorbed light and C-P-alpha
+  dtransp <- fapar * dppfd * transp_unitiabs
+
+  return( dtransp )
+}
+
+
+calc_vcmax <- function( lai, vcmax_unitiabs, meanmppfd ) {
+  ##//////////////////////////////////////////////////////////////////
+  ## Calculates leaf-level metabolic N content per unit leaf area as a
+  ## function of Vcmax25.
+  ##------------------------------------------------------------------
+  fapar <- get_fapar( lai )
+
+  ## Calculate leafy-scale Rubisco-N as a function of LAI and current LUE
+  vcmax <- max( fapar * meanmppfd[] * vcmax_unitiabs[] ) / lai
+
+  return( vcmax )
+
+}
+
+
+calc_nr_leaf <- function( lai, mactnv_unitiabs, meanmppfd ) { 
+  ##//////////////////////////////////////////////////////////////////
+  ## Calculates leaf-level metabolic N content per unit leaf area as a
+  ## function of Vcmax25.
+  ##------------------------------------------------------------------
+  fapar <- get_fapar( lai )
+
+  ## Calculate leafy-scale Rubisco-N as a function of LAI and current LUE
+  nr_leaf <- max( fapar * meanmppfd[] * mactnv_unitiabs[] ) / lai
+
+  return( nr_leaf )
 }
 
 

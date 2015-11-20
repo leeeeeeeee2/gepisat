@@ -4,9 +4,12 @@
 ##  using standard input data, read from files
 ## ////////////////////////////////////////////////////////////////////
 source('../main_r/pmodel.R')
+source('/alphadata01/bstocker/utilities/daily2monthly.R')
+daily2monthly
 
 ndaymonth <- c(31,28,31,30,31,30,31,31,30,31,30,31)
-nmonth <- 12
+nmonth    <- 12
+ndayyear  <- sum( ndaymonth )
 
 ##---------------------------------------------------------------------
 ## STANDARD PARAMETERS
@@ -20,6 +23,7 @@ cpalpha <- 1.26                           # Cramer-Prentice alpha (unitless)
 beta    <- 244.033                        # Unit cost of carboxylation
 kPo     <- 101325.0                       # standard atmosphere, Pa (Allen, 1973)
 kTo     <- 25.0                           # base temperature, deg C (Prentice, unpublished)
+n_molmass <- 14.0067                      # g N / mol N
 
 ##---------------------------------------------------------------------
 ## GET MONTHLY CLIMATE
@@ -50,32 +54,51 @@ for (moy in 1:nmonth){
   mvpd[moy] <- calc_vpd( mtemp[moy], mvapr[moy] )
 }
 
-## PPFD from file produced as output from STASH (sofun implementation, '*.m.qm.out')
-filn_ppfd <- "../data/CH-Oe1_2002.m.qm.out"
-df.ppfd <- read.table( filn_ppfd, col.names=c("year","ppfd") )
-istart <- which.min( abs(df.ppfd$year-2002.0) )  
-df.ppfd <- df.ppfd[ istart:(istart+nmonth-1), ]  ## take subset of year 2002
+## Daily daylight seconds from file produced as output from STASH (sofun implementation, '*.d.dayl.out', in (s) )
+filn_dayl <- "../data/CH-Oe1_2002.d.dayl.out"
+df.dayl <- read.table( filn_dayl, col.names=c("year","dayl") )
+istart  <- which.min( abs(df.dayl$year-2002.0) )  
+df.dayl <- df.dayl[ istart:(istart+ndayyear-1), ]  ## take subset of year 2002
+df.dayl$dayl <- df.dayl$dayl * 60 * 60 # convert from hours to seconds
 
+## Monhtly PPFD from file produced as output from STASH (sofun implementation, '*.m.qm.out', in (mol m-2 month-1) )
+filn_mppfd <- "../data/CH-Oe1_2002.m.qm.out"
+df.mppfd <- read.table( filn_mppfd, col.names=c("year","mppfd") )
+istart  <- which.min( abs(df.mppfd$year-2002.0) )  
+df.mppfd <- df.mppfd[ istart:(istart+nmonth-1), ]  ## take subset of year 2002
+df.mppfd$monsecs <- daily2monthly( df.dayl$dayl, "sum" )
+df.mppfd$meanmmppfd <- df.mppfd$mppfd / df.mppfd$monsecs
 
 ##------------------------------------------------------------
 ## RUN P-MODEL
 ## ... and several "components" (K, viscosity, Gamma-star, 
 ## Chi...) using functions defined within pmodel.R
-## with monthly input for PPFD, air temperature, and VPD
+## with monthly input for mPPFD, air temperature, and VPD
 ##------------------------------------------------------------
 mgpp <- rep( NA, nmonth )
-mrd  <- rep( NA, nmonth )
-mvcmax    <- rep( NA, nmonth )
-mnrubisco <- rep( NA, nmonth )
 mluenet   <- rep( NA, nmonth )
+mrd  <- rep( NA, nmonth )
+mvcmax_unitiabs <- rep( NA, nmonth )
+mactnv_unitiabs <- rep( NA, nmonth )
+
 for (moy in 1:nmonth){
-  out <- pmodel( fpar=fpar, ppfd=df.ppfd$ppfd[moy], co2=co2, tc=mtemp[moy], cpalpha=cpalpha, vpd=mvpd[moy], elv=elv )
-  mgpp[moy]      <- out$gpp
-  mrd[moy]       <- out$rd
-  mvcmax[moy]    <- out$vcmax
-  mnrubisco[moy] <- out$actnv
-  mluenet[moy]   <- out$lue
+
+  out <- pmodel( fpar=fpar, ppfd=df.mppfd$mppfd[moy], co2=co2, tc=mtemp[moy], cpalpha=cpalpha, vpd=mvpd[moy], elv=elv )
+  mgpp[moy]            <- out$gpp  # mol CO2 m-2 month-1
+  mluenet[moy]         <- out$lue
+  mrd[moy]             <- out$rd   # mol CO2 m-2 month-1
+  mvcmax_unitiabs[moy] <- out$vcmax_unitiabs  # mol CO2 / mol absorbed light
+  mactnv_unitiabs[moy] <- out$actnv_unitiabs
+
 }
+
+## actual Vcmax is determined by monthly light intensity (per second), averaged over daylight seconds 
+mvcmax  <- mvcmax_unitiabs[] * df.mppfd$meanmmppfd[]
+
+## metabolic leaf N per unit ground area (canopy level metabolic leaf N), 
+## based on maximum monthly value of Vcmax25
+mactnv    <- mactnv_unitiabs[] * df.mppfd$meanmmppfd[]
+nv_ground <- n_molmass * max( mactnv[] )
 
 ## CALCULATE K
 ## Michaelis-Menten coefficient (Pa)
@@ -133,10 +156,13 @@ cat( "sunshine fraction (given in unitless):                      ", "\n" ) #, f
 cat( "   ", filn_fsun, "\n" ) #, file=zzz )
 cat( "vapour pressure (given in hPa):                      ", "\n" ) #, file=zzz )
 cat( "   ", filn_vapr, "\n" ) #, file=zzz )
-cat( "PPFD (given in mol/m2):                           ", "\n" ) #, file=zzz )
-cat( "   ", filn_ppfd, "\n" ) #, file=zzz )
+cat( "mPPFD (given in mol/m2):                           ", "\n" ) #, file=zzz )
+cat( "   ", filn_mppfd, "\n" ) #, file=zzz )
 cat( "------------------------------------------------------------", "\n"  ) #, file=zzz )
-cat( "Outputs:", "\n"   ) #, file=zzz )
+cat( "Annual outputs:", "\n"   ) #, file=zzz )
+cat( "Metabolic leaf-N per unit ground area (gN/m2 ground area): ", nv_ground, "\n" ) #, file=zzz )
+cat( "------------------------------------------------------------", "\n"  ) #, file=zzz )
+cat( "Monthly outputs:", "\n"   ) #, file=zzz )
 cat( "Michaelis-Menten K (Pa):                      ", "\n" ) #, file=zzz )
 cat( "   ", kmm, "\n" ) #, file=zzz )
 cat( "Michaelis-Menten K, using 'calc_k_colin' (Pa):", "\n" ) #, file=zzz )
@@ -153,12 +179,12 @@ cat( "Chi, using simplified method 'lue_vpd_simpl' (unitless):", "\n" ) #, file=
 cat( "   ", chi_simpl, "\n" ) #, file=zzz )
 cat( "Chi, using Wang-Han method 'lue_approx' (unitless):", "\n" ) #, file=zzz )
 cat( "   ", chi_wh, "\n" ) #, file=zzz )
-cat( "GPP (mol C m-2 s-1):", "\n" ) #, file=zzz )
+cat( "GPP (mol C m-2 month-1):", "\n" ) #, file=zzz )
 cat( "   ", mgpp, "\n" ) #, file=zzz )
-cat( "Rd (mol C m-2 s-1):", "\n" ) #, file=zzz )
+cat( "Rd (mol C m-2 month-1):", "\n" ) #, file=zzz )
 cat( "   ", mrd, "\n" ) #, file=zzz )
-cat( "Vcmax (mol C m-2 s-1):", "\n" ) #, file=zzz )
-cat( "   ", mvcmax, "\n" ) #, file=zzz )
+cat( "Vcmax (mmol C m-2 s-1):", "\n" ) #, file=zzz )
+cat( "   ", mvcmax*1e3, "\n" ) #, file=zzz )
 cat( "------------------------------------------------------------", "\n" ) #, file=zzz  )
 # close(zzz)
 
@@ -258,7 +284,7 @@ legend( "topleft", c("Wang-Han method", "theoretical full method"), lty=1, bty="
 plot(  1:nmonth, mgpp, type="l", col="red", xlab="MOY", ylab="GPP (mol C m-2 month-1)"  )
 lines( 1:nmonth, mgpp-mrd, lty=2, col="red", xlab="MOY"  )
 lines( 1:nmonth, mgpp_tyler$gpp, col="blue")
-lines( 1:nmonth, mluenet*df.ppfd$ppfd, col="magenta")
+lines( 1:nmonth, mluenet*df.mppfd$mppfd, col="magenta")
 points( 1:nmonth, mgpp_obs )
 legend( "topleft", c("simulted GPP", "simulated GPP, GePiSaT", "simulated GPP-Rd"), lty=1, bty="n", col=c("red","blue","magenta"))
 legend( "topleft", c("","","","FLUXNET data"), bty="n", lty=0, pch=c(NA,NA,NA,1) )

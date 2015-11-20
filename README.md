@@ -91,9 +91,9 @@ This directory holds a variety of analyzing, plotting and processing tools.
     * __plot_outliers.R__
         * This script reads the observation and outlier-free datasets output by __model.py__, plots them and highlights the observation pairs identified as outliers
     * __plot_partitioning.R__
-        * This script reads the observation and outlier-free datasets output by model.py, and plots the linear and hyperbolic partitioning
+        * This script reads the observation and outlier-free datasets output by __model.py__, and plots the linear and hyperbolic partitioning
     * __plot_ts.R__
-        * This script reads the data output from __timeseries.py__ to plot the gridded data associated with flux tower locations.
+        * This script reads the data output from __gepisat_ts.py__ to plot the gridded data associated with flux tower locations.
 * __processing/__
     * __catfiles_lue.pl__
         * This script will concatenate all the files listed in the working directory that end with ".txt" into a single file

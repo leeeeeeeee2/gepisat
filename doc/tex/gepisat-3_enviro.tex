@@ -4,7 +4,7 @@
 % Imperial College London
 %
 % 2014-10-29 -- created
-% 2014-10-29 -- last updated
+% 2015-03-18 -- last updated
 %
 % ------------
 % description:
@@ -17,6 +17,7 @@
 % 01. modularized chapter [14.10.29]
 % 02. newline for each sentence [14.10.29]
 % --> simpler for Git version control
+% 03. noted pip install of psycopg2 in Canopy [15.03.18]
 %
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 3.1 -- PROGRAMMING ENVIRONMENT
@@ -37,12 +38,15 @@ The most efficient method of quickly gaining access to all the necessary Python 
 Two notable Python IDEs are the Enthought Python Distribution\footnotemark \footnotetext{https://www.enthought.com/products/canopy/} (now called ``Canopy'') and Google spyder$^{2}$\footnotemark \footnotetext{http://code.google.com/p/spyderlib/} (previously called ``Pydee'').  
 Both Canopy and spyder provide a comprehensive Python developing and programming environment for scientific analysis and visualization.  
 There is a free version of Canopy as well as a free one-year academic license for registered users with a school or university e-mail address. 
-Spyder is open-source software available for Windows, Mac OSX, and Linux operating systems.  
+Spyder is open-source software available for Windows, Mac OSX, and Linux operating systems; however it has not been used or tested.  
+This text assumes the use of the Enthought Canopy IDE.
 Table \ref{tab:pylib} presents a list of Python libraries that are used in this model and the model files in which they are used.
 
-Due to lack of compatibility with Canopy IDE and the psycopg2 module and the complexity of installing the HDF4 libraries (for reading the MODIS EVI data) on a native installation of Python, a combination of Python environments are used in this model.  
-To process the data, table\textunderscore maker.py is run from Canopy.  
-To create the database tables, populate them with the data and to run the model, the native Python environment (with numpy, scipy, and psycopg2 libraries installed) is used.
+To overcome the lack of native compatibility between Canopy and the psycopg2 module, psycopg2 can be installed as ``second party'' software by means of pip (Python package manager).
+In a native Linux system and using the Canopy Python environment as the default Python environment, run: \texttt{pip install psycopg2} on the command line.
+Note that for use of Canopy IDE outside a virtual machine where the GePiSaT database is installed may not be possible (although untried as of this writing).
+The main advantage of the Canopy IDE is the easy of installing the HDF4 libraries (for reading the MODIS EVI data), which is rather complicated to successfully achieve (in the writer's opinion).  
+For all other circumstances, Canopy may be used separately for processing HDF4 data (via table\textunderscore maker.py), whilst all other Python programs may be run from a separate Python environment.  
 
 %% ------------------------------------------------------------------------ %%
 %% tab:pylib | List of Python libraries

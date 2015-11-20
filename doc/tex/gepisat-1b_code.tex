@@ -4,7 +4,7 @@
 % Imperial College London
 %
 % 2014-10-29 -- created
-% 2014-10-29 -- last updated
+% 2015-03-18 -- last updated
 %
 % ------------
 % description:
@@ -17,6 +17,7 @@
 % 01. modularized chapter [14.10.29]
 % 02. newline for each sentence [14.10.29]
 % --> simpler for Git version control
+% 03. added varname table [15.03.18]
 %
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 1.3 -- THE MODEL CODE
@@ -60,7 +61,33 @@ This class holds the main variables required as output to the \texttt{var\textun
 In the current implementation of the model, only core variables are considered; therefore, all variables have the binary ``1'' associated with the \textit{varcore} field.  
 All core variables are given in a Python dictionary, coreVars, where each \textit{varname} is presented with its associated \textit{varid}.  
 The \textit{varid} field is simply a numeric that is incremented for each additional variable added to the model.  
-Similarly, a Python dictionary, variableUnits, associates each \textit{varname} with its appropriate measurement units, i.e., the \textit{varunit} field.  
+Similarly, a Python dictionary, variableUnits, associates each \textit{varname} with its appropriate measurement units, i.e., the \textit{varunit} field. 
+Table \ref{tab:varname} provides an example of the core variables, with their units and identification number, that are currently used in the GePiSaT database (see \S \ref{sec:obsdata} for details regarding each variable).
+
+%% ------------------------------------------------------------------------ %%
+%% tab:varname | Var names used in the current implementation of GePiSaT
+%% ------------------------------------------------------------------------ %%
+\begin{table}[h]
+    \caption{Current list of variable names, units, and identification numbers used in the GePiSaT database.}
+    \label{tab:varname}
+    \centering
+    \begin{tabular}{l l l}
+        \hline
+        \bf{\textit{varname}} & \bf{\textit{varunit}} & \bf{\textit{varid}} \\
+        \hline
+        NEE\textunderscore f & $\mu$mol CO$_2$ m$^{-2}$ s$^{-1}$ & 1 \\        
+        PPFD\textunderscore f & $\mu$mol photons m$^{-2}$ s$^{-1}$ & 15 \\        
+        SWdown & W m$^{-2}$ & 18 \\        
+        FAPAR & NA &  19 \\        
+        VPD & kPa & 20 \\
+        CO2 & ppm & 21 \\
+        Tc & $^\circ$C & 22 \\
+        Pre & mm & 23 \\
+        Elv & m & 25 \\
+        alpha & NA & 26 \\
+        \hline
+    \end{tabular}
+\end{table}
 
 Due to the difference in how stations are named depending on whether they are flux towers or gridded pixels, the \textit{vartype} must be known for the variable in question (e.g., ``flux'' for flux towers and ``grid'' for gridded pixels).  
 Depending on the \textit{vartype}, the \textit{stationid} (and therefore the \textit{msxvidx}) can be determined.  If the \textit{vartype} is ``flux,'' then the \textit{stationid} is simply read from the filename (as is the convention with flux tower data to have each file saved with the \textit{stationid}).  

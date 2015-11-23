@@ -81,6 +81,7 @@ mrd  <- rep( NA, nmonth )
 mvcmax_unitiabs <- rep( NA, nmonth )
 mactnv_unitiabs <- rep( NA, nmonth )
 mrd_unitiabs <- rep( NA, nmonth )
+mtransp <- rep( NA, nmonth )
 
 for (moy in 1:nmonth){
 
@@ -91,6 +92,7 @@ for (moy in 1:nmonth){
   mrd_unitiabs[moy]    <- out$rd_unitiabs   # mol CO2 m-2 month-1
   mvcmax_unitiabs[moy] <- out$vcmax_unitiabs  # mol CO2 / mol absorbed light
   mactnv_unitiabs[moy] <- out$actnv_unitiabs
+  mtransp[moy]         <- out$transp
 
 }
 
@@ -189,6 +191,8 @@ cat( "GPP (mol C m-2 month-1):", "\n" ) #, file=zzz )
 cat( "   ", format( mgpp, digits=4 ), "\n" ) #, file=zzz )
 cat( "Rd (mol C m-2 month-1):", "\n" ) #, file=zzz )
 cat( "   ", format( mrd, digits=4 ), "\n" ) #, file=zzz )
+cat( "E, transpiration (mol H2O m-2 month-1):", "\n" ) #, file=zzz )
+cat( "   ", format( mtransp, digits=4), "\n" ) #, file=zzz )
 cat( "Vcmax (mmol C m-2 s-1):", "\n" ) #, file=zzz )
 cat( "   ", format( mvcmax*1e3, digits=4 ), "\n" ) #, file=zzz )
 cat( "------------------------------------------------------------", "\n" ) #, file=zzz  )

@@ -217,9 +217,9 @@ pmodel <- function( fpar, ppfd, co2, tc, cpalpha, vpd, elv, method="full" ){
   ## - gs = A / (ca (1-chi))
   ## (- chi = ci / ca)
   ## => E = (1.6 A D) / (ca - ci)
-  transp           <- (1.6 * iabs * kphio * fa * m * vpd) / (ca * (1.0 - chi))   # gpp <- iabs * kphio * fa * m
-  transp_unitfapar <- (1.6 * ppfd * kphio * fa * m * vpd) / (ca * (1.0 - chi))
-  transp_unitiabs  <- (1.6 * 1.0  * kphio * fa * m * vpd) / (ca * (1.0 - chi))
+  transp           <- (1.6 * iabs * kphio * fa * m * vpd) / (ca - ci)   # gpp <- iabs * kphio * fa * m
+  transp_unitfapar <- (1.6 * ppfd * kphio * fa * m * vpd) / (ca - ci)
+  transp_unitiabs  <- (1.6 * 1.0  * kphio * fa * m * vpd) / (ca - ci)
 
   ## construct list for output
   out <- list( 

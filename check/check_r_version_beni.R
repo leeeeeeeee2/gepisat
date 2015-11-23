@@ -80,6 +80,7 @@ mluenet   <- rep( NA, nmonth )
 mrd  <- rep( NA, nmonth )
 mvcmax_unitiabs <- rep( NA, nmonth )
 mactnv_unitiabs <- rep( NA, nmonth )
+mrd_unitiabs <- rep( NA, nmonth )
 
 for (moy in 1:nmonth){
 
@@ -87,13 +88,18 @@ for (moy in 1:nmonth){
   mgpp[moy]            <- out$gpp  # mol CO2 m-2 month-1
   mluenet[moy]         <- out$lue
   mrd[moy]             <- out$rd   # mol CO2 m-2 month-1
+  mrd_unitiabs[moy]    <- out$rd_unitiabs   # mol CO2 m-2 month-1
   mvcmax_unitiabs[moy] <- out$vcmax_unitiabs  # mol CO2 / mol absorbed light
   mactnv_unitiabs[moy] <- out$actnv_unitiabs
 
 }
 
+## Actual Rd is happening also at night, therefore determined by average daytime light intensity (meanmppfd)
+## and total day length (60.0 * 60.0 * 24.0 * ndaymonth[])
+mrd_corr  <- mrd_unitiabs[] * df.mppfd$meanmmppfd[] * 60.0 * 60.0 * 24.0 * ndaymonth[]
+
 ## actual Vcmax is determined by monthly light intensity (per second), averaged over daylight seconds 
-mvcmax  <- mvcmax_unitiabs[] * df.mppfd$meanmmppfd[]
+mvcmax    <- mvcmax_unitiabs[] * df.mppfd$meanmmppfd[]
 
 ## metabolic leaf N per unit ground area (canopy level metabolic leaf N), 
 ## based on maximum monthly value of Vcmax25
@@ -160,31 +166,31 @@ cat( "mPPFD (given in mol/m2):                           ", "\n" ) #, file=zzz )
 cat( "   ", filn_mppfd, "\n" ) #, file=zzz )
 cat( "------------------------------------------------------------", "\n"  ) #, file=zzz )
 cat( "Annual outputs:", "\n"   ) #, file=zzz )
-cat( "Metabolic leaf-N per unit ground area (gN/m2 ground area): ", nv_ground, "\n" ) #, file=zzz )
+cat( "Metabolic leaf-N per unit ground area, assuming LAI = 1 (gN/m2 ground area): ", format( nv_ground, digits=4 ), "\n" ) #, file=zzz )
 cat( "------------------------------------------------------------", "\n"  ) #, file=zzz )
 cat( "Monthly outputs:", "\n"   ) #, file=zzz )
 cat( "Michaelis-Menten K (Pa):                      ", "\n" ) #, file=zzz )
-cat( "   ", kmm, "\n" ) #, file=zzz )
+cat( "   ", format( kmm, digits=4 ), "\n" ) #, file=zzz )
 cat( "Michaelis-Menten K, using 'calc_k_colin' (Pa):", "\n" ) #, file=zzz )
-cat( "   ", kmm_colin, "\n" ) #, file=zzz )
+cat( "   ", format( kmm_colin, digits=4 ), "\n" ) #, file=zzz )
 cat( "Viscosity (mPa s):", "\n" ) #, file=zzz )
-cat( "   ", visc_out, "\n" ) #, file=zzz )
+cat( "   ", format( visc_out, digits=4 ), "\n" ) #, file=zzz )
 cat( "Gamma-star, using 'calc_gstar_gepisat' (Pa):", "\n" ) #, file=zzz )
-cat( "   ", gstar, "\n" ) #, file=zzz )
+cat( "   ", format( gstar, digits=4 ), "\n" ) #, file=zzz )
 cat( "Gamma-star, using 'calc_gstar_colin' (Pa):", "\n" ) #, file=zzz )
-cat( "   ", gstar_colin, "\n" ) #, file=zzz )
+cat( "   ", format( gstar_colin, digits=4 ), "\n" ) #, file=zzz )
 cat( "Chi, using full method 'lue_vpd_full' (unitless):", "\n" ) #, file=zzz )
-cat( "   ", chi_full, "\n" ) #, file=zzz )
+cat( "   ", format( chi_full, digits=4 ), "\n" ) #, file=zzz )
 cat( "Chi, using simplified method 'lue_vpd_simpl' (unitless):", "\n" ) #, file=zzz )
-cat( "   ", chi_simpl, "\n" ) #, file=zzz )
+cat( "   ", format( chi_simpl, digits=4 ), "\n" ) #, file=zzz )
 cat( "Chi, using Wang-Han method 'lue_approx' (unitless):", "\n" ) #, file=zzz )
-cat( "   ", chi_wh, "\n" ) #, file=zzz )
+cat( "   ", format( chi_wh, digits=4 ), "\n" ) #, file=zzz )
 cat( "GPP (mol C m-2 month-1):", "\n" ) #, file=zzz )
-cat( "   ", mgpp, "\n" ) #, file=zzz )
+cat( "   ", format( mgpp, digits=4 ), "\n" ) #, file=zzz )
 cat( "Rd (mol C m-2 month-1):", "\n" ) #, file=zzz )
-cat( "   ", mrd, "\n" ) #, file=zzz )
+cat( "   ", format( mrd, digits=4 ), "\n" ) #, file=zzz )
 cat( "Vcmax (mmol C m-2 s-1):", "\n" ) #, file=zzz )
-cat( "   ", mvcmax*1e3, "\n" ) #, file=zzz )
+cat( "   ", format( mvcmax*1e3, digits=4 ), "\n" ) #, file=zzz )
 cat( "------------------------------------------------------------", "\n" ) #, file=zzz  )
 # close(zzz)
 
@@ -282,7 +288,8 @@ legend( "topleft", c("Wang-Han method", "theoretical full method"), lty=1, bty="
 # ## GPP 
 # pdf("gpp_comparison.pdf")
 plot(  1:nmonth, mgpp, type="l", col="red", xlab="MOY", ylab="GPP (mol C m-2 month-1)"  )
-lines( 1:nmonth, mgpp-mrd, lty=2, col="red", xlab="MOY"  )
+lines( 1:nmonth, mgpp - mrd, lty=2, col="red", xlab="MOY"  )
+lines( 1:nmonth, mgpp - mrd_corr, lty=1, col="red", xlab="MOY"  )
 lines( 1:nmonth, mgpp_tyler$gpp, col="blue")
 lines( 1:nmonth, mluenet*df.mppfd$mppfd, col="magenta")
 points( 1:nmonth, mgpp_obs )
@@ -290,6 +297,12 @@ legend( "topleft", c("simulted GPP", "simulated GPP, GePiSaT", "simulated GPP-Rd
 legend( "topleft", c("","","","FLUXNET data"), bty="n", lty=0, pch=c(NA,NA,NA,1) )
 title("CH-Oe1, fAPAR=1, year 2002")
 # dev.off()
+
+# agpp <- sum( mgpp )
+# ard  <- sum( mrd )
+# ard_corr <- sum( mrd_corr )
+# print( paste( "Rd fraction of GPP:             ", ard/agpp ) )
+# print( paste( "correct (?) Rd fraction of GPP: ", ard_corr/agpp ) )
 
 # ## VCMAX 
 # # pdf("vcmax_comparison.pdf")

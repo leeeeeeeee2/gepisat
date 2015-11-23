@@ -8,7 +8,8 @@
 # Imperial College London
 #
 # 2015-03-16 -- created
-# 2015-03-16 -- last updated
+# 2015-03-16 -- updated
+# 2015-11-23 -- checked for consistency with Fortran 90 version and added to gepisat repository
 #
 # ------------
 # description:
@@ -31,6 +32,9 @@
 #
 # VERSION 1.0.1
 #  - 'lue_approx' function now based on SI units.
+# 
+# VERSION 1.0.2
+#  - added functions that are used in SOFUN implementation (F90 version)
 #
 # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 #  Function Definitions

@@ -2,10 +2,10 @@
 #
 # db_setup.py
 #
-# VERSION 2.0
+# VERSION 2.1
 #
 # 2013-05-15 -- created (as postgreSQL.py)
-# 2015-11-18 -- last updated
+# 2016-01-15 -- last updated
 #
 # ---------
 # citation:
@@ -29,35 +29,37 @@
 # ----------
 # changelog:
 # ----------
-# 01. Added check for table existance [13.05.28]
-# 02. Changed varchar(n) datatype to text [13.06.17]
-#     http://www.depesz.com/2010/03/02/charx-vs-varcharx-vs-varchar-vs-text/
-# 03. Added popdataset() function now that we have fluxtower data
-# 04. Abstracted user name and password to file; defaults to user postgres
-#     and pass bitnami (update as necessary) [13.08.27]
-# 05. Housekeeping [13.08.27]
-# 06. Removed alter table owner from table create queries [13.08.27]
-#     * Think about adding this command in relation to "my_user"
-# 07. Renamed script from "postgreSQL.py" to "db_setup.py" [13.08.27]
-# 08. Changed import module os to os.path [13.08.27]
-# 09. Added dependency check on createdataset() [13.09.12]
-# 10. Updated getdata function [13.09.12]
-#     * takes a filename (with path)
-#     * returns t regarless of errors (None-type if error occurs)
-# 11. Updated popmeta, popvar, and popdata functions [13.09.12]
-#     * check for t
-#     * else print errors
-# 12. Gridded data station ids have 9 characters; update database definition of
-#     stationid and msvidx [13.09.12]
-#     * stationid varchar(12)
-#     * msvidx varchar(15)
-# 13. Added glob to modules list [13.09.12]
-# 14. Creates reset_db, clean_db, and clean_table functions [13.10.01]
-# 15. Created db_size() function [13.10.02]
-# 16. Added get_var|data_files() functions [14.01.10]
-# 17. Added BITNAMI directory structure to get data functions [14.02.05]
-# 18. General housekeeping [14.09.02]
-# 19. PEP8 style fixes [15.11.18]
+# - Added check for table existance [13.05.28]
+# - Changed varchar(n) datatype to text [13.06.17]
+#   http://www.depesz.com/2010/03/02/charx-vs-varcharx-vs-varchar-vs-text/
+# - Added popdataset() function now that we have fluxtower data
+# - Abstracted user name and password to file; defaults to user postgres
+#   and pass bitnami (update as necessary) [13.08.27]
+# - Housekeeping [13.08.27]
+# - Removed alter table owner from table create queries [13.08.27]
+#   * Think about adding this command in relation to "my_user"
+# - Renamed script from "postgreSQL.py" to "db_setup.py" [13.08.27]
+# - Changed import module os to os.path [13.08.27]
+# - Added dependency check on createdataset() [13.09.12]
+# - Updated getdata function [13.09.12]
+#   * takes a filename (with path)
+#   * returns t regarless of errors (None-type if error occurs)
+# - Updated popmeta, popvar, and popdata functions [13.09.12]
+#   * check for t
+#   * else print errors
+# - Gridded data station ids have 9 characters; update database definition of
+#   stationid and msvidx [13.09.12]
+#   * stationid varchar(12)
+#   * msvidx varchar(15)
+# - Added glob to modules list [13.09.12]
+# - Creates reset_db, clean_db, and clean_table functions [13.10.01]
+# - Created db_size() function [13.10.02]
+# - Added get_var|data_files() functions [14.01.10]
+# - Added BITNAMI directory structure to get data functions [14.02.05]
+# - General housekeeping [14.09.02]
+# - PEP8 style fixes [15.11.18]
+# - added Python 3 support [16.01.15]
+# - added logging [16.01.15]
 #
 # -----
 # todo:
@@ -70,8 +72,10 @@
 # IMPORT MODULES:
 ###############################################################################
 import glob
+import logging
 import os.path
 import sys
+
 import psycopg2
 
 
@@ -84,21 +88,27 @@ def connectSQL():
     Input:    None.
     Output:   psycopg2 connection (con)
     Features: Connects to postgreSQL database and returns connection handle
+              or None type if connection fails
     """
     # Open credentials file:
-    cred_file = "./user.txt"
+    cred_file = "user.txt"
+    my_user = "postgres"
+    my_pass = "bitnami"
     if os.path.isfile(cred_file):
-        f = open(cred_file, "r")
-        cred_data = f.readline()
-        if cred_data:
-            cred_data = cred_data.rstrip()
-            my_user, my_pass = cred_data.split(',')
-    else:
-        my_user, my_pass = ('postgres', 'bitnami')
-    #
+        try:
+            f = open(cred_file, "r")
+        except:
+            logging.exception("Failed to read crendential file")
+        else:
+            logging.debug("Reading credential file")
+            cred_data = f.readline()
+            if cred_data:
+                cred_data = cred_data.rstrip()
+                my_user, my_pass = cred_data.split(',')
+
     # Initialize connection variable:
     con = None
-    #
+
     # Test database connection:
     try:
         con = psycopg2.connect(
@@ -107,13 +117,16 @@ def connectSQL():
             user=my_user,
             host='localhost',
             password=my_pass
-            )
-    #
-    except psycopg2.DatabaseError, e:
-        print 'Error %s' % e
-        sys.exit(1)
-    #
-    return con
+        )
+    except psycopg2.DatabaseError:
+        logging.exception("Failed to connect to the database")
+    except:
+        logging.exception(
+            "Encountered unknown error while connecting to database")
+    else:
+        logging.debug("Database connection created")
+    finally:
+        return con
 
 
 def getversion():
@@ -124,41 +137,41 @@ def getversion():
     Features: Connects to postgreSQL database and prints the postgreSQL version
     Depends:  connectSQL
     """
-    # Connect to the database and create cursor:
     con = connectSQL()
-    cur = con.cursor()
-    #
-    # Execute query:
-    cur.execute("SELECT version()")
-    #
-    # Print version:
-    ver = cur.fetchone()
-    print ver
-    #
-    # Close connection
-    con.close()
+    if con is not None:
+        logging.debug("Creating connection cursor")
+        cur = con.cursor()
+
+        # Print version and close connection:
+        logging.debug("Checking database version")
+        cur.execute("SELECT version()")
+        ver = cur.fetchone()
+        logging.info("%s", ver)
+        con.close()
 
 
 def getdata(myfile):
     """
     Name:     getdata
-    Input:    string, input file with path (myfile)
+    Input:    str, input file with path (myfile)
     Output:   tuple (t)
-    Features: Returns tuple of input file contents
+    Features: Returns tuple of input file contents or None type if data file
+              is unreadable
     """
     # Check that file exists:
     if os.path.isfile(myfile):
         # Open input file for reading:
         try:
             f = open(myfile, 'r')
-        except IOError as e:
-            print "Error reading file!\n" + e
+        except IOError:
+            logging.exception("Failed to read data file %s", myfile)
             t = None
         except:
-            print "Unexpected error: ", sys.exc_info()[0]
+            logging.exception("Failed at reading data file %s", myfile)
             t = None
         else:
             # Read content and save to tuple:
+            logging.debug("Reading data file %s", myfile)
             content = f.readlines()[1:]  # skip header line
             t = tuple(content)
         return t
@@ -173,37 +186,32 @@ def droptable(tname):
               and checks and drops any tables that depend on it
     Depends:  connectSQL
     """
-    # Define querry:
+    # Define query:
     q = "DROP TABLE IF EXISTS " + tname
-    #
+
     # Check dependencies:
     if (tname == "met_data"):
         # Check to see if var_list exists:
         isvarlist = existsSQL("var_list")
-        #
-        # Warn and drop dependent table:
         if (isvarlist):
-            print "Warning, dropping dependent table var_list"
+            logging.warning("Dropping dependent table 'var_list'")
             droptable("var_list")
     elif (tname == "var_list"):
         # Check to see if data_set exists:
         isdataset = existsSQL("data_set")
-        #
-        # Warn and drop dependent table:
         if (isdataset):
-            print "Warning, dropping dependent table data_set"
+            logging.warning("Dropping dependent table 'data_set'")
             droptable("data_set")
-    #
-    # Connect to database and create cursor:
+
+    logging.debug("Creating database connection")
     con = connectSQL()
-    cur = con.cursor()
-    #
-    # Execute querry:
-    cur.execute(q)
-    #
-    # Commit changes to database and close:
-    con.commit()
-    con.close()
+    if con is not None:
+        logging.debug("Creating connection cursor")
+        cur = con.cursor()
+        logging.debug("Executing SQL query")
+        cur.execute(q)
+        con.commit()
+        con.close()
 
 
 def createmetdata():
@@ -216,7 +224,7 @@ def createmetdata():
     Depends:  - connectSQL
               - droptable
     """
-    # Define create table querry
+    # Define create table query
     q = (
         "CREATE TABLE met_data ("
         "mapid character(3),"
@@ -245,18 +253,19 @@ def createmetdata():
         "OIDS=FALSE"
         "); "
         )
-    #
+
     # Drop met_data if it exists:
     droptable("met_data")
-    #
-    # Connect to database:
+
+    logging.debug("Creating database connection")
     con = connectSQL()
-    cur = con.cursor()
-    #
-    # Create met_data table:
-    cur.execute(q)
-    con.commit()
-    con.close()
+    if con is not None:
+        logging.debug("Creating connection cursor")
+        cur = con.cursor()
+        logging.debug("Executing SQL query")
+        cur.execute(q)
+        con.commit()
+        con.close()
 
 
 def createvarlist():
@@ -270,7 +279,7 @@ def createvarlist():
               - droptable
               - existsSQL
     """
-    # Define create table querry:
+    # Define create table query:
     q = (
         "CREATE TABLE var_list ("
         "msvidx varchar(15) NOT NULL,"
@@ -286,24 +295,24 @@ def createvarlist():
         "OIDS = FALSE"
         "); "
         )
-    #
+
     # Drop var_list if it exists:
     droptable("var_list")
-    #
-    # Check to see if met_data exists
+
+    # Check to see if met_data exists and proceed if dependency exists:
     ismetdata = existsSQL("met_data")
-    #
-    # Proceed if dependency exists:
     if ismetdata:
-        # Connect to database:
+        logging.debug("Creating database connection")
         con = connectSQL()
-        cur = con.cursor()
-        # Create var_list table:
-        cur.execute(q)
-        con.commit()
-        con.close()
+        if con is not None:
+            logging.debug("Creating connection cursor")
+            cur = con.cursor()
+            logging.debug("Executing SQL query")
+            cur.execute(q)
+            con.commit()
+            con.close()
     else:
-        print "Cannot proceed, missing dependency 'met_data' table"
+        logging.warning("Cannot proceed, missing dependency 'met_data' table")
 
 
 def createdataset():
@@ -317,7 +326,7 @@ def createdataset():
               - existsSQL
               - connectSQL
     """
-    # Define create table querry:
+    # Define create table query:
     q = (
         "CREATE TABLE data_set ("
         "msvidx varchar(15) REFERENCES var_list(msvidx),"
@@ -329,22 +338,22 @@ def createdataset():
         "OIDS = FALSE"
         "); "
         )
-    #
+
     # Drop data_set if it exists:
     droptable("data_set")
-    #
-    # Check to see if var_list table exists:
+
+    # Check to see if var_list table exists and proceed if dependency exists:
     isvarlist = existsSQL("var_list")
-    #
-    # Proceed if dependency exists:
     if isvarlist:
-        # Connect to database:
+        logging.debug("Creating database connection")
         con = connectSQL()
-        cur = con.cursor()
-        # Create data_set table:
-        cur.execute(q)
-        con.commit()
-        con.close()
+        if con is not None:
+            logging.debug("Creating connection cursor")
+            cur = con.cursor()
+            logging.debug("Executing SQL query")
+            cur.execute(q)
+            con.commit()
+            con.close()
 
 
 def popmetdata(filename):
@@ -362,33 +371,38 @@ def popmetdata(filename):
     if t:
         # Make sure the number of columns is right before processing
         ncols = len(t[0].rstrip().split(','))
-        if (ncols != 21):
-            print "Input for met_data table must have 21 columns!"
+        if ncols != 21:
+            logging.error(
+                "Found %d cols, met_data table must have 21 cols!", ncols)
             sys.exit(1)
-            #
+
         # Check that table exists:
         ismetdata = existsSQL("met_data")
         if (ismetdata):
-            # Connect to database and create cursor:
+            logging.debug("Creating database connection")
             con = connectSQL()
-            cur = con.cursor()
-            #
-            # Add data to table (met_data has 21 columns):
-            for r in t:
-                l = (
-                    "('%s','%s','%s','%s','%s','%s','%s','%s',"
-                    "'%s','%s','%s','%s','%s','%s','%s','%s',"
-                    "'%s','%s','%s','%s','%s')"
-                    ) % tuple(r.rstrip().split(','))
-                cur.execute("INSERT INTO met_data VALUES " + l)
-                #
-            # Commit changes to database:
-            con.commit()
-            con.close()
+            if con is not None:
+                logging.debug("Creating connection cursor")
+                cur = con.cursor()
+
+                # Add data to table (met_data has 21 columns):
+                logging.debug("Reading table values from file %s...", filename)
+                for r in t:
+                    l = (
+                        "('%s','%s','%s','%s','%s','%s','%s','%s',"
+                        "'%s','%s','%s','%s','%s','%s','%s','%s',"
+                        "'%s','%s','%s','%s','%s')"
+                        ) % tuple(r.rstrip().split(','))
+                    cur.execute("INSERT INTO met_data VALUES " + l)
+                logging.debug("...complete")
+
+                # Commit changes to database:
+                con.commit()
+                con.close()
         else:
-            print "Table met_data does not exist!"
+            logging.warning("Table 'met_data' does not exist!")
     else:
-        print "No data read from file", filename
+        logging.warning("No data found in file %s", filename)
 
 
 def popvarlist(filename):
@@ -406,31 +420,36 @@ def popvarlist(filename):
     if t:
         # Make sure number of cols is right before processing:
         ncols = len(t[0].rstrip().split(','))
-        if (ncols != 7):
-            print "Input for var_list table must have seven columns!"
+        if ncols != 7:
+            logging.error(
+                "Found %d cols, var_list table must have 7 cols!", ncols)
             sys.exit(1)
-            #
+
         # Check that table exists:
         isvarlist = existsSQL("var_list")
         if (isvarlist):
-            # Connect to the database and create a cursor:
+            logging.debug("Creating database connection")
             con = connectSQL()
-            cur = con.cursor()
-            #
-            # Add data to table (var_list has 7 columns):
-            for r in t:
-                l = (
-                    "('%s','%s','%s','%s','%s','%s','%s')"
-                    ) % tuple(r.rstrip().split(','))
-                cur.execute("INSERT INTO var_list VALUES " + l)
-                #
-            # Commit changes to database and close:
-            con.commit()
-            con.close()
+            if con is not None:
+                logging.debug("Creating connection cursor")
+                cur = con.cursor()
+
+                # Add data to table (var_list has 7 columns):
+                logging.debug("Reading table values from file %s...", filename)
+                for r in t:
+                    l = (
+                        "('%s','%s','%s','%s','%s','%s','%s')"
+                        ) % tuple(r.rstrip().split(','))
+                    cur.execute("INSERT INTO var_list VALUES " + l)
+                logging.debug("...complete")
+
+                # Commit changes to database and close:
+                con.commit()
+                con.close()
         else:
-            print "Table var_list does not exist!"
+            logging.warning("Table 'var_list' does not exist!")
     else:
-        print "No data read from file", filename
+        logging.warning("No data found in file %s", filename)
 
 
 def popdataset(filename):
@@ -448,29 +467,34 @@ def popdataset(filename):
     if t:
         # Make certain the number of columns is correct:
         ncols = len(t[0].rstrip().split(','))
-        if (ncols != 4):
-            print "Input for data_set table must have four columns!"
+        if ncols != 4:
+            logging.error(
+                "Found %d cols, data_set table must have 4 cols!", ncols)
             sys.exit(1)
-            #
+
         # Check that the table exists:
         isdataset = existsSQL("data_set")
         if (isdataset):
-            # Connect to database and create a cursor:
+            logging.debug("Creating database connection")
             con = connectSQL()
-            cur = con.cursor()
-            #
-            # Add data to table:
-            for r in t:
-                l = "('%s','%s','%s','%s')" % tuple(r.rstrip().split(','))
-                cur.execute("INSERT INTO data_set VALUES " + l)
-                #
-            # Commit changes to database and close:
-            con.commit()
-            con.close()
+            if con is not None:
+                logging.debug("Creating connection cursor")
+                cur = con.cursor()
+
+                # Add data to table:
+                logging.debug("Reading table values from file %s...", filename)
+                for r in t:
+                    l = "('%s','%s','%s','%s')" % tuple(r.rstrip().split(','))
+                    cur.execute("INSERT INTO data_set VALUES " + l)
+                logging.debug("...complete")
+
+                # Commit changes to database and close:
+                con.commit()
+                con.close()
         else:
-            print "Table data_set does not exist!"
+            logging.warning("Table data_set does not exist!")
     else:
-        print "No data read from file", filename
+        logging.warning("No data found in file %s", filename)
 
 
 def existsSQL(tname):
@@ -481,27 +505,23 @@ def existsSQL(tname):
     Features: Returns boolean if the table exists in the postgreSQL database
     Depends:  connectSQL
     """
-    # Define a querry:
+    # Define a query:
     q = (
         "SELECT * FROM information_schema.tables "
         "WHERE table_name='%s'"
         ) % tname
-    #
-    # Connect to database and start a cursor:
+
+    logging.debug("Creating database connection")
     con = connectSQL()
-    cur = con.cursor()
-    #
-    # Execute querry:
-    cur.execute(q)
-    #
-    # Fetch results:
-    myresult = bool(cur.rowcount)
-    #
-    # Close connection
-    con.close()
-    #
-    # Return boolean:
-    return myresult
+    if con is not None:
+        logging.debug("Creating connection cursor")
+        cur = con.cursor()
+        logging.debug("Executing SQL query")
+        cur.execute(q)
+        myresult = bool(cur.rowcount)
+        con.close()
+
+        return myresult
 
 
 def reset_db():
@@ -521,24 +541,26 @@ def reset_db():
     ismd = existsSQL('met_data')
     isvl = existsSQL('var_list')
     isds = existsSQL('data_set')
-    #
+
     # Drop those that do:
     if isds:
-        print "Dropping 'data_set'..."
+        logging.warning("Dropping 'data_set'...")
         droptable('data_set')
     if isvl:
-        print "Dropping 'var_list'..."
+        logging.warning("Dropping 'var_list'...")
         droptable('var_list')
     if ismd:
-        print "Dropping 'met_data'..."
+        logging.warning("Dropping 'met_data'...")
         droptable('met_data')
-    #
+
     # Recreate all three tables:
-    print "Creating 'met_data'..."
+    logging.info("Creating 'met_data'...")
     createmetdata()
-    print "Creating 'var_list'..."
+
+    logging.info("Creating 'var_list'...")
     createvarlist()
-    print "Creating 'data_set'..."
+
+    logging.info("Creating 'data_set'...")
     createdataset()
 
 
@@ -552,32 +574,34 @@ def clean_db():
     Depends:  - existsSQL
               - connectSQL
     """
-    # Initialize query:
-    q = ""
-    #
     # Check which tables exist:
     ismd = existsSQL('met_data')
     isvl = existsSQL('var_list')
     isds = existsSQL('data_set')
-    #
-    # Connect to database and start a cursor:
+
+    logging.debug("Creating database connection")
     con = connectSQL()
-    cur = con.cursor()
-    #
-    # Clean tables:
-    if isds:
-        q = "DELETE FROM %s;" % ("data_set")
-        cur.execute(q)
-    if isvl:
-        q = "DELETE FROM %s;" % ("var_list")
-        cur.execute(q)
-    if ismd:
-        q = "DELETE FROM %s;" % ("met_data")
-        cur.execute(q)
-    #
-    # Commit changes and close:
-    con.commit()
-    con.close()
+    if con is not None:
+        logging.debug("Creating connection cursor")
+        cur = con.cursor()
+
+        # Clean tables:
+        if isds:
+            logging.debug("Cleaning 'data_set' table")
+            q = "DELETE FROM %s;" % ("data_set")
+            cur.execute(q)
+        if isvl:
+            logging.debug("Cleaning 'var_list' table")
+            q = "DELETE FROM %s;" % ("var_list")
+            cur.execute(q)
+        if ismd:
+            logging.debug("Cleaning 'met_data' table")
+            q = "DELETE FROM %s;" % ("met_data")
+            cur.execute(q)
+
+        # Commit changes and close:
+        con.commit()
+        con.close()
 
 
 def clean_table(tname):
@@ -593,168 +617,191 @@ def clean_table(tname):
     q = (
         "DELETE FROM %s;"
         ) % tname
-    #
+
     # Check which tables exist:
     istable = existsSQL(tname)
-    #
-    # Connect to database and start a cursor:
+
+    logging.debug("Creating database connection")
     con = connectSQL()
-    cur = con.cursor()
-    #
-    # Clean table:
-    if istable:
-        cur.execute(q)
-    #
-    # Commit changes and close:
-    con.commit()
-    con.close()
+    if con is not None:
+        logging.debug("Creating connection cursor")
+        cur = con.cursor()
+
+        # Clean table:
+        if istable:
+            logging.debug("Cleaning '%s' table", tname)
+            cur.execute(q)
+        else:
+            logging.warning("Table '%s' does not exist", tname)
+
+        # Commit changes and close:
+        con.commit()
+        con.close()
 
 
-def db_size():
+def db_size(db_name='gepisat'):
     """
     Name:     db_size
-    Input:    None.
-    Output:   string, database size
+    Input:    [optional] str, database name (db_name)
+    Output:   int, database size (in bytes)
     Features: Returns the disk size of a postgreSQL database (bytes)
     Depends:  connectSQL
     Note:     Hard-coded database name
     """
     # Define db name as query parameter:
-    params = ('gepisat',)
-    #params = ('test',)
-    #
+    params = (db_name,)
+
     # Define query:
     q = (
         "SELECT pg_database_size(%s) "
         "As fulldbsize;"
         )
-    #
-    # Connect to db and start a cursor:
+
+    logging.debug("Creating database connection")
     con = connectSQL()
-    cur = con.cursor()
-    #
-    # Execute query, fetch results:
-    cur.execute(q, params)
-    my_result = cur.fetchone()
-    con.close()
-    #
-    return my_result[0]
+    if con is not None:
+        logging.debug("Creating connection cursor")
+        cur = con.cursor()
+
+        # Execute query, fetch results:
+        logging.debug("Executing SQL query")
+        cur.execute(q, params)
+        my_result = cur.fetchone()
+        con.close()
+
+        try:
+            my_size = int(my_result[0])
+        except ValueError:
+            logging.exception("Return value %s not an int", my_result[0])
+        except TypeError:
+            try:
+                my_size = int(my_result)
+            except:
+                logging.exception("Failed to convert result %s", my_result)
+        except:
+            logging.exception("Failed to convert result %s", my_result)
+
+        return my_size
 
 
-def get_var_files():
+def get_var_files(base_path):
     """
     Name:     get_var_files
-    Input:    None.
+    Input:    str, base path (base_path)
     Output:   list, file names (files_list)
     Features: Returns a list of var_list file names (with path)
-    Note:     Hard-coded base_path
     """
-    # Merl:
-    base_path = "/usr/local/share/database/"
-    # BITNAMI:
-    #base_path = "/database/files/var_list/"
-    #
     path_list = [
-        #base_path + "cru/vpd/",
-        #base_path + "cru/tc/",
-        #base_path + "cru/pre/"
-        base_path + "cru/cld/",
-        #base_path + "cru/elv/",
-        #base_path + "noaa/co2/",
-        #base_path + "fluxtowers/station_data/",
-        #base_path + "glas/canopy_height/",
-        #base_path + "modis/evi/",
-        #base_path + "watch/swdown/",
-        #base_path + "alpha/"
+        os.path.join(base_path, "cru", "cld", "*Var-List*"),
+        os.path.join(base_path, "cru", "elv", "*Var-List*"),
+        # os.path.join(base_path, "cru", "pre", "*Var-List*"),
+        os.path.join(base_path, "cru", "tc", "*Var-List*"),
+        os.path.join(base_path, "cru", "vpd", "*Var-List*"),
+        os.path.join(base_path, "fluxtowers", "station_data", "*Var-List*"),
+        os.path.join(base_path, "modis", "evi", "*Var-List*"),
+        os.path.join(base_path, "noaa", "co2", "*Var-List*"),
+        os.path.join(base_path, "watch", "swdown", "*Var-List*"),
+        # os.path.join(base_path, "splash", "alpha", "*Var-List*"),
     ]
-    #
+
     files_list = []
-    #
     for path in path_list:
-        tmp_list = glob.glob(path + "*Var-List*")
-        files_list = files_list + tmp_list
-        #
+        logging.debug("Checking for files in %s", os.path.dirname(path))
+        tmp_list = glob.glob(path)
+        files_list += tmp_list
+
     return files_list
 
 
-def get_data_files():
+def get_data_files(base_path):
     """
     Name:     get_data_files
-    Input:    None.
+    Input:    str, base path (base_path)
     Output:   list, file names (files_list)
     Features: Returns a list of data_set file names (with paths)
     Note:     Hard-coded base_path
     """
-    # Merl:
-    base_path = "/usr/local/share/database/"
-    # BITNAMI:
-    #base_path = "/database/files/data_set/"
-    #
     path_list = [
-        #base_path + "cru/vpd/"
-        #base_path + "cru/tc/",
-        #base_path + "cru/pre/"
-        #base_path + "cru/cld/",
-        #base_path + "cru/elv/",
-        #base_path + "noaa/co2/",
-        #base_path + "fluxtowers/station_data/",
-        #base_path + "glas/canopy_height/",
-        #base_path + "modis/evi/aqua/",
-        #base_path + "modis/evi/terra/",
-        #base_path + "watch/swdown/",
-        base_path + "alpha/",
+        os.path.join(base_path, "cru", "cld", "*Data-Set*"),
+        os.path.join(base_path, "cru", "elv", "*Data-Set*"),
+        # os.path.join(base_path, "cru", "pre", "*Data-Set*"),
+        os.path.join(base_path, "cru", "tc", "*Data-Set*"),
+        os.path.join(base_path, "cru", "vpd", "*Data-Set*"),
+        os.path.join(base_path, "fluxtowers", "station_data", "*Data-Set*"),
+        os.path.join(base_path, "noaa", "co2", "*Data-Set*"),
+        os.path.join(base_path, "modis", "evi", "*Data-Set*"),
+        os.path.join(base_path, "watch", "swdown", "*Data-Set*"),
+        # os.path.join(base_path, "splash", "alpha", "*Data-Set*"),
     ]
-    #
+
     files_list = []
-    #
     for path in path_list:
-        tmp_list = glob.glob(path + "*Data-Set*")
-        files_list = files_list + tmp_list
-        #
+        logging.debug("Checking for files in %s", os.path.dirname(path))
+        tmp_list = glob.glob(path)
+        files_list += tmp_list
+
     return files_list
 
 ###############################################################################
 # MAIN PROGRAM:
 ###############################################################################
-# Test database connection:
-getversion()
+if __name__ == "__main__":
+    # Create a root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_handler = logging.StreamHandler()
+    rec_format = "%(asctime)s:%(levelname)s:%(name)s:%(funcName)s:%(message)s"
+    formatter = logging.Formatter(rec_format, datefmt='%Y-%m-%d %H:%M:%S')
+    root_handler.setFormatter(formatter)
+    root_logger.addHandler(root_handler)
 
-# Reset or clean database:
-reset_db()
-# clean_db()
-# clean_table("data_set")
+    # Test database connection:
+    # getversion()
 
-# Check database size:
-my_dbsize = db_size()
-print("Start,%s" % my_dbsize)
+    # Reset or clean database:
+    # reset_db()
+    # clean_db()
+    # clean_table("data_set")
 
-# Create and populate met_data table:
-met_dir = "/database/files/met_data/point/"
-print("Processing 'met_data'")
-md_files = glob.glob(met_dir + "*Met-Data*")
-for x in sorted(md_files):
-    #print os.path.basename(x)
-    popmetdata(x)
-    print("%s,%s" % (os.path.basename(x), db_size()))
+    # Debug: check if tables exist:
+    root_logger.debug("met: %s", existsSQL('met_data'))
+    root_logger.debug("var: %s", existsSQL('var_list'))
+    root_logger.debug("dat: %s", existsSQL('data_set'))
 
-# Create and populate var_list table :
-# * NOTE: some cols depend on met_data, so create/pop it first
-print("Processing 'var_list'")
-vl_files = get_var_files()
-for y in sorted(vl_files):
-    print(" ...", os.path.basename(y))
-    popvarlist(y)
-    print "%s,%s" % (os.path.basename(y), db_size())
+    # Check database size:
+    my_dbsize = db_size()
+    root_logger.info("Database starting size: %0.3f MB" % (1e-6*my_dbsize))
 
-# Create and populate data_set table
-print "Processing 'data_set'"
-ds_files = get_data_files()
-for z in sorted(ds_files):
-    print("%s" % os.path.basename(z))
-    popdataset(z)
-    print("%s,%s" % (os.path.basename(z), db_size()))
+    # Create and populate met_data table:
+    if False:
+        root_logger.info("Processing 'met_data' table...")
+        met_dir = "/database/files/met_data/point/"
+        md_files = glob.glob(met_dir + "*Met-Data*")
+        for x in sorted(md_files):
+            popmetdata(x)
+            root_logger.info("added %s (%0.3f MB)" % (os.path.basename(x),
+                                                      1e-6*db_size()))
+        root_logger.info("... 'met_data' complete")
 
-# Debug: check if tables exist:
-print "met: %s" % existsSQL('met_data')
-print "var: %s" % existsSQL('var_list')
-print "dat: %s" % existsSQL('data_set')
+    if False:
+        # Create and populate var_list table :
+        # NOTE: some cols depend on met_data, so create/pop it first
+        root_logger.info("Processing 'var_list' table...")
+        vl_dir = "/database/files/psql_data"
+        vl_files = get_var_files(vl_dir)
+        for y in sorted(vl_files):
+            popvarlist(y)
+            root_logger.info("added %s (%0.3f MB)" % (os.path.basename(y),
+                                                      1e-6*db_size()))
+        root_logger.info("... 'var_list' complete")
+
+    if True:
+        # Create and populate data_set table
+        root_logger.info("Processing 'data_set' table...")
+        ds_dir = "/home/user/Projects/gepisat/data/psql_data"
+        ds_files = get_data_files(ds_dir)
+        for z in sorted(ds_files):
+            popdataset(z)
+            root_logger.info("added file %s (%0.3f MB)" % (os.path.basename(z),
+                                                           1e-6*db_size()))
+        root_logger.info("... 'data_set' complete")

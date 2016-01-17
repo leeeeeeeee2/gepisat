@@ -2,10 +2,10 @@
 #
 # db_setup.py
 #
-# VERSION 2.1
+# VERSION 2.1.1
 #
 # 2013-05-15 -- created (as postgreSQL.py)
-# 2016-01-15 -- last updated
+# 2016-01-17 -- last updated
 #
 # ---------
 # citation:
@@ -22,9 +22,7 @@
 # 1. Create/drop database tables (met_data, var_list, data_set)
 # 2. Read data from file and populates database tables
 #
-# NOTE 1: getdata() function requires hardcoding data directory
-#
-# NOTE 2: database name is hardcoded in connectSQL() and db_size()
+# NOTE: database name is hardcoded in connectSQL()
 #
 # ----------
 # changelog:
@@ -64,9 +62,9 @@
 # -----
 # todo:
 # -----
-# 01. getdata() function needs better file handling
-#     * how to handle multiple input files?
-# 02. Add database name (e.g. 'gepisat') to the user.txt file
+# - getdata() function needs better file handling
+#   * how to handle multiple input files?
+# - Add database name (e.g. 'gepisat') to the user.txt file
 #
 ###############################################################################
 # IMPORT MODULES:
@@ -798,7 +796,7 @@ if __name__ == "__main__":
     if True:
         # Create and populate data_set table
         root_logger.info("Processing 'data_set' table...")
-        ds_dir = "/home/user/Projects/gepisat/data/psql_data"
+        ds_dir = "/database/files/psql_data"
         ds_files = get_data_files(ds_dir)
         for z in sorted(ds_files):
             popdataset(z)

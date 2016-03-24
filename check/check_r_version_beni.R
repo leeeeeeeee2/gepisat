@@ -69,6 +69,7 @@ df.mppfd <- df.mppfd[ istart:(istart+nmonth-1), ]  ## take subset of year 2002
 df.mppfd$monsecs <- daily2monthly( df.dayl$dayl, "sum" )
 df.mppfd$meanmmppfd <- df.mppfd$mppfd / df.mppfd$monsecs
 
+
 ##------------------------------------------------------------
 ## RUN P-MODEL
 ## ... and several "components" (K, viscosity, Gamma-star, 
@@ -76,9 +77,11 @@ df.mppfd$meanmmppfd <- df.mppfd$mppfd / df.mppfd$monsecs
 ## with monthly input for mPPFD, air temperature, and VPD
 ##------------------------------------------------------------
 mgpp <- rep( NA, nmonth )
-mluenet   <- rep( NA, nmonth )
+mlue   <- rep( NA, nmonth )
 mrd  <- rep( NA, nmonth )
+mrd_corr  <- rep( NA, nmonth )
 mvcmax_unitiabs <- rep( NA, nmonth )
+mvcmax <- rep( NA, nmonth )
 mactnv_unitiabs <- rep( NA, nmonth )
 mrd_unitiabs <- rep( NA, nmonth )
 mtransp <- rep( NA, nmonth )
@@ -87,21 +90,20 @@ for (moy in 1:nmonth){
 
   out <- pmodel( fpar=fpar, ppfd=df.mppfd$mppfd[moy], co2=co2, tc=mtemp[moy], cpalpha=cpalpha, vpd=mvpd[moy], elv=elv )
   mgpp[moy]            <- out$gpp  # mol CO2 m-2 month-1
-  mluenet[moy]         <- out$lue
+  mlue[moy]            <- out$lue
   mrd[moy]             <- out$rd   # mol CO2 m-2 month-1
   mrd_unitiabs[moy]    <- out$rd_unitiabs   # mol CO2 m-2 month-1
   mvcmax_unitiabs[moy] <- out$vcmax_unitiabs  # mol CO2 / mol absorbed light
   mactnv_unitiabs[moy] <- out$actnv_unitiabs
   mtransp[moy]         <- out$transp
 
+  ## actual Vcmax is determined by monthly light intensity (per second), averaged over daylight seconds 
+  mvcmax[moy]    <- calc_vcmax( lai=1.0, df.mppfd$meanmmppfd[moy], mvcmax_unitiabs[moy] ) 
+
+  ## Actual Rd is happening also at night, therefore determined by average daytime light intensity (meanmppfd)
+  mrd_corr[moy]  <- calc_drd( lai=1.0, df.mppfd$meanmmppfd[moy], mrd_unitiabs[moy] ) * ndaymonth[]
+
 }
-
-## Actual Rd is happening also at night, therefore determined by average daytime light intensity (meanmppfd)
-## and total day length (60.0 * 60.0 * 24.0 * ndaymonth[])
-mrd_corr  <- mrd_unitiabs[] * df.mppfd$meanmmppfd[] * 60.0 * 60.0 * 24.0 * ndaymonth[]
-
-## actual Vcmax is determined by monthly light intensity (per second), averaged over daylight seconds 
-mvcmax    <- mvcmax_unitiabs[] * df.mppfd$meanmmppfd[]
 
 ## metabolic leaf N per unit ground area (canopy level metabolic leaf N), 
 ## based on maximum monthly value of Vcmax25
@@ -187,8 +189,12 @@ cat( "Chi, using simplified method 'lue_vpd_simpl' (unitless):", "\n" ) #, file=
 cat( "   ", format( chi_simpl, digits=4 ), "\n" ) #, file=zzz )
 cat( "Chi, using Wang-Han method 'lue_approx' (unitless):", "\n" ) #, file=zzz )
 cat( "   ", format( chi_wh, digits=4 ), "\n" ) #, file=zzz )
+cat( "LUE (mol C m-2 month-1 (mol m2)-1 ):", "\n" ) #, file=zzz )
+cat( "   ", format( mlue, digits=4 ), "\n" ) #, file=zzz )
 cat( "GPP (mol C m-2 month-1):", "\n" ) #, file=zzz )
 cat( "   ", format( mgpp, digits=4 ), "\n" ) #, file=zzz )
+cat( "GPP (g C m-2 month-1):", "\n" ) #, file=zzz )
+cat( "   ", format( mgpp*12.0107, digits=4 ), "\n" ) #, file=zzz )
 cat( "Rd (mol C m-2 month-1):", "\n" ) #, file=zzz )
 cat( "   ", format( mrd, digits=4 ), "\n" ) #, file=zzz )
 cat( "E, transpiration (mol H2O m-2 month-1):", "\n" ) #, file=zzz )
@@ -217,21 +223,22 @@ indata <- indata[ indata$station == "CH-Oe1", ]
 indata <- indata[ indata$year == 2002, ]
 
 ## Tyler data
-mgpp_tyler <- read.csv( "/alphadata01/bstocker/sofun/trunk/components/mgpp_gepisat_tyler.csv", header=TRUE )
+mgpp_tyler <- read.csv( "/alphadata01/bstocker/sofun/utils_sofun/components/mgpp_gepisat_tyler.csv", header=TRUE )
 
 ## GPP data from observations
-filnam <- "/alphadata01/bstocker/sofun/trunk/input/CH-Oe1_daily_gpp_med_STANDARD.txt"
+filnam <- "/alphadata01/bstocker/data/gepisat/gpp_daily/CH-Oe1_daily_gpp_med_STANDARD.txt"
 df.gpp <- read.table( filnam, header=FALSE, col.names="gpp" )
 source("/alphadata01/bstocker/utilities/daily2monthly.R") ## this is in our 'utilities' repository
 mgpp_obs <- daily2monthly( df.gpp$gpp, method="sum" )
 
 
 ## SAVE DATA FOR USE BY TYLER AND WANG-HAN
-benioutput <- data.frame( year=rep(2002,nmonth), moy=1:nmonth, kpp_Pa=kmm
+benioutput <- data.frame( year=rep(2002,nmonth), moy=1:nmonth, vpd=mvpd, temp=mtemp, ppfd=df.mppfd$mppfd
+  , kpp_Pa=kmm
   , visc_Pa_s=visc, gstar_Pa=gstar, chi_WH_method=chi_wh, chi_simpl=chi_simpl, chi_full=chi_full 
   )
 save( benioutput, file="benioutput.Rdata" )
-write.csv( benioutput, file="benioutput.txt", row.names=FALSE )
+write.csv( benioutput, file="benioutput.csv", row.names=FALSE )
 
 # COMPARE DATA
 # temperature: ok
@@ -295,7 +302,7 @@ plot(  1:nmonth, mgpp, type="l", col="red", xlab="MOY", ylab="GPP (mol C m-2 mon
 lines( 1:nmonth, mgpp - mrd, lty=2, col="red", xlab="MOY"  )
 lines( 1:nmonth, mgpp - mrd_corr, lty=1, col="red", xlab="MOY"  )
 lines( 1:nmonth, mgpp_tyler$gpp, col="blue")
-lines( 1:nmonth, mluenet*df.mppfd$mppfd, col="magenta")
+lines( 1:nmonth, mlue*df.mppfd$mppfd, col="magenta")
 points( 1:nmonth, mgpp_obs )
 legend( "topleft", c("simulted GPP", "simulated GPP, GePiSaT", "simulated GPP-Rd"), lty=1, bty="n", col=c("red","blue","magenta"))
 legend( "topleft", c("","","","FLUXNET data"), bty="n", lty=0, pch=c(NA,NA,NA,1) )

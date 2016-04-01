@@ -4,7 +4,7 @@
 #
 # VERSION 2.2.0-dev
 #
-# LAST UPDATES: 2016-01-17
+# LAST UPDATES: 2016-04-01
 #
 # ---------
 # citation:
@@ -21,23 +21,32 @@
 # IMPORT MODULES
 ###############################################################################
 import datetime
+import logging
 
 import numpy
-import scipy.special
-import scipy.stats
+
+from utilities import calc_statistics
+from utilities import goodness_of_fit
+from utilities import pearsons_r
+from utilities import peirce_dev
 
 
 ###############################################################################
 # CLASSES
 ###############################################################################
-class FLUX_PARTI:
+class STAGE1:
     """
-    Name:     FLUX_PARTI
+    Name:     STAGE1
     Features: This class performs flux partitioning of monthly NEE & PPFD
               observations
     History   Version 2.2.0-dev
               - class separated from model [16.01.17]
               - Python 2/3 supported print statements [16.01.17]
+              - moved utility functions to utilities script [16.04.01]
+                * calc statistics
+                * goodness of fit
+                * pearsons r
+                * peirce dev
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Variable Definitions
@@ -193,7 +202,7 @@ class FLUX_PARTI:
     # ////////////////////////////////////////////////////////////////////////
     def __init__(self, p, n, t, m):
         """
-        Name:     FLUX_PARTI.__init__
+        Name:     STAGE1.__init__
         Input:    - list, monthly PPFD observations (p)
                   - list, monthly NEE observations (n)
                   - string, flux tower name (t)
@@ -201,7 +210,16 @@ class FLUX_PARTI:
         Features: Initialize the class with observation data, calculate basic
                   statistics, estimate model parameters, and calculate
                   Pearson's correlation coefficient
+        Depends:  - calc_statistics
+                  - pearsons_r
+                  - save_estimates
+                  - save_stats
+                  - update_guess
         """
+        # Create a class logger
+        self.logger = logging.getLogger(__name__)
+        self.logger.info("STAGE1 class called")
+
         # Save tower name & month being processed:
         self.name = t
         self.month = m
@@ -217,14 +235,14 @@ class FLUX_PARTI:
             self.ave_ppfd,
             self.std_ppfd,
             self.skw_ppfd,
-            self.krt_ppfd) = self.calc_statistics(p)
+            self.krt_ppfd) = calc_statistics(p)
         (
             self.max_nee,
             self.min_nee,
             self.ave_nee,
             self.std_nee,
             self.skw_nee,
-            self.krt_nee) = self.calc_statistics(n)
+            self.krt_nee) = calc_statistics(n)
         self.save_stats(obs=1, h=-1)
 
         # Update model parameters:
@@ -232,95 +250,14 @@ class FLUX_PARTI:
         self.save_estimates(obs=1, h=-1)
 
         # Calculate Pearson's correlation coefficient:
-        self.r_obs = self.pearsons_r(n, p)
+        self.r_obs = pearsons_r(n, p)
 
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
     # ////////////////////////////////////////////////////////////////////////
-    def calc_statistics(self, my_array):
-        """
-        Name:     FLUX_PARTI.calc_statistics
-        Input:    numpy.ndarray (my_array)
-        Output:   tuple, statistical quantities
-                  - float, max value (max_val)
-                  - float, min value (min_val)
-                  - float, mean value (ave_val)
-                  - float, standard deviation (std_val)
-                  - float, skewness (skew_val)
-                  - float, kurtosis (kurt_val)
-        Features: Returns the basic/advanced statistics for an array of values
-        """
-        # Make sure my_array is a numpy array:
-        if not isinstance(my_array, numpy.ndarray):
-            my_array = numpy.array(my_array)
-
-        # Make sure my_array is not empty or crashes on skew/kurt:
-        if my_array.any() and len(my_array) > 1:
-            # Max, min, mean, st dev, skew, kurtosis (offset from normal)
-            max_val = my_array.max()
-            min_val = my_array.min()
-            ave_val = my_array.mean()
-            std_val = my_array.std()
-
-            # Address divide by zero issues:
-            if std_val == 0:
-                std_val = 1e-4
-
-            skew_val = (
-                sum((my_array - ave_val)**3) /
-                ((len(my_array) - 1)*std_val**3)
-                )
-            kurt_val = (
-                sum((my_array - ave_val)**4) /
-                ((len(my_array) - 1)*std_val**4) - 3
-                )
-        else:
-            # Maintain initial quantity values:
-            max_val = 0.0
-            min_val = 0.0
-            ave_val = 0.0
-            std_val = 0.0
-            skew_val = 0.0
-            kurt_val = 0.0
-
-        return (max_val, min_val, ave_val, std_val, skew_val, kurt_val)
-
-    def pearsons_r(self, x, y):
-        """
-        Name:     FLUX_PARTI.pearsons_r
-        Input:    - numpy.ndarray (x)
-                  - numpy.ndarray (y)
-        Output:   float, Pearson's r (pearsonsr)
-        Features: Returns Pearson's correlation between two arrays
-        """
-        # Make certain data are numpy arrays:
-        if not isinstance(x, numpy.ndarray):
-            x = numpy.array(x)
-        if not isinstance(y, numpy.ndarray):
-            y = numpy.array(y)
-
-        # Initialize Pearson's r:
-        pearsonsr = -9999.0
-
-        # Make certain both arrays have equal lengths:
-        if (len(x) == len(y)):
-            try:
-                slope, intrcp, pearsonsr, p, sterr = (
-                    scipy.stats.linregress(x, y)
-                )
-                #sxy = ((x - x.mean())*(y - y.mean())).sum()
-                #sxx = ((x - x.mean())**2.0).sum()
-                #syy = ((y - y.mean())**2.0).sum()
-                #pearsonsr = sxy/numpy.sqrt(sxx)/numpy.sqrt(syy)
-            except:
-                print("Error calculating Pearson's r")
-                return -9999.0
-            else:
-                return pearsonsr
-
     def save_stats(self, obs, h):
         """
-        Name:     FLUX_PARTI.save_stats
+        Name:     STAGE1.save_stats
         Inputs:   - int, observation flag (obs)
                   - int, hyperbolic model flag (h)
         Output:   None.
@@ -330,6 +267,7 @@ class FLUX_PARTI:
         """
         if obs == 1:
             # Backup Observation Data:
+            self.logger.debug("saving stats for observations")
             self.max_ppfd_obs = self.max_ppfd
             self.min_ppfd_obs = self.min_ppfd
             self.ave_ppfd_obs = self.ave_ppfd
@@ -346,6 +284,7 @@ class FLUX_PARTI:
             # Backup Data with Removed Outliers (RO):
             if h:
                 # Outliers Based on Hyperbolic Model
+                self.logger.debug("saving stats for hyperbolic regression")
                 self.max_ppfd_ro_h = self.max_ppfd
                 self.min_ppfd_ro_h = self.min_ppfd
                 self.ave_ppfd_ro_h = self.ave_ppfd
@@ -360,6 +299,7 @@ class FLUX_PARTI:
                 self.krt_nee_ro_h = self.krt_nee
             else:
                 # Outliers Based on Linear Model
+                self.logger.debug("saving stats for linear regression")
                 self.max_ppfd_ro_l = self.max_ppfd
                 self.min_ppfd_ro_l = self.min_ppfd
                 self.ave_ppfd_ro_l = self.ave_ppfd
@@ -375,12 +315,14 @@ class FLUX_PARTI:
 
     def update_guess(self):
         """
-        Name:     FLUX_PARTI.update_guess
+        Name:     STAGE1.update_guess
         Input:    None.
         Output:   None.
         Features: Updates the model parameter estimation values based on the
                   current data statistics
         """
+        self.logger.debug("updating initial model guess values")
+
         # Linear model [alpha, R]:
         try:
             self.lm_estimates[0] = (
@@ -392,6 +334,7 @@ class FLUX_PARTI:
         else:
             if abs(self.lm_estimates[0]) <= 5.0e-4:
                 self.lm_estimates[0] = 1.0e-3
+
         self.lm_estimates[1] = (
             0.899*self.std_nee
             + 0.827*self.ave_nee
@@ -415,7 +358,7 @@ class FLUX_PARTI:
 
     def save_estimates(self, obs, h):
         """
-        Name:     FLUX_PARTI.save_estimates
+        Name:     STAGE1.save_estimates
         Input:    - int, observation flag (obs)
                   - int, hyperbolic model flag (h)
         Output:   None.
@@ -425,20 +368,23 @@ class FLUX_PARTI:
         """
         if obs == 1:
             # Backup Model Estimates for Observation Data:
+            self.logger.debug("saving observation estimates")
             self.lm_estimates_obs = self.lm_estimates
             self.hm_estimates_obs = self.hm_estimates
         elif obs == 0:
             # Backup Model Estimates for Data with Removed Outliers (RO):
             if h == 1:
                 # Outliers Based on Hyperbolic Model
+                self.logger.debug("saving hyperbolic model estimates")
                 self.hm_estimates_ro = self.hm_estimates
             elif h == 0:
                 # Outliers Based on Linear Model
+                self.logger.debug("saving linear model estimates")
                 self.lm_estimates_ro = self.lm_estimates
 
     def model_h(self, x, Foo, alpha, R):
         """
-        Name:     FLUX_PARTI.model_h
+        Name:     STAGE1.model_h
         Input:    - numpy.ndarray, monthly PPFD (x)
                   - float, hyperbolic parameter (Foo)
                   - float, hyperbolic parameter (alpha)
@@ -465,7 +411,7 @@ class FLUX_PARTI:
 
     def model_l(self, x, alpha, R):
         """
-        Name:     FLUX_PARTI.model_l
+        Name:     STAGE1.model_l
         Input:    - numpy.ndarray, monthly PPFD (x)
                   - float, linear parameter (alpha)
                   - float, linear parameter (R)
@@ -481,18 +427,21 @@ class FLUX_PARTI:
 
     def calc_model_h(self):
         """
-        Name:     FLUX_PARTI.calc_model
+        Name:     STAGE1.calc_model
         Input:    None.
         Output:   None.
         Features: Calculates NEE and the fitness statistics using the
                   optimization parameters for the hyperbolic model based on the
                   observation data
+        Depends:  - model_h
+                  - goodness_of_fit
         """
+        self.logger.debug("calculating hyperbolic model")
         self.nee_model_h = self.model_h(self.ppfd_obs,
                                         self.hm_optimized[0],
                                         self.hm_optimized[1],
                                         self.hm_optimized[2])
-        #
+
         if -9999 in self.hm_optimized:
             self.hm_mse = -9999.0
             self.hm_rmse = -9999.0
@@ -500,19 +449,20 @@ class FLUX_PARTI:
         else:
             (self.hm_mse,
              self.hm_rmse,
-             self.hm_rsqr) = self.goodness_of_fit(self.nee_model_h,
-                                                  self.nee_obs,
-                                                  3)
+             self.hm_rsqr) = goodness_of_fit(self.nee_model_h, self.nee_obs, 3)
 
     def calc_model_h_ro(self):
         """
-        Name:     FLUX_PARTI.calc_model_h_ro
+        Name:     STAGE1.calc_model_h_ro
         Input:    None.
         Output:   None.
         Features: Calculates NEE and the fitness statistics using the
                   optimization parameters for the hyperbolic model based on the
                   observation data with outliers removed
+        Depends:  - model_h
+                  - goodness_of_fit
         """
+        self.logger.debug("calculating hyperbolic model without outliers")
         self.nee_model_h_ro = self.model_h(self.ppfd_obs_h_ro,
                                            self.hm_optimized_ro[0],
                                            self.hm_optimized_ro[1],
@@ -525,19 +475,21 @@ class FLUX_PARTI:
         else:
             (self.hm_mse_ro,
              self.hm_rmse_ro,
-             self.hm_rsqr_ro) = self.goodness_of_fit(self.nee_model_h_ro,
-                                                     self.nee_obs_h_ro,
-                                                     3)
+             self.hm_rsqr_ro) = goodness_of_fit(self.nee_model_h_ro,
+                                                self.nee_obs_h_ro, 3)
 
     def calc_model_l(self):
         """
-        Name:     FLUX_PARTI.calc_model_l
+        Name:     STAGE1.calc_model_l
         Input:    None.
         Output:   None.
         Features: Calculates NEE and the fitness statistics using the
                   optimization parameters for the linear model based on the
                   observation data
+        Depends:  - model_l
+                  - goodness_of_fit
         """
+        self.logger.debug("calculating linear model")
         self.nee_model_l = self.model_l(self.ppfd_obs,
                                         self.lm_optimized[0],
                                         self.lm_optimized[1])
@@ -549,19 +501,21 @@ class FLUX_PARTI:
         else:
             (self.lm_mse,
              self.lm_rmse,
-             self.lm_rsqr) = self.goodness_of_fit(self.nee_model_l,
-                                                  self.nee_obs,
-                                                  2)
+             self.lm_rsqr) = goodness_of_fit(self.nee_model_l,
+                                             self.nee_obs, 2)
 
     def calc_model_l_ro(self):
         """
-        Name:     FLUX_PARTI.calc_model_l_ro
+        Name:     STAGE1.calc_model_l_ro
         Input:    None.
         Output:   None.
         Features: Calculates NEE and the fitness statistics using the
                   optimization parameters for the linear model based on the
                   observation data with outliers removed
+        Depends:  - model_l
+                  - goodness_of_fit
         """
+        self.logger.debug("calculating linear model without outliers")
         self.nee_model_l_ro = self.model_l(self.ppfd_obs_l_ro,
                                            self.lm_optimized_ro[0],
                                            self.lm_optimized_ro[1])
@@ -573,62 +527,26 @@ class FLUX_PARTI:
         else:
             (self.lm_mse_ro,
              self.lm_rmse_ro,
-             self.lm_rsqr_ro) = self.goodness_of_fit(self.nee_model_l_ro,
-                                                     self.nee_obs_l_ro,
-                                                     2)
-
-    def goodness_of_fit(self, modvals, obsvals, nparams):
-        """
-        Name:     FLUX_PARTI.goodness_of_fit
-        Input:    - numpy.ndarray, modeled values (modvals)
-                  - numpy.ndarray, observed values (obsvals)
-                  - int, number of model parameters (nparams)
-        Output:   tuple, goodness of fit statistics
-                  - float, mean squared error (mse)
-                  - float, root-mean squared error (rmse)
-                  - float, adjusted coefficient of determination (r2_adj)
-        Features: Returns the mean squared error, RMSE, and R-squared for
-                  given modeled values
-        """
-        # Initialize return values:
-        mse = 0.0
-        rmse = 0.0
-        r2_adj = 0.0
-
-        # Check that both have the same number of values and that the length
-        # is greater than 4, no divide by zero issues:
-        if (len(obsvals) > 4 and len(modvals) == len(obsvals)):
-            # Sum of the squared error (SSE):
-            sse = sum((obsvals - modvals)**2.0)
-
-            # Mean squared error:
-            mse = float(sse)/(len(obsvals) - nparams)
-
-            # Total sum of the squares (SST):
-            sst = sum((obsvals - float(sum(obsvals))/len(obsvals))**2.0)
-
-            # R-squared:
-            #r2 = 1.0 - float(sse)/sst
-            r2_adj = 1.0 - (
-                float(sse)/sst*(len(obsvals) - 1.0) /
-                float(len(obsvals) - nparams - 1.0)
-                )
-
-            # RMSE:
-            rmse = numpy.sqrt(float(sse)/len(obsvals))
-
-        return (mse, rmse, r2_adj)
+             self.lm_rsqr_ro) = goodness_of_fit(self.nee_model_l_ro,
+                                                self.nee_obs_l_ro, 2)
 
     def remove_mh_outliers(self):
         """
-        Name:     FLUX_PARTI.remove_mh_outliers
+        Name:     STAGE1.remove_mh_outliers
         Input:    None.
         Output:   int, success flag (rval)
         Features: Returns flag indicating the successful removal of outliers
                   from the hyperbolic model observations; saves outlier-free
                   data, new statistics, and updated model estimates
-        Ref:      Chapter 11.5, GePiSaT Documentation
+        Depends:  - peirce_dev
+                  - calc_statistics
+                  - save_stats
+                  - update_guess
+                  - save_estimates
+                  - pearsons_r
         """
+        self.logger.debug("removing outliers from hyperbolic model")
+
         # Set Peirce values:
         peirce_cap_n = len(self.nee_obs)
         peirce_lc_n = 1
@@ -648,7 +566,7 @@ class FLUX_PARTI:
         # Run check again if no outliers are found in first attempt:
         if (outliers_found == 0):
             peirce_lc_n = 2
-            self.peirce_x2 = self.peirce_dev(
+            self.peirce_x2 = peirce_dev(
                 peirce_cap_n, peirce_lc_n, peirce_m
                 )
             self.peirce_delta2 = self.hm_mse*self.peirce_x2
@@ -666,7 +584,7 @@ class FLUX_PARTI:
             if peirce_lc_n >= peirce_cap_n:
                 peirce_lc_n = outliers_found + 1.0
             else:
-                self.peirce_x2 = self.peirce_dev(
+                self.peirce_x2 = peirce_dev(
                     peirce_cap_n, peirce_lc_n, peirce_m)
                 self.peirce_delta2 = self.hm_mse*self.peirce_x2
                 outliers_index = numpy.where(sq_errors > self.peirce_delta2)[0]
@@ -687,21 +605,18 @@ class FLUX_PARTI:
                 self.ave_ppfd,
                 self.std_ppfd,
                 self.skw_ppfd,
-                self.krt_ppfd) = self.calc_statistics(self.ppfd_obs_h_ro)
+                self.krt_ppfd) = calc_statistics(self.ppfd_obs_h_ro)
             (
                 self.max_nee,
                 self.min_nee,
                 self.ave_nee,
                 self.std_nee,
                 self.skw_nee,
-                self.krt_nee) = self.calc_statistics(self.nee_obs_h_ro)
+                self.krt_nee) = calc_statistics(self.nee_obs_h_ro)
             self.save_stats(obs=0, h=1)
             self.update_guess()
             self.save_estimates(obs=0, h=1)
-            self.r_ro_h = self.pearsons_r(
-                self.ppfd_obs_h_ro,
-                self.nee_obs_h_ro
-                )
+            self.r_ro_h = pearsons_r(self.ppfd_obs_h_ro, self.nee_obs_h_ro)
             rval = 1
         else:
             rval = 0
@@ -709,21 +624,28 @@ class FLUX_PARTI:
 
     def remove_ml_outliers(self):
         """
-        Name:     FLUX_PARTI.remove_ml_outliers
+        Name:     STAGE1.remove_ml_outliers
         Input:    None.
         Output:   int, success flag (rval)
         Features: Returns flag indicating the successful removal of outliers
                   from the linear model observations; saves outlier-free
                   data, new statistics, and updated model estimates
-        Ref:      Chapter 11.5, GePiSaT Documentation
+        Depends:  - peirce_dev
+                  - calc_statistics
+                  - save_stats
+                  - save_estimates
+                  - update_guess
+                  - pearsons_r
         """
+        self.logger.debug("removing outliers from linear model")
+
         # Set Peirce values:
         peirce_cap_n = len(self.nee_obs)
         peirce_lc_n = 1
         peirce_m = 2
 
         # Calculate tolerance
-        self.peirce_x2 = self.peirce_dev(peirce_cap_n, peirce_lc_n, peirce_m)
+        self.peirce_x2 = peirce_dev(peirce_cap_n, peirce_lc_n, peirce_m)
         self.peirce_delta2 = self.hm_mse*self.peirce_x2
 
         # Calculate the square errors:
@@ -736,7 +658,7 @@ class FLUX_PARTI:
         # Run check again if no outliers are found in first attempt:
         if (outliers_found == 0):
             peirce_lc_n = 2
-            self.peirce_x2 = self.peirce_dev(
+            self.peirce_x2 = peirce_dev(
                 peirce_cap_n, peirce_lc_n, peirce_m
                 )
             self.peirce_delta2 = self.hm_mse*self.peirce_x2
@@ -754,7 +676,7 @@ class FLUX_PARTI:
             if peirce_lc_n >= peirce_cap_n:
                 peirce_lc_n = outliers_found + 1.0
             else:
-                self.peirce_x2 = self.peirce_dev(
+                self.peirce_x2 = peirce_dev(
                     peirce_cap_n, peirce_lc_n, peirce_m)
                 self.peirce_delta2 = self.hm_mse*self.peirce_x2
                 outliers_index = numpy.where(sq_errors > self.peirce_delta2)[0]
@@ -775,82 +697,26 @@ class FLUX_PARTI:
                 self.ave_ppfd,
                 self.std_ppfd,
                 self.skw_ppfd,
-                self.krt_ppfd) = self.calc_statistics(self.ppfd_obs_h_ro)
+                self.krt_ppfd) = calc_statistics(self.ppfd_obs_h_ro)
             (
                 self.max_nee,
                 self.min_nee,
                 self.ave_nee,
                 self.std_nee,
                 self.skw_nee,
-                self.krt_nee) = self.calc_statistics(self.nee_obs_h_ro)
+                self.krt_nee) = calc_statistics(self.nee_obs_h_ro)
             self.save_stats(obs=0, h=0)
             self.update_guess()
             self.save_estimates(obs=0, h=0)
-            self.r_ro_l = self.pearsons_r(
-                self.ppfd_obs_l_ro,
-                self.nee_obs_l_ro
-                )
+            self.r_ro_l = pearsons_r(self.ppfd_obs_l_ro, self.nee_obs_l_ro)
             rval = 1
         else:
             rval = 0
         return rval
 
-    def peirce_dev(self, peirce_cap_n, peirce_lc_n, peirce_m):
-        """
-        Name:     FLUX_PARTI.peirce_dev
-        Input:    - int, total number of observations (peirce_cap_n)
-                  - int, number of outliers to be removed (peirce_lc_n)
-                  - int, number of model unknowns (peirce_m)
-        Output:   float, squared error threshold (x2)
-        Features: Returns the squared threshold error deviation for outlier
-                  identification using Peirce's criterion based on Gould's
-                  methodology
-        Ref:      Chapter 11.5, GePiSaT Documentation
-        """
-        # Assign floats to input variables:
-        N = float(peirce_cap_n)
-        n = float(peirce_lc_n)
-        m = float(peirce_m)
-
-        # Check the total number of observations:
-        if N > 1:
-            # Calculate Q (Nth root of Gould's equation B):
-            # Note: 1/N exponent is factored to each individual term to prevent
-            # OverflowError with large N (e.g., >142)
-            Q = (n**(n/N)*(N-n)**((N-n)/N))/N
-
-            # Initialize R values (as floats):
-            Rnew = 1.0  # <- Tried values between 1 and 10 and all seem stable
-            Rold = 0.0  # <- Necessary to prompt while loop
-
-            while (abs(Rnew - Rold) > (N*2.0e-16)):
-                # Calculate Lamda (1/(N-n)th root of Gould's equation A'):
-                ldiv = Rnew**n
-                if ldiv == 0:
-                    ldiv = 1.0e-6
-                Lamda = ((Q**N)/(ldiv))**(1.0/(N - n))
-
-                # Calculate x-squared (straight-forward Gould's equation C):
-                x2 = 1.0 + (N - m - n)/n*(1.0 - Lamda**2.0)
-
-                # Return 0 for negative x2 values:
-                if x2 < 0:
-                    x2 = 0
-                    Rold = Rnew
-                else:
-                    # Use x-squared to update R (Gould's equation D):
-                    Rold = Rnew
-                    Rnew = (
-                        numpy.exp((x2 - 1)/2.0) *
-                        scipy.special.erfc(numpy.sqrt(x2)/numpy.sqrt(2.0))
-                        )
-        else:
-            x2 = 0.0
-        return x2
-
     def summary_statistics(self):
         """
-        Name:     FLUX_PARTI.summary_statistics
+        Name:     STAGE1.summary_statistics
         Input:    None.
         Output:   string, summary of statistics (sum_stat)
         Features: Returns output string that summarizes all variables in this
@@ -1054,7 +920,7 @@ class FLUX_PARTI:
 
     def model_selection(self):
         """
-        Name:     FLUX_PARTI.model_selection
+        Name:     STAGE1.model_selection
         Input:    None.
         Output:   None.
         Features: Saves the model (i.e., none, hyperbolic with
@@ -1230,7 +1096,7 @@ class FLUX_PARTI:
 
     def calc_gpp(self, ppfd):
         """
-        Name:     FLUX_PARTI.calc_gpp
+        Name:     STAGE1.calc_gpp
         Input:    numpy.ndarray, monthly PPFD (ppfd)
         Output:   tuple, modeled GPP and associated error
                   - numpy.ndarray, modeled GPP (gpp)
@@ -1239,6 +1105,9 @@ class FLUX_PARTI:
                   best model
         Ref:      Chapters 11.2 & 11.3, GePiSaT Documentation
         """
+        self.logger.debug(
+            "calculating GPP for model selection %d", self.mod_select)
+
         # Get model selection:
         if (self.mod_select == 1 or self.mod_select == 2):
             model = "H"
@@ -1314,3 +1183,20 @@ class FLUX_PARTI:
 
         # Return GPP
         return (gpp, gpp_err)
+
+###############################################################################
+# MAIN PROGRAM
+###############################################################################
+if __name__ == '__main__':
+    # Create a root logger:
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+
+    # Instantiating logging handler and record format:
+    root_handler = logging.FileHandler("stage1.log")
+    rec_format = "%(asctime)s:%(levelname)s:%(name)s:%(funcName)s:%(message)s"
+    formatter = logging.Formatter(rec_format, datefmt="%Y-%m-%d %H:%M:%S")
+    root_handler.setFormatter(formatter)
+
+    # Send logging handler to root logger:
+    root_logger.addHandler(root_handler)

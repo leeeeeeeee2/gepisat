@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# model.py
+# solar.py
 #
 # VERSION 2.2.0-dev
 #
@@ -12,10 +12,6 @@
 # I. C. Prentice, T. W. Davis, X. M. P. Gilbert, B. D. Stocker, B. J. Evans,
 # H. Wang, and T. F. Keenan, "The Global ecosystem in Space and Time (GePiSaT)
 # Model of the Terrestrial Biosphere," (in progress).
-#
-# ------------
-# description:
-# ------------
 
 ###############################################################################
 # IMPORT MODULES
@@ -47,75 +43,101 @@ class SOLAR_TOA:
     History:  Version
               - import global constants [16.04.01]
               - import utility functions [16.04.01]
+              - updated methods to mirror SPLASH [16.04.01]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
     # ////////////////////////////////////////////////////////////////////////
-    # @TODO separate functions from init
-
-    def __init__(self, lon, lat, n, y=0):
+    def __init__(self, lat, lon):
         """
         Name:     SOLAR_TOA.__init__
-        Input:    - float, longitude (lon)
+        Inputs:   - float, longitude (lon)
                   - float, latitude (lat)
-                  - int, day of year (n)
-                  - int, year (y)
+        Features: Initializes point-based top-of-the-atmosphere radiation class
         """
         # Create a class logger
         self.logger = logging.getLogger(__name__)
         self.logger.info("SOLAR_TOA class called")
 
         # Error handle and assign required public variables:
-        if y == 0:
-            self.year = 2001
-        else:
-            self.year = y
         if lat > 90.0 or lat < -90.0:
-            print("Latitude outside range of validity (-90 to 90)!")
+            self.logger.error(
+                "Latitude outside range of validity, (-90 to 90)!")
+            raise ValueError(
+                "Latitude outside range of validity, (-90 to 90)!")
         else:
+            self.logger.info("latitude set to %0.3f degrees", lat)
             self.lat = lat
+
         if lon > 180.0 or lon < -180.0:
-            print("Longitude outside range of validity (-180 to 180)!")
+            self.logger.error(
+                "Longitude outside range of validity (-180 to 180)!")
+            raise ValueError(
+                "Longitude outside range of validity (-180 to 180)!")
         else:
             self.lon = lon
-        if n < 1 or n > 366:
-            print("Day outside range of validity (1 to 366)!")
-        else:
-            self.doy = n
 
+    def calculate_daily_fluxes(self, n, y=0):
+        """
+        Name:     SOLAR_TOA.calculate_daily_fluxes
+        Inputs:   - int, day of year (n)
+                  - [optional] int, year (y)
+        Outputs:  None.
+        Features: Calculates the half-hourly and daily top-of-the-atmosphere
+                  solar radiation and photosynthetic photon fluxes
+        """
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # 0. Create local time series, hours
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        local_hh = numpy.array([0.5*i for i in xrange(48)])
-        self.local_time = numpy.array([
-            datetime.datetime(self.year, 1, 1, 0, 0, 0) +
-            datetime.timedelta(days=(n-1)) +
-            datetime.timedelta(hours=i) for i in local_hh
-        ])
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # 1. Calculate number of days in year (kN), days
+        # 0. Calculate number of days in year (kN), days
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         if y == 0:
-            self.kN = 365.
+            kN = 365
+            self.year = 2001
+        elif y < 0:
+            self.logger.error("year set out of range")
+            raise ValueError(
+                "Please use a valid Julian or Gregorian calendar year")
         else:
-            self.kN = self.julian_day((y + 1), 1, 1) - self.julian_day(y, 1, 1)
+            kN = self.julian_day((y+1), 1, 1) - self.julian_day(y, 1, 1)
+            self.year = y
+        self.kN = kN
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # 1. Create local time series, hours
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if n < 1 or n > 366:
+            self.logger.error(
+                "Day of year outside range of validity, (1 to 366)!")
+            raise ValueError(
+                "Day of year outside range of validity (1 to 366)!")
+        else:
+            self.day = n
+            local_hh = numpy.array([0.5*i for i in xrange(48)])
+            self.local_time = numpy.array([
+                datetime.datetime(self.year, 1, 1, 0, 0, 0) +
+                datetime.timedelta(days=(n-1)) +
+                datetime.timedelta(hours=i) for i in local_hh
+            ])
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 2. Calculate heliocentric longitudes (nu and lambda), degrees
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Berger (1978)
         my_nu, my_lambda = self.berger_tls(n)
-        #self.nu_deg = my_nu
-        #self.lambda_deg = my_lambda
+        self.my_nu = my_nu
+        self.my_lambda = my_lambda
+        self.logger.info("true anomaly, nu, set to %f degrees", my_nu)
+        self.logger.info("true lon, lambda, set to %f degrees", my_lambda)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 3. Calculate distance factor (dr), unitless
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Berger et al. (1993)
-        my_rho = (1.0 - self.ke**2)/(1.0 + self.ke*dcos(my_nu))
+        kee = ke**2
+        my_rho = (1.0 - kee)/(1.0 + ke*dcos(my_nu))
         dr = (1.0/my_rho)**2
-        #self.dr = dr
+        self.dr = dr
+        self.logger.info("relative Earth-Sun distance, rho, set to %f", my_rho)
+        self.logger.info("distance factor, dr, set to %f", dr)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 4. Calculate declination angle (delta), degrees
@@ -123,49 +145,59 @@ class SOLAR_TOA:
         # Woolf (1968)
         delta = numpy.arcsin(dsin(my_lambda)*dsin(keps))
         delta /= pir
-        #self.delta_deg = delta
+        self.delta = delta
+        self.logger.info("declination, delta, set to %f", delta)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 5. Calculate time zone hour, hours
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if lon < 0:
+        if self.lon < 0:
             # Swap to positive to "round down" negative numbers:
-            temp_lon = -1.0*lon
+            temp_lon = -1.0*self.lon
             temp_tzh = int(temp_lon/15)
             tz_hour = -1.0*temp_tzh
         else:
-            tz_hour = int(lon/15)
-        #self.tz_hour = tz_hour
+            tz_hour = int(self.lon/15)
+        self.tz_hour = tz_hour
+        self.logger.info("time zone hour set to %d", tz_hour)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 6. Calculate the equation of time, hours
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # Spencer (1971)
         eot = self.spencer_eot(n)
-        #self.eot_hour = eot
+        self.eot_hour = eot
+        self.logger.info("Equation of Time set to %f", eot)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 7. Calculate the longitude correction, hours
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        lc = (15.0*tz_hour - lon)/15.0
-        #self.lc_hour = lc
+        lonc = (15.0*tz_hour - self.lon)/15.0
+        self.lc_hour = lonc
+        self.logger.info("longitude corrector set to %f", lonc)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 8. Calculate the solar time, hours
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        ts_hh = local_hh + eot - lc
-        #self.ts_hh = ts_hh
+        ts_hh = local_hh + eot - lonc
+        self.ts_hh = ts_hh
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 9. Calculate the hour angle, degrees
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         w_hh = (360./24.)*(ts_hh - 12.0)
+        self.w_hh = w_hh
+        self.logger.info("hour angle set to %f", w_hh)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 10. Calculate variable substitutes (u and v), unitless
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        ru = dsin(delta)*dsin(lat)
-        rv = dcos(delta)*dcos(lat)
+        ru = dsin(delta)*dsin(self.lat)
+        rv = dcos(delta)*dcos(self.lat)
+        self.ru = ru
+        self.rv = rv
+        self.logger.info("variable substitute, ru, set to %f", ru)
+        self.logger.info("variable substitute, rv, set to %f", rv)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 11. Calculate the sunset hour angle (hs), degrees
@@ -173,22 +205,25 @@ class SOLAR_TOA:
         # Eq. 3.22, Stine & Geyer (2001)
         if (ru/rv) >= 1.0:
             # Polar day (no sunset)
+            self.logger.debug("polar day---no sunset")
             hs = 180.0
         elif (ru/rv) <= -1.0:
             # Polar night (no sunrise)
+            self.logger.debug("polar night---no sunrise")
             hs = 0.0
         else:
             hs = -1.0*ru/rv
             hs = numpy.arccos(hs)
             hs /= pir
-        #self.hs_deg = hs
+        self.hs = hs
+        self.logger.info("sunset angle, hs, set to %f", hs)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 12. Calculate the half-hourly solar radiation flux, W/m^2
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         io_hh = kGsc*dr*(ru + rv*dcos(w_hh))
         io_hh = io_hh.clip(min=0)
-        #self.io_wm2 = io_hh
+        self.io_wm2 = io_hh
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 13. Calculate the half-hourly PPFD, umol/m^2/s
@@ -202,6 +237,7 @@ class SOLAR_TOA:
         # Eq. 1.10.3, Duffy & Beckman (1993)
         ho = (86400.0/numpy.pi)*kGsc*dr*(ru*pir*hs + rv*dsin(hs))
         self.ho_jm2 = ho
+        self.logger.info("daily ET radiation set to %f MJ/m^2", (1.0e-6)*ho)
 
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions

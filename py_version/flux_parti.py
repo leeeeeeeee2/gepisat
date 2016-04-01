@@ -12,11 +12,7 @@
 # I. C. Prentice, T. W. Davis, X. M. P. Gilbert, B. D. Stocker, B. J. Evans,
 # H. Wang, and T. F. Keenan, "The Global ecosystem in Space and Time (GePiSaT)
 # Model of the Terrestrial Biosphere," (in progress).
-#
-# ------------
-# description:
-# ------------
-#
+
 ###############################################################################
 # IMPORT MODULES
 ###############################################################################
@@ -24,6 +20,8 @@ import datetime
 import logging
 
 import numpy
+from scipy.optimize import curve_fit
+import scipy.stats
 
 from utilities import calc_statistics
 from utilities import goodness_of_fit
@@ -47,6 +45,7 @@ class STAGE1:
                 * goodness of fit
                 * pearsons r
                 * peirce dev
+              - reduced function calls by adding modes [16.04.01]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Variable Definitions
@@ -132,13 +131,6 @@ class STAGE1:
     r_ro_h = 0.0
     r_ro_l = 0.0
 
-    # Peirce's criterion values:
-    #peirce_cap_n = 0.0
-    #peirce_lc_n = 1.0
-    #peirce_m = 1.0
-    peirce_x2 = 0.0
-    peirce_delta2 = 0.0
-
     # Linear model coefficients and their standard errors [alpha, R]:
     # includes student's t statistic and p-value for model parameters
     # * alpha :: [unitless]
@@ -200,13 +192,13 @@ class STAGE1:
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
     # ////////////////////////////////////////////////////////////////////////
-    def __init__(self, p, n, t, m):
+    def __init__(self, ppfd, nee, tower, mo):
         """
         Name:     STAGE1.__init__
-        Input:    - list, monthly PPFD observations (p)
-                  - list, monthly NEE observations (n)
-                  - string, flux tower name (t)
-                  - datetime.date, current month (m)
+        Input:    - list, monthly PPFD observations (ppfd)
+                  - list, monthly NEE observations (nee)
+                  - string, flux tower name (tower)
+                  - datetime.date, current month (mo)
         Features: Initialize the class with observation data, calculate basic
                   statistics, estimate model parameters, and calculate
                   Pearson's correlation coefficient
@@ -221,12 +213,12 @@ class STAGE1:
         self.logger.info("STAGE1 class called")
 
         # Save tower name & month being processed:
-        self.name = t
-        self.month = m
+        self.name = tower
+        self.month = mo
 
         # Save PPFD and NEE lists:
-        self.ppfd_obs = p
-        self.nee_obs = n
+        self.ppfd_obs = ppfd
+        self.nee_obs = nee
 
         # Calculate statistics for observations:
         (
@@ -235,14 +227,14 @@ class STAGE1:
             self.ave_ppfd,
             self.std_ppfd,
             self.skw_ppfd,
-            self.krt_ppfd) = calc_statistics(p)
+            self.krt_ppfd) = calc_statistics(ppfd)
         (
             self.max_nee,
             self.min_nee,
             self.ave_nee,
             self.std_nee,
             self.skw_nee,
-            self.krt_nee) = calc_statistics(n)
+            self.krt_nee) = calc_statistics(nee)
         self.save_stats(obs=1, h=-1)
 
         # Update model parameters:
@@ -250,11 +242,823 @@ class STAGE1:
         self.save_estimates(obs=1, h=-1)
 
         # Calculate Pearson's correlation coefficient:
-        self.r_obs = pearsons_r(n, p)
+        self.r_obs = pearsons_r(nee, ppfd)
 
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
     # ////////////////////////////////////////////////////////////////////////
+    def calc_gpp(self, ppfd):
+        """
+        Name:     STAGE1.calc_gpp
+        Input:    numpy.ndarray, monthly PPFD (ppfd)
+        Output:   tuple, modeled GPP and associated error
+                  - numpy.ndarray, modeled GPP (gpp)
+                  - numpy.ndarray, associated error (gpp_err)
+        Features: Returns GPP (umol m-2 s-1) and associated error based on the
+                  best model
+        Ref:      Chapters 11.2 & 11.3, GePiSaT Documentation
+        """
+        self.logger.debug(
+            "calculating GPP for model selection %d", self.mod_select)
+
+        # Get model selection:
+        if (self.mod_select == 1 or self.mod_select == 2):
+            model = "H"
+        elif (self.mod_select == 3 or self.mod_select == 4):
+            model = "L"
+
+        # Get outlier selection:
+        if (self.mod_select == 1 or self.mod_select == 3):
+            outlier = 0
+        elif (self.mod_select == 2 or self.mod_select == 4):
+            outlier = 1
+
+        if self.mod_select == 0:
+            # Default to hyperbolic model with outliers removed estimates
+            (foo, alpha, r) = self.hm_estimates_ro
+            (foo_err, alpha_err, r_err) = (0., 0., 0.)
+
+            if foo == 0 or alpha == 0:
+                # Use linear estimates instead:
+                (alpha, r) = self.lm_estimates_ro
+                (alpha_err, r_err) = (0., 0.)
+
+                # Calculate GPP and GPP err:
+                gpp = (alpha*ppfd)
+                gpp_err = (ppfd*alpha_err)
+            else:
+                # Variable substitutes:
+                apf = alpha*ppfd + foo
+                afp = alpha*foo*ppfd
+                afpp = alpha*foo*(ppfd**2)
+
+                # Calculate GPP and its associated error:
+                gpp = afp/apf
+                gpp_err = numpy.sqrt(
+                    (alpha_err**2)*((foo*ppfd*apf - afpp)/(apf**2))**2 +
+                    (foo_err**2)*((alpha*ppfd*apf - afp)/(apf**2))**2
+                )
+
+            # Clip out negative values of GPP:
+            gpp = gpp.clip(min=0)
+        elif model.upper() == "H":
+            # Retrieve parameters for hyperbolic model:
+            if outlier == 0:
+                (foo, alpha, r) = self.hm_optimized
+                (foo_err, alpha_err, r_err) = self.hm_optim_err
+            elif outlier == 1:
+                (foo, alpha, r) = self.hm_optimized_ro
+                (foo_err, alpha_err, r_err) = self.hm_optim_err_ro
+
+            # Variable substitutes:
+            apf = alpha*ppfd + foo
+            afp = alpha*foo*ppfd
+            afpp = alpha*foo*(ppfd**2)
+
+            # Calculate GPP and its associated error:
+            gpp = afp/apf
+            gpp_err = numpy.sqrt(
+                (alpha_err**2)*((foo*ppfd*apf - afpp)/(apf**2))**2 +
+                (foo_err**2)*((alpha*ppfd*apf - afp)/(apf**2))**2
+            )
+        elif model.upper() == "L":
+            # Retrieve parameters for linear model:
+            if outlier == 0:
+                (alpha, r) = self.lm_optimized
+                (alpha_err, r_err) = self.lm_optim_err
+            elif outlier == 1:
+                (alpha, r) = self.lm_optimized_ro
+                (alpha_err, r_err) = self.lm_optim_err_ro
+
+            # Calculate GPP:
+            gpp = (alpha*ppfd)
+            gpp_err = (ppfd*alpha_err)
+
+        # Return GPP
+        return (gpp, gpp_err)
+
+    def calc_model(self, mode, ro):
+        """
+        Name:     STAGE1.calc_model
+        Input:    - str, model mode (mode)
+                    'H' for hyperbolic
+                    'L' for linear
+                  - bool, remove outliers (ro)
+        Output:   None.
+        Features: Calculates NEE and the fitness statistics using the
+                  optimization parameters for the hyperbolic or linear model
+                  based on observation data with or without outliers removed
+        Depends:  - model_h
+                  - model_l
+                  - goodness_of_fit
+        """
+        self.logger.debug("Model mode %s", mode)
+        self.logger.debug("Outlier removal: %s", ro)
+
+        if mode == "H":
+            if ro:
+                self.logger.debug(
+                    "calculating hyperbolic model without outliers")
+                self.nee_model_h_ro = self.model_h(self.ppfd_obs_h_ro,
+                                                   self.hm_optimized_ro[0],
+                                                   self.hm_optimized_ro[1],
+                                                   self.hm_optimized_ro[2])
+
+                if -9999 in self.hm_optimized_ro:
+                    self.hm_mse_ro = -9999.0
+                    self.hm_rmse_ro = -9999.0
+                    self.hm_rsqr_ro = -9999.0
+                else:
+                    (self.hm_mse_ro,
+                     self.hm_rmse_ro,
+                     self.hm_rsqr_ro) = goodness_of_fit(self.nee_model_h_ro,
+                                                        self.nee_obs_h_ro, 3)
+            else:
+                self.logger.debug("calculating hyperbolic model")
+                self.nee_model_h = self.model_h(self.ppfd_obs,
+                                                self.hm_optimized[0],
+                                                self.hm_optimized[1],
+                                                self.hm_optimized[2])
+
+                if -9999 in self.hm_optimized:
+                    self.hm_mse = -9999.0
+                    self.hm_rmse = -9999.0
+                    self.hm_rsqr = -9999.0
+                else:
+                    (self.hm_mse,
+                     self.hm_rmse,
+                     self.hm_rsqr) = goodness_of_fit(self.nee_model_h,
+                                                     self.nee_obs, 3)
+        elif mode == "L":
+            if ro:
+                self.logger.debug("calculating linear model without outliers")
+                self.nee_model_l_ro = self.model_l(self.ppfd_obs_l_ro,
+                                                   self.lm_optimized_ro[0],
+                                                   self.lm_optimized_ro[1])
+
+                if -9999 in self.lm_optimized_ro:
+                    self.lm_mse_ro = -9999.0
+                    self.lm_rmse_ro = -9999.0
+                    self.lm_rsqr_ro = -9999.0
+                else:
+                    (self.lm_mse_ro,
+                     self.lm_rmse_ro,
+                     self.lm_rsqr_ro) = goodness_of_fit(self.nee_model_l_ro,
+                                                        self.nee_obs_l_ro, 2)
+            else:
+                self.logger.debug("calculating linear model")
+                self.nee_model_l = self.model_l(self.ppfd_obs,
+                                                self.lm_optimized[0],
+                                                self.lm_optimized[1])
+
+                if -9999 in self.lm_optimized:
+                    self.lm_mse = -9999.0
+                    self.lm_rmse = -9999.0
+                    self.lm_rsqr = -9999.0
+                else:
+                    (self.lm_mse,
+                     self.lm_rmse,
+                     self.lm_rsqr) = goodness_of_fit(self.nee_model_l,
+                                                     self.nee_obs, 2)
+
+    def model_h(self, x, Foo, alpha, R):
+        """
+        Name:     STAGE1.model_h
+        Input:    - numpy.ndarray, monthly PPFD (x)
+                  - float, hyperbolic parameter (Foo)
+                  - float, hyperbolic parameter (alpha)
+                  - float, hyperbolic parameter (R)
+        Output:   numpy.ndarray, modeled NEE
+        Features: Returns array of NEE based on the hyperbolic model in the
+                  form: Y = (ax+b)/(bx+c)
+        Ref:      Eq. 15, GePiSaT Documentation
+        """
+        a = 1.0*(alpha*R) - 1.0*(alpha*Foo)
+        b = 1.0*(Foo*R)
+        c = 1.0*alpha
+        d = 1.0*Foo
+
+        numerator = 1.0*(a*x) + b
+        denominator = 1.0*(c*x) + d
+
+        # Compensate for zero division by adding a small number to each value:
+        if 0 in denominator:
+            denominator = [elem + 1.0e-6 for elem in denominator]
+            denominator = numpy.array(denominator)
+
+        return (numerator/denominator)
+
+    def model_l(self, x, alpha, R):
+        """
+        Name:     STAGE1.model_l
+        Input:    - numpy.ndarray, monthly PPFD (x)
+                  - float, linear parameter (alpha)
+                  - float, linear parameter (R)
+        Output:   - numpy.ndarray, modeled NEE
+        Features: Returns array of NEE based on the linear model in the form:
+                  Y = ax+b
+        Ref:      Eq. 14, GePiSaT Documentation
+        """
+        a = -1.0*alpha
+        b = R
+
+        return (a*x + b)
+
+    def model_selection(self):
+        """
+        Name:     STAGE1.model_selection
+        Input:    None.
+        Output:   None.
+        Features: Saves the model (i.e., none, hyperbolic with
+                  observations, hyperbolic with outliers removed, linear with
+                  observations, linear with outliers removed) that ``best''
+                  represents the data based on thesholds of fitness, validity
+                  of parameter values, and parameter significance
+        """
+        # Define threshold values:
+        r2_thresh = 0.5       # minimum R-squared fitness
+        p_thresh = 0.05       # minimum parameter significance (95%)
+
+        # Initialize selection dictionary:
+        select_dict = {'obs_h': 1,
+                       'ro_h': 2,
+                       'obs_l': 3,
+                       'ro_l': 4}
+
+        # Initialize model failure dictionary:
+        model_dict = {'obs_h': 0,
+                      'ro_h': 0,
+                      'obs_l': 0,
+                      'ro_l': 0}
+
+        # Initialize R-squared dictionary:
+        r2_dict = {'obs_h': self.hm_rsqr,
+                   'obs_l': self.lm_rsqr,
+                   'ro_h': self.hm_rsqr_ro,
+                   'ro_l': self.lm_rsqr_ro}
+
+        # Initialize P-value dictionary:
+        p_dict = {'obs_h': numpy.array(self.hm_optim_p),
+                  'ro_h': numpy.array(self.hm_optim_p_ro),
+                  'obs_l': numpy.array(self.lm_optim_p),
+                  'ro_l': numpy.array(self.lm_optim_p_ro)}
+
+        # Initialize parameter value dictionary:
+        value_dict = {
+            'obs_h': {'foo': self.hm_optimized[0],
+                      'alpha': self.hm_optimized[1],
+                      'r': self.hm_optimized[2]
+                      },
+            'ro_h': {'foo': self.hm_optimized_ro[0],
+                     'alpha': self.hm_optimized_ro[1],
+                     'r': self.hm_optimized_ro[2]
+                     },
+            'obs_l': {'alpha': self.lm_optimized[0],
+                      'r': self.lm_optimized[1]
+                      },
+            'ro_l': {'alpha': self.lm_optimized_ro[0],
+                     'r': self.lm_optimized_ro[1]
+                     }
+        }
+
+        # Initialize model selection:
+        best_model = 0
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # FIRST CRITERIA--- R-SQUARED THRESHOLD
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if (numpy.array(r2_dict.values()) < r2_thresh).any():
+            # Eliminate those with poor R2:
+            m_failed = [k for k, v in r2_dict.items() if v < r2_thresh]
+            for m in m_failed:
+                model_dict[m] = 1
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # SECOND CRITERIA--- PARAMETER RANGE OF VALIDITY
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # -- rectangular hypberbola:
+        if (value_dict['obs_h']['foo'] > 100 or
+                value_dict['obs_h']['foo'] < 0 or
+                value_dict['obs_h']['alpha'] > 1 or
+                value_dict['obs_h']['alpha'] < 0):
+            model_dict['obs_h'] = 1
+        if (value_dict['ro_h']['foo'] > 100 or
+                value_dict['ro_h']['foo'] < 0 or
+                value_dict['ro_h']['alpha'] > 1 or
+                value_dict['ro_h']['alpha'] < 0):
+            model_dict['ro_h'] = 1
+
+        # -- linear:
+        if (value_dict['obs_l']['alpha'] > 1 or
+                value_dict['obs_l']['alpha'] < 0):
+            model_dict['obs_l'] = 1
+        if (value_dict['ro_l']['alpha'] > 1 or
+                value_dict['ro_l']['alpha'] < 0):
+            model_dict['ro_l'] = 1
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # THIRD CRITERIA--- PARAMETER SIGNIFICANCE
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if (p_dict['obs_h'] > p_thresh).any():
+            model_dict['obs_h'] = 1
+        if (p_dict['ro_h'] > p_thresh).any():
+            model_dict['ro_h'] = 1
+        if (p_dict['obs_l'] > p_thresh).any():
+            model_dict['obs_l'] = 1
+        if (p_dict['ro_l'] > p_thresh).any():
+            model_dict['ro_l'] = 1
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # ANALYSIS:
+        # Let's see which models passed the selection criteria and how many
+        # of them there are
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        mods = [k for k, v in model_dict.items() if v == 0]
+        howmany = len(mods)
+
+        if howmany > 0:
+            # At least one model passed the initial criteria
+            if howmany == 1:
+                # There is one best choice:
+                best_model = select_dict[mods[0]]
+            elif howmany == 2:
+                # Choose the better of the two:
+                if 1.01*r2_dict[mods[1]] >= 0.99*r2_dict[mods[0]]:
+                    best_model = select_dict[mods[1]]
+                else:
+                    best_model = select_dict[mods[0]]
+            else:
+                # Gather R-squared and worst p-values for remaining models:
+                mods_rs = [r2_dict[m] for m in mods]
+                mods_ps = [p_dict[m].max() for m in mods]
+
+                # Get the max R-squared and min p-value:
+                max_rs = max(mods_rs)
+                min_ps = min(mods_ps)
+
+                # How many models meet this criteria:
+                mods_temp = [
+                    m for m in mods if
+                    mods_rs[mods.index(m)] == max_rs and
+                    mods_ps[mods.index(m)] == min_ps
+                    ]
+                n_temp = len(mods_temp)
+
+                if n_temp == 0:
+                    # There is no "best" model, go through default heirarchy:
+                    if 'ro_h' in mods:
+                        best_model = select_dict['ro_h']
+                    elif 'ro_l' in mods:
+                        best_model = select_dict['ro_l']
+                    elif 'obs_l' in mods:
+                        best_model = select_dict['obs_l']
+                    else:
+                        best_model = select_dict['obs_h']
+                elif n_temp == 1:
+                    # Select the best model:
+                    best_model = select_dict[mods_temp[0]]
+                elif n_temp == 2:
+                    # Choose the better of the two:
+                    if (1.01*r2_dict[mods_temp[1]] >=
+                            0.99*r2_dict[mods_temp[0]]):
+                        best_model = select_dict[mods_temp[1]]
+                    else:
+                        best_model = select_dict[mods_temp[0]]
+                else:
+                    # There are 3 or 4 models
+                    # that all having the same max R2 and min p-value.
+                    # Default choices: ro_h, ro_l, obs_l, obs_h
+                    if 'ro_h' in mods_temp:
+                        best_model = select_dict['ro_h']
+                    elif 'ro_l' in mods_temp:
+                        best_model = select_dict['ro_l']
+                    elif 'obs_l' in mods_temp:
+                        best_model = select_dict['obs_l']
+                    else:
+                        best_model = select_dict['obs_h']
+
+        # Save model selection:
+        self.mod_select = best_model
+
+    def partition(self, to_write, rm_out):
+        """
+        Name:     STAGE1.partition
+        Input:    - numpy.ndarray, month of NEE observations (nee)
+                  - numpy.ndarray, month of PPFD observations (ppfd)
+                  - int, write to file boolean (to_write)
+                  - int, outlier removal boolean (rm_out)
+                  - str, station name (tower)
+                  - datetime.date (month)
+        Output:   FLUX_PARTI class object (my_class)
+        Features: Returns a class with flux partitioning results based on
+                  NEE:PPFD observations; processes outliers (optional);
+                  saves results to file (optional)
+        """
+        ## ~~~~~~~~~~ ANALYZE OBSERVATIONS ~~~~~~~~~~ ##
+        # ---------------------
+        # Model H optimization:
+        # ---------------------
+        try:
+            mh_opt, mh_cov = curve_fit(self.model_h,
+                                       self.ppfd_obs,
+                                       self.nee_obs,
+                                       p0=self.hm_estimates)
+        except:
+            self.hm_optimized = [-9999.0, -9999.0, -9999.0]
+            self.hm_optim_err = [-9999.0, -9999.0, -9999.0]
+        else:
+            (self.hm_optimized[0],
+             self.hm_optimized[1],
+             self.hm_optimized[2]) = mh_opt
+
+            # Extract variance values from matrix:
+            try:
+                mh_var = numpy.diag(mh_cov)
+            except ValueError:
+                mh_var = [0, 0, 0]
+            else:
+                if numpy.isfinite(mh_var).all() and not (mh_var < 0).any():
+                    (self.hm_optim_err[0],
+                     self.hm_optim_err[1],
+                     self.hm_optim_err[2]) = numpy.sqrt(mh_var)
+
+                    # Calculate the t-value:
+                    (self.hm_optim_t[0],
+                     self.hm_optim_t[1],
+                     self.hm_optim_t[2]) = (numpy.array(self.hm_optimized) /
+                                            numpy.array(self.hm_optim_err))
+
+                    # Calculate the p-value:
+                    hm_df = len(self.nee_obs) - 3.0  # degrees of freedom
+                    (self.hm_optim_p[0],
+                     self.hm_optim_p[1],
+                     self.hm_optim_p[2]) = scipy.stats.t.pdf(
+                        -abs(numpy.array(self.hm_optim_t)), hm_df)
+                else:
+                    self.hm_optim_err[0] = 0.0
+                    self.hm_optim_err[1] = 0.0
+                    self.hm_optim_err[2] = 0.0
+        finally:
+            self.calc_model(mode="H", ro=False)
+
+        # ---------------------
+        # Model L optimization:
+        # ---------------------
+        try:
+            ml_opt, ml_cov = curve_fit(self.model_l,
+                                       self.ppfd_obs,
+                                       self.nee_obs,
+                                       p0=self.lm_estimates)
+        except:
+            self.lm_optimized = [-9999.0, -9999.0]
+            self.lm_optim_err = [-9999.0, -9999.0]
+        else:
+            (self.lm_optimized[0],
+             self.lm_optimized[1]) = ml_opt
+
+            # Extract variance values from matrix:
+            try:
+                ml_var = numpy.diag(ml_cov)
+            except ValueError:
+                ml_var = [0, 0]
+            else:
+                if numpy.isfinite(ml_var).all() and not (ml_var < 0).any():
+                    (self.lm_optim_err[0],
+                     self.lm_optim_err[1]) = numpy.sqrt(ml_var)
+
+                    # Calculate the t-value:
+                    (self.lm_optim_t[0],
+                     self.lm_optim_t[1]) = (numpy.array(self.lm_optimized) /
+                                            numpy.array(self.lm_optim_err))
+
+                    # Calculate the p-value:
+                    lm_df = len(self.nee_obs) - 2  # degrees of freedom
+                    (self.lm_optim_p[0],
+                     self.lm_optim_p[1]) = scipy.stats.t.pdf(
+                        -abs(numpy.array(self.lm_optim_t)), lm_df)
+                else:
+                    self.lm_optim_err[0] = 0.0
+                    self.lm_optim_err[1] = 0.0
+        finally:
+            self.calc_model(mode="L", ro=False)
+
+        ## ~~~~~~~~~~ WRITE OBSERVATION RESULTS ~~~~~~~~~~ ##
+        if to_write:
+            output_file = "out/%s_%s.txt" % (self.name, self.month)
+
+            header0 = "MH_guess,%f,%f,%f\n" % (self.hm_estimates[1],
+                                               self.hm_estimates[2],
+                                               self.hm_estimates[0])
+
+            header1 = "ML_guess,%f,%f\n" % (self.lm_estimates[0],
+                                            self.lm_estimates[1])
+
+            header2 = "MH_opt,%f,%f,%f,%f,%f\n" % (self.hm_optimized[1],
+                                                   self.hm_optimized[2],
+                                                   self.hm_optimized[0],
+                                                   self.hm_rmse,
+                                                   self.hm_rsqr)
+
+            header3 = "ML_opt,%f,%f,,%f,%f\n" % (self.lm_optimized[0],
+                                                 self.lm_optimized[1],
+                                                 self.lm_rmse,
+                                                 self.lm_rsqr)
+
+            OUTFILE = open(output_file, 'w')
+            OUTFILE.write(header0)
+            OUTFILE.write(header1)
+            OUTFILE.write(header2)
+            OUTFILE.write(header3)
+            OUTFILE.write("ppfd_obs,nee_obs,nee_mh,nee_ml\n")
+            for po, no, nh, nl in map(None,
+                                      self.ppfd_obs,
+                                      self.nee_obs,
+                                      self.nee_model_h,
+                                      self.nee_model_l):
+                outline = "%s,%s,%s,%s\n" % (po, no, nh, nl)
+                OUTFILE.write(outline)
+            OUTFILE.close()
+        ## ~~~~~~~~~~ REMOVE OUTLIERS AND RE-ANALYZE ~~~~~~~~~~ ##
+        if rm_out:
+            # ---------------------
+            # Model H optimization:
+            # ---------------------
+            self.remove_outliers(mode="H")
+            try:
+                mh_opt_ro, mh_cov_ro = curve_fit(self.model_h,
+                                                 self.ppfd_obs_h_ro,
+                                                 self.nee_obs_h_ro,
+                                                 p0=self.hm_estimates)
+            except:
+                self.hm_optimized_ro = [-9999.0, -9999.0, -9999.0]
+                self.hm_optim_err_ro = [-9999.0, -9999.0, -9999.0]
+            else:
+                (self.hm_optimized_ro[0],
+                 self.hm_optimized_ro[1],
+                 self.hm_optimized_ro[2]) = mh_opt_ro
+
+                # Extract variance values from matrix:
+                try:
+                    mh_var_ro = numpy.diag(mh_cov_ro)
+                except ValueError:
+                    mh_var_ro = [0, 0, 0]
+                else:
+                    if (numpy.isfinite(mh_var_ro).all() and not
+                            (mh_var_ro < 0).any()):
+                        (self.hm_optim_err_ro[0],
+                         self.hm_optim_err_ro[1],
+                         self.hm_optim_err_ro[2]) = numpy.sqrt(mh_var_ro)
+
+                        # Calculate the t-value:
+                        (self.hm_optim_t_ro[0],
+                         self.hm_optim_t_ro[1],
+                         self.hm_optim_t_ro[2]) = (
+                            numpy.array(self.hm_optimized_ro) /
+                            numpy.array(self.hm_optim_err_ro))
+
+                        # Calculate the p-value:
+                        hm_df_ro = len(self.nee_obs) - self.hm_outliers - 3
+                        (self.hm_optim_p_ro[0],
+                         self.hm_optim_p_ro[1],
+                         self.hm_optim_p_ro[2]) = scipy.stats.t.pdf(
+                            -abs(numpy.array(self.hm_optim_t_ro)), hm_df_ro)
+                    else:
+                        self.hm_optim_err_ro[0] = 0.0
+                        self.hm_optim_err_ro[1] = 0.0
+                        self.hm_optim_err_ro[2] = 0.0
+            finally:
+                self.calc_model(mode="H", ro=True)
+
+            # ---------------------
+            # Model L optimization:
+            # ---------------------
+            self.remove_outliers(mode="L")
+            try:
+                ml_opt_ro, ml_cov_ro = curve_fit(self.model_l,
+                                                 self.ppfd_obs_l_ro,
+                                                 self.nee_obs_l_ro,
+                                                 p0=self.lm_estimates)
+            except:
+                self.lm_optimized_ro = [-9999.0, -9999.0]
+                self.lm_optim_err_ro = [-9999.0, -9999.0]
+            else:
+                (self.lm_optimized_ro[0],
+                 self.lm_optimized_ro[1]) = ml_opt_ro
+
+                # Extract variance values from matrix:
+                try:
+                    ml_var_ro = numpy.diag(ml_cov_ro)
+                except ValueError:
+                    ml_var_ro = [0, 0]
+                else:
+                    if (numpy.isfinite(ml_var_ro).all() and not
+                            (ml_var_ro < 0).any()):
+                        (self.lm_optim_err_ro[0],
+                         self.lm_optim_err_ro[1]) = numpy.sqrt(ml_var_ro)
+
+                        # Calculate the t-value:
+                        (self.lm_optim_t_ro[0],
+                         self.lm_optim_t_ro[1]) = (
+                            numpy.array(self.lm_optimized_ro) /
+                            numpy.array(self.lm_optim_err_ro))
+
+                        # Calculate the p-value:
+                        lm_df_ro = len(self.nee_obs) - self.lm_outliers - 2
+                        (self.lm_optim_p_ro[0],
+                         self.lm_optim_p_ro[1]) = scipy.stats.t.pdf(
+                            -abs(numpy.array(self.lm_optim_t_ro)), lm_df_ro)
+                    else:
+                        self.lm_optim_err_ro[0] = 0.0
+                        self.lm_optim_err_ro[1] = 0.0
+            finally:
+                self.calc_model(mode="L", ro=True)
+
+            ## ~~~~~~~~~~ WRITE OUTLIER-FREE RESULTS ~~~~~~~~~~ ##
+            if to_write:
+                output_file = "out/%s_%s_ro.txt" % (self.name, self.month)
+                header0 = "MH_guess,%0.5f,%0.2f,%0.2f\n" % (
+                    self.hm_estimates[1],
+                    self.hm_estimates[2],
+                    self.hm_estimates[0])
+                header1 = "ML_guess,%0.5f,%0.2f\n" % (
+                    self.lm_estimates[0],
+                    self.lm_estimates[1])
+                header2 = "MH_opt,%0.5f,%0.2f,%0.2f,%0.2f,%0.3f\n" % (
+                    self.hm_optimized_ro[1],
+                    self.hm_optimized_ro[2],
+                    self.hm_optimized_ro[0],
+                    self.hm_rmse_ro,
+                    self.hm_rsqr_ro)
+                header3 = "ML_opt,%0.5f,%0.2f,,%0.2f,%0.3f\n" % (
+                    self.lm_optimized_ro[0],
+                    self.lm_optimized_ro[1],
+                    self.lm_rmse_ro,
+                    self.lm_rsqr_ro)
+                OUTFILE = open(output_file, 'w')
+                OUTFILE.write(header0)
+                OUTFILE.write(header1)
+                OUTFILE.write(header2)
+                OUTFILE.write(header3)
+                OUTFILE.write("ppfd_obs_h,nee_obs_h,nee_mod_h,"
+                              "ppfd_obs_l,nee_obs_l,nee_mod_l\n")
+                for (poh, noh, nhh, pol, nol, nll) in map(None,
+                                                          self.ppfd_obs_h_ro,
+                                                          self.nee_obs_h_ro,
+                                                          self.nee_model_h_ro,
+                                                          self.ppfd_obs_l_ro,
+                                                          self.nee_obs_l_ro,
+                                                          self.nee_model_l_ro):
+                    outline = "%s,%s,%s,%s,%s,%s\n" % (
+                        poh, noh, nhh, pol, nol, nll)
+                    OUTFILE.write(outline)
+                OUTFILE.close()
+
+        # Run model selection criteria:
+        self.model_selection()
+
+    def remove_outliers(self, mode):
+        """
+        Name:     STAGE1.remove_outliers
+        Input:    str, model mode (mode)
+                    "H" hyperbolic
+                    "L" linear
+        Output:   int, success flag (rval)
+        Features: Returns flag indicating the successful removal of outliers
+                  from model observations; saves outlier-free data, new
+                  statistics, and updated model estimates
+        Depends:  - peirce_dev
+                  - calc_statistics
+                  - save_stats
+                  - update_guess
+                  - save_estimates
+                  - pearsons_r
+        """
+        if mode == "H":
+            self.logger.debug("removing outliers from hyperbolic model")
+            peirce_m = 3
+            mse = self.hm_mse
+            nee_model = self.nee_model_h
+        elif mode == "L":
+            self.logger.debug("removing outliers from linear model")
+            peirce_m = 2
+            mse = self.lm_mse
+            nee_model = self.nee_model_l
+
+        # Set Peirce values:
+        peirce_cap_n = len(self.nee_obs)
+        peirce_lc_n = 1
+
+        # Calculate tolerance
+        peirce_x2 = peirce_dev(peirce_cap_n, peirce_lc_n, peirce_m)
+        peirce_delta2 = mse*peirce_x2
+
+        # Calculate the square errors:
+        sq_errors = (self.nee_obs - nee_model)**2.0
+
+        # Find if/where exceedance occurs:
+        outliers_index = numpy.where(sq_errors > peirce_delta2)[0]
+        outliers_found = len(outliers_index)
+
+        # Run check again if no outliers are found in first attempt:
+        if (outliers_found == 0):
+            peirce_lc_n = 2
+            peirce_x2 = peirce_dev(peirce_cap_n, peirce_lc_n, peirce_m)
+            peirce_delta2 = mse*peirce_x2
+            outliers_index = numpy.where(sq_errors > peirce_delta2)[0]
+            outliers_found = len(outliers_index)
+
+            # Reset n
+            peirce_lc_n = 1
+
+        # Increment n until it is greater than number of outliers found:
+        while (peirce_lc_n <= outliers_found):
+            peirce_lc_n += 1
+
+            # Check that n < N:
+            if peirce_lc_n >= peirce_cap_n:
+                peirce_lc_n = outliers_found + 1.0
+            else:
+                peirce_x2 = peirce_dev(
+                    peirce_cap_n, peirce_lc_n, peirce_m)
+                peirce_delta2 = mse*peirce_x2
+                outliers_index = numpy.where(sq_errors > peirce_delta2)[0]
+                outliers_found = len(outliers_index)
+
+        ppfd_obs_ro = numpy.delete(self.ppfd_obs, outliers_index)
+        nee_obs_ro = numpy.delete(self.nee_obs, outliers_index)
+        if ppfd_obs_ro.any() and nee_obs_ro.any():
+            # Recalculate statistics and update guess values:
+            (self.max_ppfd,
+             self.min_ppfd,
+             self.ave_ppfd,
+             self.std_ppfd,
+             self.skw_ppfd,
+             self.krt_ppfd) = calc_statistics(ppfd_obs_ro)
+
+            (self.max_nee,
+             self.min_nee,
+             self.ave_nee,
+             self.std_nee,
+             self.skw_nee,
+             self.krt_nee) = calc_statistics(nee_obs_ro)
+
+            pear = pearsons_r(ppfd_obs_ro, nee_obs_ro)
+            rval = 1
+        else:
+            pear = -9999
+            rval = 0
+
+        if mode == "H":
+            self.hm_outliers = outliers_found
+
+            # Remove outliers found:
+            self.ppfd_obs_h_ro = ppfd_obs_ro
+            self.nee_obs_h_ro = nee_obs_ro
+            self.r_ro_h = pear
+
+            self.save_stats(obs=0, h=1)
+            self.update_guess()
+            self.save_estimates(obs=0, h=1)
+        elif mode == "L":
+            self.lm_outliers = outliers_found
+
+            # Remove outliers found:
+            self.ppfd_obs_l_ro = ppfd_obs_ro
+            self.nee_obs_l_ro = nee_obs_ro
+            self.r_ro_l = pear
+
+            self.save_stats(obs=0, h=0)
+            self.update_guess()
+            self.save_estimates(obs=0, h=0)
+
+        return rval
+
+    def save_estimates(self, obs, h):
+        """
+        Name:     STAGE1.save_estimates
+        Input:    - int, observation flag (obs)
+                  - int, hyperbolic model flag (h)
+        Output:   None.
+        Features: Saves the current model estimates to either observation
+                  (obs==1) or outliers removed (obs==0) for either the
+                  hyperbolic (h==1) or linear (h==0) model
+        """
+        if obs == 1:
+            # Backup Model Estimates for Observation Data:
+            self.logger.debug("saving observation estimates")
+            self.lm_estimates_obs = self.lm_estimates
+            self.hm_estimates_obs = self.hm_estimates
+        elif obs == 0:
+            # Backup Model Estimates for Data with Removed Outliers (RO):
+            if h == 1:
+                # Outliers Based on Hyperbolic Model
+                self.logger.debug("saving hyperbolic model estimates")
+                self.hm_estimates_ro = self.hm_estimates
+            elif h == 0:
+                # Outliers Based on Linear Model
+                self.logger.debug("saving linear model estimates")
+                self.lm_estimates_ro = self.lm_estimates
+
     def save_stats(self, obs, h):
         """
         Name:     STAGE1.save_stats
@@ -312,407 +1116,6 @@ class STAGE1:
                 self.std_nee_ro_l = self.std_nee
                 self.skw_nee_ro_l = self.skw_nee
                 self.krt_nee_ro_l = self.krt_nee
-
-    def update_guess(self):
-        """
-        Name:     STAGE1.update_guess
-        Input:    None.
-        Output:   None.
-        Features: Updates the model parameter estimation values based on the
-                  current data statistics
-        """
-        self.logger.debug("updating initial model guess values")
-
-        # Linear model [alpha, R]:
-        try:
-            self.lm_estimates[0] = (
-                0.672*(self.max_nee - self.min_nee) /
-                (self.max_ppfd - self.min_ppfd)
-                )
-        except ZeroDivisionError:
-            self.lm_estimates[0] = 0.672*(self.max_nee - self.min_nee)/1.0e-3
-        else:
-            if abs(self.lm_estimates[0]) <= 5.0e-4:
-                self.lm_estimates[0] = 1.0e-3
-
-        self.lm_estimates[1] = (
-            0.899*self.std_nee
-            + 0.827*self.ave_nee
-            + 0.00628*self.ave_ppfd
-            - 0.008*self.std_ppfd
-        )
-
-        # Hyperbolic model [Foo, alpha, R]:
-        self.hm_estimates[0] = 3.83*self.std_nee
-        try:
-            self.hm_estimates[1] = (
-                1.96*(self.max_nee - self.min_nee) /
-                (self.max_ppfd - self.min_ppfd)
-                )
-        except ZeroDivisionError:
-            self.hm_estimates[1] = 1.96*(self.max_nee - self.min_nee)/1.0e-3
-        else:
-            if abs(self.hm_estimates[1]) <= 5.0e-4:
-                self.hm_estimates[1] = 1.0e-3
-        self.hm_estimates[2] = 0.69*self.std_nee
-
-    def save_estimates(self, obs, h):
-        """
-        Name:     STAGE1.save_estimates
-        Input:    - int, observation flag (obs)
-                  - int, hyperbolic model flag (h)
-        Output:   None.
-        Features: Saves the current model estimates to either observation
-                  (obs==1) or outliers removed (obs==0) for either the
-                  hyperbolic (h==1) or linear (h==0) model
-        """
-        if obs == 1:
-            # Backup Model Estimates for Observation Data:
-            self.logger.debug("saving observation estimates")
-            self.lm_estimates_obs = self.lm_estimates
-            self.hm_estimates_obs = self.hm_estimates
-        elif obs == 0:
-            # Backup Model Estimates for Data with Removed Outliers (RO):
-            if h == 1:
-                # Outliers Based on Hyperbolic Model
-                self.logger.debug("saving hyperbolic model estimates")
-                self.hm_estimates_ro = self.hm_estimates
-            elif h == 0:
-                # Outliers Based on Linear Model
-                self.logger.debug("saving linear model estimates")
-                self.lm_estimates_ro = self.lm_estimates
-
-    def model_h(self, x, Foo, alpha, R):
-        """
-        Name:     STAGE1.model_h
-        Input:    - numpy.ndarray, monthly PPFD (x)
-                  - float, hyperbolic parameter (Foo)
-                  - float, hyperbolic parameter (alpha)
-                  - float, hyperbolic parameter (R)
-        Output:   numpy.ndarray, modeled NEE
-        Features: Returns array of NEE based on the hyperbolic model in the
-                  form: Y = (ax+b)/(bx+c)
-        Ref:      Eq. 15, GePiSaT Documentation
-        """
-        a = 1.0*(alpha*R) - 1.0*(alpha*Foo)
-        b = 1.0*(Foo*R)
-        c = 1.0*alpha
-        d = 1.0*Foo
-
-        numerator = 1.0*(a*x) + b
-        denominator = 1.0*(c*x) + d
-
-        # Compensate for zero division by adding a small number to each value:
-        if 0 in denominator:
-            denominator = [elem + 1.0e-6 for elem in denominator]
-            denominator = numpy.array(denominator)
-
-        return (numerator/denominator)
-
-    def model_l(self, x, alpha, R):
-        """
-        Name:     STAGE1.model_l
-        Input:    - numpy.ndarray, monthly PPFD (x)
-                  - float, linear parameter (alpha)
-                  - float, linear parameter (R)
-        Output:   - numpy.ndarray, modeled NEE
-        Features: Returns array of NEE based on the linear model in the form:
-                  Y = ax+b
-        Ref:      Eq. 14, GePiSaT Documentation
-        """
-        a = -1.0*alpha
-        b = R
-
-        return (a*x + b)
-
-    def calc_model_h(self):
-        """
-        Name:     STAGE1.calc_model
-        Input:    None.
-        Output:   None.
-        Features: Calculates NEE and the fitness statistics using the
-                  optimization parameters for the hyperbolic model based on the
-                  observation data
-        Depends:  - model_h
-                  - goodness_of_fit
-        """
-        self.logger.debug("calculating hyperbolic model")
-        self.nee_model_h = self.model_h(self.ppfd_obs,
-                                        self.hm_optimized[0],
-                                        self.hm_optimized[1],
-                                        self.hm_optimized[2])
-
-        if -9999 in self.hm_optimized:
-            self.hm_mse = -9999.0
-            self.hm_rmse = -9999.0
-            self.hm_rsqr = -9999.0
-        else:
-            (self.hm_mse,
-             self.hm_rmse,
-             self.hm_rsqr) = goodness_of_fit(self.nee_model_h, self.nee_obs, 3)
-
-    def calc_model_h_ro(self):
-        """
-        Name:     STAGE1.calc_model_h_ro
-        Input:    None.
-        Output:   None.
-        Features: Calculates NEE and the fitness statistics using the
-                  optimization parameters for the hyperbolic model based on the
-                  observation data with outliers removed
-        Depends:  - model_h
-                  - goodness_of_fit
-        """
-        self.logger.debug("calculating hyperbolic model without outliers")
-        self.nee_model_h_ro = self.model_h(self.ppfd_obs_h_ro,
-                                           self.hm_optimized_ro[0],
-                                           self.hm_optimized_ro[1],
-                                           self.hm_optimized_ro[2])
-
-        if -9999 in self.hm_optimized_ro:
-            self.hm_mse_ro = -9999.0
-            self.hm_rmse_ro = -9999.0
-            self.hm_rsqr_ro = -9999.0
-        else:
-            (self.hm_mse_ro,
-             self.hm_rmse_ro,
-             self.hm_rsqr_ro) = goodness_of_fit(self.nee_model_h_ro,
-                                                self.nee_obs_h_ro, 3)
-
-    def calc_model_l(self):
-        """
-        Name:     STAGE1.calc_model_l
-        Input:    None.
-        Output:   None.
-        Features: Calculates NEE and the fitness statistics using the
-                  optimization parameters for the linear model based on the
-                  observation data
-        Depends:  - model_l
-                  - goodness_of_fit
-        """
-        self.logger.debug("calculating linear model")
-        self.nee_model_l = self.model_l(self.ppfd_obs,
-                                        self.lm_optimized[0],
-                                        self.lm_optimized[1])
-
-        if -9999 in self.lm_optimized:
-            self.lm_mse = -9999.0
-            self.lm_rmse = -9999.0
-            self.lm_rsqr = -9999.0
-        else:
-            (self.lm_mse,
-             self.lm_rmse,
-             self.lm_rsqr) = goodness_of_fit(self.nee_model_l,
-                                             self.nee_obs, 2)
-
-    def calc_model_l_ro(self):
-        """
-        Name:     STAGE1.calc_model_l_ro
-        Input:    None.
-        Output:   None.
-        Features: Calculates NEE and the fitness statistics using the
-                  optimization parameters for the linear model based on the
-                  observation data with outliers removed
-        Depends:  - model_l
-                  - goodness_of_fit
-        """
-        self.logger.debug("calculating linear model without outliers")
-        self.nee_model_l_ro = self.model_l(self.ppfd_obs_l_ro,
-                                           self.lm_optimized_ro[0],
-                                           self.lm_optimized_ro[1])
-
-        if -9999 in self.lm_optimized_ro:
-            self.lm_mse_ro = -9999.0
-            self.lm_rmse_ro = -9999.0
-            self.lm_rsqr_ro = -9999.0
-        else:
-            (self.lm_mse_ro,
-             self.lm_rmse_ro,
-             self.lm_rsqr_ro) = goodness_of_fit(self.nee_model_l_ro,
-                                                self.nee_obs_l_ro, 2)
-
-    def remove_mh_outliers(self):
-        """
-        Name:     STAGE1.remove_mh_outliers
-        Input:    None.
-        Output:   int, success flag (rval)
-        Features: Returns flag indicating the successful removal of outliers
-                  from the hyperbolic model observations; saves outlier-free
-                  data, new statistics, and updated model estimates
-        Depends:  - peirce_dev
-                  - calc_statistics
-                  - save_stats
-                  - update_guess
-                  - save_estimates
-                  - pearsons_r
-        """
-        self.logger.debug("removing outliers from hyperbolic model")
-
-        # Set Peirce values:
-        peirce_cap_n = len(self.nee_obs)
-        peirce_lc_n = 1
-        peirce_m = 3
-
-        # Calculate tolerance
-        self.peirce_x2 = self.peirce_dev(peirce_cap_n, peirce_lc_n, peirce_m)
-        self.peirce_delta2 = self.hm_mse*self.peirce_x2
-
-        # Calculate the square errors:
-        sq_errors = (self.nee_obs - self.nee_model_h)**2.0
-
-        # Find if/where exceedance occurs:
-        outliers_index = numpy.where(sq_errors > self.peirce_delta2)[0]
-        outliers_found = len(outliers_index)
-
-        # Run check again if no outliers are found in first attempt:
-        if (outliers_found == 0):
-            peirce_lc_n = 2
-            self.peirce_x2 = peirce_dev(
-                peirce_cap_n, peirce_lc_n, peirce_m
-                )
-            self.peirce_delta2 = self.hm_mse*self.peirce_x2
-            outliers_index = numpy.where(sq_errors > self.peirce_delta2)[0]
-            outliers_found = len(outliers_index)
-
-            # Reset n
-            peirce_lc_n = 1
-
-        # Increment n until it is greater than number of outliers found:
-        while (peirce_lc_n <= outliers_found):
-            peirce_lc_n += 1
-
-            # Check that n < N:
-            if peirce_lc_n >= peirce_cap_n:
-                peirce_lc_n = outliers_found + 1.0
-            else:
-                self.peirce_x2 = peirce_dev(
-                    peirce_cap_n, peirce_lc_n, peirce_m)
-                self.peirce_delta2 = self.hm_mse*self.peirce_x2
-                outliers_index = numpy.where(sq_errors > self.peirce_delta2)[0]
-                outliers_found = len(outliers_index)
-
-        self.hm_outliers = outliers_found
-
-        # Remove outliers found:
-        self.ppfd_obs_h_ro = numpy.delete(self.ppfd_obs, outliers_index)
-        self.nee_obs_h_ro = numpy.delete(self.nee_obs, outliers_index)
-
-        # Check that both arrays still have observations:
-        if self.ppfd_obs_h_ro.any() and self.nee_obs_h_ro.any():
-            # Recalculate statistics and update guess values:
-            (
-                self.max_ppfd,
-                self.min_ppfd,
-                self.ave_ppfd,
-                self.std_ppfd,
-                self.skw_ppfd,
-                self.krt_ppfd) = calc_statistics(self.ppfd_obs_h_ro)
-            (
-                self.max_nee,
-                self.min_nee,
-                self.ave_nee,
-                self.std_nee,
-                self.skw_nee,
-                self.krt_nee) = calc_statistics(self.nee_obs_h_ro)
-            self.save_stats(obs=0, h=1)
-            self.update_guess()
-            self.save_estimates(obs=0, h=1)
-            self.r_ro_h = pearsons_r(self.ppfd_obs_h_ro, self.nee_obs_h_ro)
-            rval = 1
-        else:
-            rval = 0
-        return rval
-
-    def remove_ml_outliers(self):
-        """
-        Name:     STAGE1.remove_ml_outliers
-        Input:    None.
-        Output:   int, success flag (rval)
-        Features: Returns flag indicating the successful removal of outliers
-                  from the linear model observations; saves outlier-free
-                  data, new statistics, and updated model estimates
-        Depends:  - peirce_dev
-                  - calc_statistics
-                  - save_stats
-                  - save_estimates
-                  - update_guess
-                  - pearsons_r
-        """
-        self.logger.debug("removing outliers from linear model")
-
-        # Set Peirce values:
-        peirce_cap_n = len(self.nee_obs)
-        peirce_lc_n = 1
-        peirce_m = 2
-
-        # Calculate tolerance
-        self.peirce_x2 = peirce_dev(peirce_cap_n, peirce_lc_n, peirce_m)
-        self.peirce_delta2 = self.hm_mse*self.peirce_x2
-
-        # Calculate the square errors:
-        sq_errors = (self.nee_obs - self.nee_model_l)**2.0
-
-        # Find if/where exceedance occurs:
-        outliers_index = numpy.where(sq_errors > self.peirce_delta2)[0]
-        outliers_found = len(outliers_index)
-
-        # Run check again if no outliers are found in first attempt:
-        if (outliers_found == 0):
-            peirce_lc_n = 2
-            self.peirce_x2 = peirce_dev(
-                peirce_cap_n, peirce_lc_n, peirce_m
-                )
-            self.peirce_delta2 = self.hm_mse*self.peirce_x2
-            outliers_index = numpy.where(sq_errors > self.peirce_delta2)[0]
-            outliers_found = len(outliers_index)
-
-            # Reset n
-            peirce_lc_n = 1
-
-        # Increment n until it is greater than number of outliers found:
-        while (peirce_lc_n <= outliers_found):
-            peirce_lc_n += 1
-
-            # Check that n < N:
-            if peirce_lc_n >= peirce_cap_n:
-                peirce_lc_n = outliers_found + 1.0
-            else:
-                self.peirce_x2 = peirce_dev(
-                    peirce_cap_n, peirce_lc_n, peirce_m)
-                self.peirce_delta2 = self.hm_mse*self.peirce_x2
-                outliers_index = numpy.where(sq_errors > self.peirce_delta2)[0]
-                outliers_found = len(outliers_index)
-
-        self.lm_outliers = outliers_found
-
-        # Remove outliers found:
-        self.ppfd_obs_l_ro = numpy.delete(self.ppfd_obs, outliers_index)
-        self.nee_obs_l_ro = numpy.delete(self.nee_obs, outliers_index)
-
-        # Make sure that arrays still have observations:
-        if self.ppfd_obs_l_ro.any() and self.nee_obs_l_ro.any():
-            # Recalculate statistics and update guess values:
-            (
-                self.max_ppfd,
-                self.min_ppfd,
-                self.ave_ppfd,
-                self.std_ppfd,
-                self.skw_ppfd,
-                self.krt_ppfd) = calc_statistics(self.ppfd_obs_h_ro)
-            (
-                self.max_nee,
-                self.min_nee,
-                self.ave_nee,
-                self.std_nee,
-                self.skw_nee,
-                self.krt_nee) = calc_statistics(self.nee_obs_h_ro)
-            self.save_stats(obs=0, h=0)
-            self.update_guess()
-            self.save_estimates(obs=0, h=0)
-            self.r_ro_l = pearsons_r(self.ppfd_obs_l_ro, self.nee_obs_l_ro)
-            rval = 1
-        else:
-            rval = 0
-        return rval
 
     def summary_statistics(self):
         """
@@ -918,271 +1321,48 @@ class STAGE1:
 
         return sum_stat
 
-    def model_selection(self):
+    def update_guess(self):
         """
-        Name:     STAGE1.model_selection
+        Name:     STAGE1.update_guess
         Input:    None.
         Output:   None.
-        Features: Saves the model (i.e., none, hyperbolic with
-                  observations, hyperbolic with outliers removed, linear with
-                  observations, linear with outliers removed) that ``best''
-                  represents the data based on thesholds of fitness, validity
-                  of parameter values, and parameter significance
+        Features: Updates the model parameter estimation values based on the
+                  current data statistics
         """
-        # Define threshold values:
-        r2_thresh = 0.5       # minimum R-squared fitness
-        p_thresh = 0.05       # minimum parameter significance (95%)
+        self.logger.debug("updating initial model guess values")
 
-        # Initialize selection dictionary:
-        select_dict = {'obs_h': 1,
-                       'ro_h': 2,
-                       'obs_l': 3,
-                       'ro_l': 4}
-
-        # Initialize model failure dictionary:
-        model_dict = {'obs_h': 0,
-                      'ro_h': 0,
-                      'obs_l': 0,
-                      'ro_l': 0}
-
-        # Initialize R-squared dictionary:
-        r2_dict = {'obs_h': self.hm_rsqr,
-                   'obs_l': self.lm_rsqr,
-                   'ro_h': self.hm_rsqr_ro,
-                   'ro_l': self.lm_rsqr_ro}
-
-        # Initialize P-value dictionary:
-        p_dict = {'obs_h': numpy.array(self.hm_optim_p),
-                  'ro_h': numpy.array(self.hm_optim_p_ro),
-                  'obs_l': numpy.array(self.lm_optim_p),
-                  'ro_l': numpy.array(self.lm_optim_p_ro)}
-
-        # Initialize parameter value dictionary:
-        value_dict = {
-            'obs_h': {'foo': self.hm_optimized[0],
-                      'alpha': self.hm_optimized[1],
-                      'r': self.hm_optimized[2]
-                      },
-            'ro_h': {'foo': self.hm_optimized_ro[0],
-                     'alpha': self.hm_optimized_ro[1],
-                     'r': self.hm_optimized_ro[2]
-                     },
-            'obs_l': {'alpha': self.lm_optimized[0],
-                      'r': self.lm_optimized[1]
-                      },
-            'ro_l': {'alpha': self.lm_optimized_ro[0],
-                     'r': self.lm_optimized_ro[1]
-                     }
-        }
-
-        # Initialize model selection:
-        best_model = 0
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # FIRST CRITERIA--- R-SQUARED THRESHOLD
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if (numpy.array(r2_dict.values()) < r2_thresh).any():
-            # Eliminate those with poor R2:
-            m_failed = [k for k, v in r2_dict.items() if v < r2_thresh]
-            for m in m_failed:
-                model_dict[m] = 1
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # SECOND CRITERIA--- PARAMETER RANGE OF VALIDITY
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # -- rectangular hypberbola:
-        if (value_dict['obs_h']['foo'] > 100 or
-                value_dict['obs_h']['foo'] < 0 or
-                value_dict['obs_h']['alpha'] > 1 or
-                value_dict['obs_h']['alpha'] < 0):
-            model_dict['obs_h'] = 1
-        if (value_dict['ro_h']['foo'] > 100 or
-                value_dict['ro_h']['foo'] < 0 or
-                value_dict['ro_h']['alpha'] > 1 or
-                value_dict['ro_h']['alpha'] < 0):
-            model_dict['ro_h'] = 1
-
-        # -- linear:
-        if (value_dict['obs_l']['alpha'] > 1 or
-                value_dict['obs_l']['alpha'] < 0):
-            model_dict['obs_l'] = 1
-        if (value_dict['ro_l']['alpha'] > 1 or
-                value_dict['ro_l']['alpha'] < 0):
-            model_dict['ro_l'] = 1
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # THIRD CRITERIA--- PARAMETER SIGNIFICANCE
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        if (p_dict['obs_h'] > p_thresh).any():
-            model_dict['obs_h'] = 1
-        if (p_dict['ro_h'] > p_thresh).any():
-            model_dict['ro_h'] = 1
-        if (p_dict['obs_l'] > p_thresh).any():
-            model_dict['obs_l'] = 1
-        if (p_dict['ro_l'] > p_thresh).any():
-            model_dict['ro_l'] = 1
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        # ANALYSIS:
-        # Let's see which models passed the selection criteria and how many
-        # of them there are
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        mods = [k for k, v in model_dict.items() if v == 0]
-        howmany = len(mods)
-
-        if howmany > 0:
-            # At least one model passed the initial criteria
-            if howmany == 1:
-                # There is one best choice:
-                best_model = select_dict[mods[0]]
-            elif howmany == 2:
-                # Choose the better of the two:
-                if 1.01*r2_dict[mods[1]] >= 0.99*r2_dict[mods[0]]:
-                    best_model = select_dict[mods[1]]
-                else:
-                    best_model = select_dict[mods[0]]
-            else:
-                # Gather R-squared and worst p-values for remaining models:
-                mods_rs = [r2_dict[m] for m in mods]
-                mods_ps = [p_dict[m].max() for m in mods]
-
-                # Get the max R-squared and min p-value:
-                max_rs = max(mods_rs)
-                min_ps = min(mods_ps)
-
-                # How many models meet this criteria:
-                mods_temp = [
-                    m for m in mods if
-                    mods_rs[mods.index(m)] == max_rs and
-                    mods_ps[mods.index(m)] == min_ps
-                    ]
-                n_temp = len(mods_temp)
-
-                if n_temp == 0:
-                    # There is no "best" model, go through default heirarchy:
-                    if 'ro_h' in mods:
-                        best_model = select_dict['ro_h']
-                    elif 'ro_l' in mods:
-                        best_model = select_dict['ro_l']
-                    elif 'obs_l' in mods:
-                        best_model = select_dict['obs_l']
-                    else:
-                        best_model = select_dict['obs_h']
-                elif n_temp == 1:
-                    # Select the best model:
-                    best_model = select_dict[mods_temp[0]]
-                elif n_temp == 2:
-                    # Choose the better of the two:
-                    if (1.01*r2_dict[mods_temp[1]] >=
-                            0.99*r2_dict[mods_temp[0]]):
-                        best_model = select_dict[mods_temp[1]]
-                    else:
-                        best_model = select_dict[mods_temp[0]]
-                else:
-                    # There are 3 or 4 models
-                    # that all having the same max R2 and min p-value.
-                    # Default choices: ro_h, ro_l, obs_l, obs_h
-                    if 'ro_h' in mods_temp:
-                        best_model = select_dict['ro_h']
-                    elif 'ro_l' in mods_temp:
-                        best_model = select_dict['ro_l']
-                    elif 'obs_l' in mods_temp:
-                        best_model = select_dict['obs_l']
-                    else:
-                        best_model = select_dict['obs_h']
-
-        # Save model selection:
-        self.mod_select = best_model
-
-    def calc_gpp(self, ppfd):
-        """
-        Name:     STAGE1.calc_gpp
-        Input:    numpy.ndarray, monthly PPFD (ppfd)
-        Output:   tuple, modeled GPP and associated error
-                  - numpy.ndarray, modeled GPP (gpp)
-                  - numpy.ndarray, associated error (gpp_err)
-        Features: Returns GPP (umol m-2 s-1) and associated error based on the
-                  best model
-        Ref:      Chapters 11.2 & 11.3, GePiSaT Documentation
-        """
-        self.logger.debug(
-            "calculating GPP for model selection %d", self.mod_select)
-
-        # Get model selection:
-        if (self.mod_select == 1 or self.mod_select == 2):
-            model = "H"
-        elif (self.mod_select == 3 or self.mod_select == 4):
-            model = "L"
-
-        # Get outlier selection:
-        if (self.mod_select == 1 or self.mod_select == 3):
-            outlier = 0
-        elif (self.mod_select == 2 or self.mod_select == 4):
-            outlier = 1
-
-        if self.mod_select == 0:
-            # Default to hyperbolic model with outliers removed estimates
-            (foo, alpha, r) = self.hm_estimates_ro
-            (foo_err, alpha_err, r_err) = (0., 0., 0.)
-
-            if foo == 0 or alpha == 0:
-                # Use linear estimates instead:
-                (alpha, r) = self.lm_estimates_ro
-                (alpha_err, r_err) = (0., 0.)
-
-                # Calculate GPP and GPP err:
-                gpp = (alpha*ppfd)
-                gpp_err = (ppfd*alpha_err)
-            else:
-                # Variable substitutes:
-                apf = alpha*ppfd + foo
-                afp = alpha*foo*ppfd
-                afpp = alpha*foo*(ppfd**2)
-
-                # Calculate GPP and its associated error:
-                gpp = afp/apf
-                gpp_err = numpy.sqrt(
-                    (alpha_err**2)*((foo*ppfd*apf - afpp)/(apf**2))**2 +
-                    (foo_err**2)*((alpha*ppfd*apf - afp)/(apf**2))**2
+        # Linear model [alpha, R]:
+        try:
+            self.lm_estimates[0] = (
+                0.672*(self.max_nee - self.min_nee) /
+                (self.max_ppfd - self.min_ppfd)
                 )
+        except ZeroDivisionError:
+            self.lm_estimates[0] = 0.672*(self.max_nee - self.min_nee)/1.0e-3
+        else:
+            if abs(self.lm_estimates[0]) <= 5.0e-4:
+                self.lm_estimates[0] = 1.0e-3
 
-            # Clip out negative values of GPP:
-            gpp = gpp.clip(min=0)
-        elif model.upper() == "H":
-            # Retrieve parameters for hyperbolic model:
-            if outlier == 0:
-                (foo, alpha, r) = self.hm_optimized
-                (foo_err, alpha_err, r_err) = self.hm_optim_err
-            elif outlier == 1:
-                (foo, alpha, r) = self.hm_optimized_ro
-                (foo_err, alpha_err, r_err) = self.hm_optim_err_ro
+        self.lm_estimates[1] = (
+            0.899*self.std_nee
+            + 0.827*self.ave_nee
+            + 0.00628*self.ave_ppfd
+            - 0.008*self.std_ppfd
+        )
 
-            # Variable substitutes:
-            apf = alpha*ppfd + foo
-            afp = alpha*foo*ppfd
-            afpp = alpha*foo*(ppfd**2)
-
-            # Calculate GPP and its associated error:
-            gpp = afp/apf
-            gpp_err = numpy.sqrt(
-                (alpha_err**2)*((foo*ppfd*apf - afpp)/(apf**2))**2 +
-                (foo_err**2)*((alpha*ppfd*apf - afp)/(apf**2))**2
-            )
-        elif model.upper() == "L":
-            # Retrieve parameters for linear model:
-            if outlier == 0:
-                (alpha, r) = self.lm_optimized
-                (alpha_err, r_err) = self.lm_optim_err
-            elif outlier == 1:
-                (alpha, r) = self.lm_optimized_ro
-                (alpha_err, r_err) = self.lm_optim_err_ro
-
-            # Calculate GPP:
-            gpp = (alpha*ppfd)
-            gpp_err = (ppfd*alpha_err)
-
-        # Return GPP
-        return (gpp, gpp_err)
+        # Hyperbolic model [Foo, alpha, R]:
+        self.hm_estimates[0] = 3.83*self.std_nee
+        try:
+            self.hm_estimates[1] = (
+                1.96*(self.max_nee - self.min_nee) /
+                (self.max_ppfd - self.min_ppfd)
+                )
+        except ZeroDivisionError:
+            self.hm_estimates[1] = 1.96*(self.max_nee - self.min_nee)/1.0e-3
+        else:
+            if abs(self.hm_estimates[1]) <= 5.0e-4:
+                self.hm_estimates[1] = 1.0e-3
+        self.hm_estimates[2] = 0.69*self.std_nee
 
 ###############################################################################
 # MAIN PROGRAM

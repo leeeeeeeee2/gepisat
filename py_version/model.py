@@ -371,6 +371,8 @@
 #  - separated individual class files [16.01.17]
 #  - Python 2/3 consistency checks [16.01.17]
 #  - imports connectSQL from db_setup [16.01.17]
+#  - moved partition function to STAGE1 class [16.04.01]
+#  - separated function from init for SOLAR class [16.04.01]
 #
 # -----
 # todo:
@@ -419,13 +421,11 @@ import os.path
 
 # import psycopg2
 import numpy
-import scipy.special
-import scipy.stats
-from scipy.optimize import curve_fit
 
 from db_setup import connectSQL
-from flux_parti import FLUX_PARTI
+from flux_parti import STAGE1
 from lue import LUE
+from solar import SOLAR_TOA
 
 
 ###############################################################################
@@ -754,8 +754,8 @@ def daily_gpp(station, cur_date):
 
     # Calculate partitioning parameters:
     if mo_nee and mo_ppfd:
-        mo_parti = partition(mo_nee, mo_ppfd, to_write=False, rm_out=True,
-                             tower=station, month=month_date)
+        mo_parti = STAGE1(mo_ppfd, mo_nee, station, month_date)
+        mo_parti.partition(to_write=False, rm_out=True)
 
         # ~~~~~~~~~~~~~~~~~~~
         # Calculate daily GPP
@@ -890,7 +890,8 @@ def gapfill_ppfd_day(station, cur_date, to_write, out_file):
 
         # Calculate daily ET solar radiation curve:
         (flux_lon, flux_lat) = get_lon_lat(station)
-        et_solar = SOLAR(flux_lon, flux_lat, jday, cur_date.year)
+        et_solar = SOLAR_TOA(flux_lat, flux_lon)
+        et_solar.calculate_daily_fluxes(jday, cur_date.year)
 
         # Get satellite measurement of solar rad (SWdown) [W m-2]:
         grid_station = flux_to_grid(station)
@@ -911,14 +912,14 @@ def gapfill_ppfd_day(station, cur_date, to_write, out_file):
             sfactor = 1.0
 
         # Add scaled half-hourly PPFD to dictionary [umol m-2 s-1]:
-        for i in xrange(48):
+        for i in range(48):
             val = et_solar.ppfd_hh[i]
             my_time = "%s" % et_solar.local_time[i].time()
             gapfill_dict[my_time] = sfactor*val
 
         # Add observations to gapfill dictionary & save for output:
         ppfd_obs = {}
-        for i in xrange(number_obs):
+        for i in range(number_obs):
             my_time = "%s" % daily_ts[i].time()
             gapfill_dict[my_time] = daily_ppfd[i]
             ppfd_obs[my_time] = daily_ppfd[i]
@@ -953,7 +954,7 @@ def gapfill_ppfd_day(station, cur_date, to_write, out_file):
 
         # Write to file:
         if to_write:
-            for i in xrange(len(daily_ts) - 1):
+            for i in range(len(daily_ts) - 1):
                 dt = "%s" % daily_ts[i]
                 obs = daily_ppfd[i]
                 try:
@@ -1391,322 +1392,6 @@ def monthly_ppfd_nee(station, start_date):
         return (ppfd_vals, nee_vals)
 
 
-def partition(nee, ppfd, to_write, rm_out, tower, month):
-    """
-    Name:     partition
-    Input:    - numpy.ndarray, month of NEE observations (nee)
-              - numpy.ndarray, month of PPFD observations (ppfd)
-              - int, write to file boolean (to_write)
-              - int, outlier removal boolean (rm_out)
-              - str, station name (tower)
-              - datetime.date (month)
-    Output:   FLUX_PARTI class object (my_class)
-    Features: Returns a class with flux partitioning results based on NEE-PPFD
-              observations; processes outliers (optional); saves results to
-              file (optional)
-    Depends:  FLUX_PARTI
-    """
-    # Create a FLUX_PARTI class with PPFD and NEE arrays:
-    my_class = FLUX_PARTI(ppfd, nee, tower, month)
-
-    ## ~~~~~~~~~~ ANALYZE OBSERVATIONS ~~~~~~~~~~ ##
-    # ---------------------
-    # Model H optimization:
-    # ---------------------
-    try:
-        mh_opt, mh_cov = curve_fit(
-            my_class.model_h,
-            my_class.ppfd_obs,
-            my_class.nee_obs,
-            p0=my_class.hm_estimates
-            )
-    except:
-        my_class.hm_optimized = [-9999.0, -9999.0, -9999.0]
-        my_class.hm_optim_err = [-9999.0, -9999.0, -9999.0]
-    else:
-        (
-            my_class.hm_optimized[0],
-            my_class.hm_optimized[1],
-            my_class.hm_optimized[2]) = mh_opt
-
-        # Extract variance values from matrix:
-        try:
-            mh_var = numpy.diag(mh_cov)
-        except ValueError:
-            mh_var = [0, 0, 0]
-        else:
-            if numpy.isfinite(mh_var).all() and not (mh_var < 0).any():
-                (
-                    my_class.hm_optim_err[0],
-                    my_class.hm_optim_err[1],
-                    my_class.hm_optim_err[2]
-                    ) = numpy.sqrt(mh_var)
-
-                # Calculate the t-value:
-                (
-                    my_class.hm_optim_t[0],
-                    my_class.hm_optim_t[1],
-                    my_class.hm_optim_t[2]
-                    ) = (numpy.array(my_class.hm_optimized) /
-                         numpy.array(my_class.hm_optim_err))
-
-                # Calculate the p-value:
-                hm_df = len(my_class.nee_obs) - 3.0  # degrees of freedom
-                (my_class.hm_optim_p[0],
-                 my_class.hm_optim_p[1],
-                 my_class.hm_optim_p[2]) = scipy.stats.t.pdf(
-                    -abs(numpy.array(my_class.hm_optim_t)), hm_df)
-            else:
-                my_class.hm_optim_err[0] = 0.0
-                my_class.hm_optim_err[1] = 0.0
-                my_class.hm_optim_err[2] = 0.0
-    finally:
-        my_class.calc_model_h()
-
-    # ---------------------
-    # Model L optimization:
-    # ---------------------
-    try:
-        ml_opt, ml_cov = curve_fit(
-            my_class.model_l,
-            my_class.ppfd_obs,
-            my_class.nee_obs,
-            p0=my_class.lm_estimates
-            )
-    except:
-        my_class.lm_optimized = [-9999.0, -9999.0]
-        my_class.lm_optim_err = [-9999.0, -9999.0]
-    else:
-        (
-            my_class.lm_optimized[0],
-            my_class.lm_optimized[1]) = ml_opt
-
-        # Extract variance values from matrix:
-        try:
-            ml_var = numpy.diag(ml_cov)
-        except ValueError:
-            ml_var = [0, 0]
-        else:
-            if numpy.isfinite(ml_var).all() and not (ml_var < 0).any():
-                (
-                    my_class.lm_optim_err[0],
-                    my_class.lm_optim_err[1]
-                    ) = numpy.sqrt(ml_var)
-
-                # Calculate the t-value:
-                (
-                    my_class.lm_optim_t[0],
-                    my_class.lm_optim_t[1]
-                    ) = (numpy.array(my_class.lm_optimized) /
-                         numpy.array(my_class.lm_optim_err))
-
-                # Calculate the p-value:
-                lm_df = len(my_class.nee_obs) - 2  # degrees of freedom
-                (my_class.lm_optim_p[0],
-                 my_class.lm_optim_p[1]) = scipy.stats.t.pdf(
-                    -abs(numpy.array(my_class.lm_optim_t)), lm_df)
-            else:
-                my_class.lm_optim_err[0] = 0.0
-                my_class.lm_optim_err[1] = 0.0
-    finally:
-        my_class.calc_model_l()
-
-    ## ~~~~~~~~~~ WRITE OBSERVATION RESULTS ~~~~~~~~~~ ##
-    if to_write:
-        output_file = "out/%s_%s.txt" % (tower, month)
-        header0 = "MH_guess,%f,%f,%f\n" % (
-            my_class.hm_estimates[1],
-            my_class.hm_estimates[2],
-            my_class.hm_estimates[0]
-            )
-        header1 = "ML_guess,%f,%f\n" % (
-            my_class.lm_estimates[0],
-            my_class.lm_estimates[1]
-            )
-        header2 = "MH_opt,%f,%f,%f,%f,%f\n" % (
-            my_class.hm_optimized[1],
-            my_class.hm_optimized[2],
-            my_class.hm_optimized[0],
-            my_class.hm_rmse,
-            my_class.hm_rsqr
-            )
-        header3 = "ML_opt,%f,%f,,%f,%f\n" % (
-            my_class.lm_optimized[0],
-            my_class.lm_optimized[1],
-            my_class.lm_rmse,
-            my_class.lm_rsqr
-            )
-        OUTFILE = open(output_file, 'w')
-        OUTFILE.write(header0)
-        OUTFILE.write(header1)
-        OUTFILE.write(header2)
-        OUTFILE.write(header3)
-        OUTFILE.write("ppfd_obs,nee_obs,nee_mh,nee_ml\n")
-        for po, no, nh, nl in map(None, my_class.ppfd_obs,
-                                  my_class.nee_obs,
-                                  my_class.nee_model_h,
-                                  my_class.nee_model_l):
-            outline = "%s,%s,%s,%s\n" % (po, no, nh, nl)
-            OUTFILE.write(outline)
-        OUTFILE.close()
-    ## ~~~~~~~~~~ REMOVE OUTLIERS AND RE-ANALYZE ~~~~~~~~~~ ##
-    if rm_out:
-        # ---------------------
-        # Model H optimization:
-        # ---------------------
-        my_class.remove_mh_outliers()
-        try:
-            mh_opt_ro, mh_cov_ro = curve_fit(
-                my_class.model_h,
-                my_class.ppfd_obs_h_ro,
-                my_class.nee_obs_h_ro,
-                p0=my_class.hm_estimates
-                )
-        except:
-            my_class.hm_optimized_ro = [-9999.0, -9999.0, -9999.0]
-            my_class.hm_optim_err_ro = [-9999.0, -9999.0, -9999.0]
-        else:
-            (
-                my_class.hm_optimized_ro[0],
-                my_class.hm_optimized_ro[1],
-                my_class.hm_optimized_ro[2]) = mh_opt_ro
-
-            # Extract variance values from matrix:
-            try:
-                mh_var_ro = numpy.diag(mh_cov_ro)
-            except ValueError:
-                mh_var_ro = [0, 0, 0]
-            else:
-                if (numpy.isfinite(mh_var_ro).all() and not
-                        (mh_var_ro < 0).any()):
-                    (
-                        my_class.hm_optim_err_ro[0],
-                        my_class.hm_optim_err_ro[1],
-                        my_class.hm_optim_err_ro[2]
-                        ) = numpy.sqrt(mh_var_ro)
-
-                    # Calculate the t-value:
-                    (
-                        my_class.hm_optim_t_ro[0],
-                        my_class.hm_optim_t_ro[1],
-                        my_class.hm_optim_t_ro[2]
-                        ) = (numpy.array(my_class.hm_optimized_ro) /
-                             numpy.array(my_class.hm_optim_err_ro))
-
-                    # Calculate the p-value:
-                    hm_df_ro = len(my_class.nee_obs) - my_class.hm_outliers - 3
-                    (my_class.hm_optim_p_ro[0],
-                     my_class.hm_optim_p_ro[1],
-                     my_class.hm_optim_p_ro[2]) = scipy.stats.t.pdf(
-                        -abs(numpy.array(my_class.hm_optim_t_ro)), hm_df_ro)
-                else:
-                    my_class.hm_optim_err_ro[0] = 0.0
-                    my_class.hm_optim_err_ro[1] = 0.0
-                    my_class.hm_optim_err_ro[2] = 0.0
-        finally:
-            my_class.calc_model_h_ro()
-
-        # ---------------------
-        # Model L optimization:
-        # ---------------------
-        my_class.remove_ml_outliers()
-        try:
-            ml_opt_ro, ml_cov_ro = curve_fit(
-                my_class.model_l,
-                my_class.ppfd_obs_l_ro,
-                my_class.nee_obs_l_ro,
-                p0=my_class.lm_estimates
-                )
-        except:
-            my_class.lm_optimized_ro = [-9999.0, -9999.0]
-            my_class.lm_optim_err_ro = [-9999.0, -9999.0]
-        else:
-            (
-                my_class.lm_optimized_ro[0],
-                my_class.lm_optimized_ro[1]) = ml_opt_ro
-
-            # Extract variance values from matrix:
-            try:
-                ml_var_ro = numpy.diag(ml_cov_ro)
-            except ValueError:
-                ml_var_ro = [0, 0]
-            else:
-                if (numpy.isfinite(ml_var_ro).all() and not
-                        (ml_var_ro < 0).any()):
-                    (
-                        my_class.lm_optim_err_ro[0],
-                        my_class.lm_optim_err_ro[1]
-                        ) = numpy.sqrt(ml_var_ro)
-
-                    # Calculate the t-value:
-                    (
-                        my_class.lm_optim_t_ro[0],
-                        my_class.lm_optim_t_ro[1]
-                        ) = (numpy.array(my_class.lm_optimized_ro) /
-                             numpy.array(my_class.lm_optim_err_ro))
-
-                    # Calculate the p-value:
-                    lm_df_ro = len(my_class.nee_obs) - my_class.lm_outliers - 2
-                    (my_class.lm_optim_p_ro[0],
-                     my_class.lm_optim_p_ro[1]) = scipy.stats.t.pdf(
-                        -abs(numpy.array(my_class.lm_optim_t_ro)), lm_df_ro)
-                else:
-                    my_class.lm_optim_err_ro[0] = 0.0
-                    my_class.lm_optim_err_ro[1] = 0.0
-        finally:
-            my_class.calc_model_l_ro()
-
-        ## ~~~~~~~~~~ WRITE OUTLIER-FREE RESULTS ~~~~~~~~~~ ##
-        if to_write:
-            output_file = "out/%s_%s_ro.txt" % (tower, month)
-            header0 = "MH_guess,%0.5f,%0.2f,%0.2f\n" % (
-                my_class.hm_estimates[1],
-                my_class.hm_estimates[2],
-                my_class.hm_estimates[0])
-            header1 = "ML_guess,%0.5f,%0.2f\n" % (
-                my_class.lm_estimates[0],
-                my_class.lm_estimates[1])
-            header2 = "MH_opt,%0.5f,%0.2f,%0.2f,%0.2f,%0.3f\n" % (
-                my_class.hm_optimized_ro[1],
-                my_class.hm_optimized_ro[2],
-                my_class.hm_optimized_ro[0],
-                my_class.hm_rmse_ro,
-                my_class.hm_rsqr_ro)
-            header3 = "ML_opt,%0.5f,%0.2f,,%0.2f,%0.3f\n" % (
-                my_class.lm_optimized_ro[0],
-                my_class.lm_optimized_ro[1],
-                my_class.lm_rmse_ro,
-                my_class.lm_rsqr_ro)
-            OUTFILE = open(output_file, 'w')
-            OUTFILE.write(header0)
-            OUTFILE.write(header1)
-            OUTFILE.write(header2)
-            OUTFILE.write(header3)
-            OUTFILE.write(
-                "ppfd_obs_h,nee_obs_h,nee_mod_h,"
-                "ppfd_obs_l,nee_obs_l,nee_mod_l\n"
-                )
-            for (
-                    poh, noh, nhh, pol, nol, nll
-                    ) in map(None, my_class.ppfd_obs_h_ro,
-                             my_class.nee_obs_h_ro,
-                             my_class.nee_model_h_ro,
-                             my_class.ppfd_obs_l_ro,
-                             my_class.nee_obs_l_ro,
-                             my_class.nee_model_l_ro):
-                outline = "%s,%s,%s,%s,%s,%s\n" % (
-                    poh, noh, nhh,
-                    pol, nol, nll
-                    )
-                OUTFILE.write(outline)
-            OUTFILE.close()
-
-    # Run model selection criteria:
-    my_class.model_selection()
-
-    # Return the FLUX_PARTI class object:
-    return my_class
-
 ###############################################################################
 # MAIN PROGRAM
 ###############################################################################
@@ -1759,12 +1444,8 @@ if __name__ == "__main__":
             # Process if enough data was found:
             if (len(monthly_ppfd) > 3 and len(monthly_nee) > 3):
                 # Perform GPP partitioning (returns FLUX_PARTI class object):
-                monthly_parti = partition(monthly_nee,
-                                          monthly_ppfd,
-                                          to_write=False,
-                                          rm_out=True,
-                                          tower=station,
-                                          month=sd)
+                monthly_parti = STAGE1(monthly_ppfd, monthly_nee, station, sd)
+                monthly_parti.partition(to_write=False, rm_out=True)
 
                 # Perform half-hourly PPFD gapfilling (umol m-2 s-1):
                 (gf_time, gf_ppfd) = gapfill_ppfd_month(station,
@@ -1820,8 +1501,7 @@ if __name__ == "__main__":
                                            elv)                     # m
             else:
                 # Create an 'empty' class:
-                monthly_parti = FLUX_PARTI(
-                    monthly_ppfd, monthly_nee, station, sd)
+                monthly_parti = STAGE1(monthly_ppfd, monthly_nee, station, sd)
 
             # Save class summary statistics:
             SFILE = open(summary_file, 'a')

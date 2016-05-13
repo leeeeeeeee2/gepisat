@@ -1,0 +1,8 @@
+# Master git ignore list:
+
+# python compile files:
+*.pyc
+*__pycache__
+
+# log files:
+*.log*

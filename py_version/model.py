@@ -4,7 +4,7 @@
 #
 # VERSION 2.2.0-dev
 #
-# LAST UPDATED: 2016-04-01
+# LAST UPDATED: 2016-05-13
 #
 # ---------
 # citation:
@@ -422,6 +422,7 @@ import os.path
 # import psycopg2
 import numpy
 
+from data import DATA
 from db_setup import connectSQL
 from flux_parti import STAGE1
 from lue import LUE
@@ -461,108 +462,6 @@ def add_one_month(dt0):
     return dt3
 
 
-def grid_centroid(my_lon, my_lat):
-    """
-    Name:     grid_centroid
-    Input:    - float, longitude (my_lon)
-              - float, latitude (my_lat)
-    Output:   tuple, longitude latitude pair (my_centroid)
-    Features: Returns the nearest 0.5 deg. grid centroid per given coordinates
-              based on the Euclidean distance to each of the four surrounding
-              grids; if any distances are equivalent, the pixel north and east
-              is selected by default
-    """
-    # Create lists of regular latitude and longitude:
-    grid_res = 0.5
-    lat_min = -90 + 0.5*grid_res
-    lon_min = -180 + 0.5*grid_res
-    lat_dim = 360
-    lon_dim = 720
-    lats = [lat_min + y * grid_res for y in xrange(lat_dim)]
-    lons = [lon_min + x * grid_res for x in xrange(lon_dim)]
-
-    # Find bounding longitude:
-    centroid_lon = None
-    if my_lon in lons:
-        centroid_lon = my_lon
-    else:
-        lons.append(my_lon)
-        lons.sort()
-        lon_index = lons.index(my_lon)
-        bb_lon_min = lons[lon_index-1]
-        try:
-            bb_lon_max = lons[lon_index+1]
-        except IndexError:
-            bb_lon_max = lons[-1] + grid_res
-
-    # Find bounding latitude:
-    centroid_lat = None
-    if my_lat in lats:
-        centroid_lat = my_lat
-    else:
-        lats.append(my_lat)
-        lats.sort()
-        lat_index = lats.index(my_lat)
-        bb_lat_min = lats[lat_index-1]
-        try:
-            bb_lat_max = lats[lat_index+1]
-        except IndexError:
-            bb_lat_max = lats[-1] + grid_res
-
-    # Determine nearest centroid:
-    # NOTE: if dist_A equals dist_B, then centroid defaults positively
-    #       i.e., north / east
-    if centroid_lon and centroid_lat:
-        my_centroid = (centroid_lon, centroid_lat)
-    elif centroid_lon and not centroid_lat:
-        # Calculate the distances between lat and bounding box:
-        dist_A = bb_lat_max - my_lat
-        dist_B = my_lat - bb_lat_min
-        if dist_A > dist_B:
-            centroid_lat = bb_lat_min
-        else:
-            centroid_lat = bb_lat_max
-        my_centroid = (centroid_lon, centroid_lat)
-    elif centroid_lat and not centroid_lon:
-        # Calculate the distances between lon and bounding box:
-        dist_A = bb_lon_max - my_lon
-        dist_B = my_lon - bb_lon_min
-        if dist_A > dist_B:
-            centroid_lon = bb_lon_min
-        else:
-            centroid_lon = bb_lon_max
-        my_centroid = (centroid_lon, centroid_lat)
-    else:
-        # Calculate distances between lat:lon and bounding box:
-        # NOTE: if all distances are equal, defaults to NE grid
-        dist_A = numpy.sqrt(
-            (bb_lon_max - my_lon)**2.0 + (bb_lat_max - my_lat)**2.0
-            )
-        dist_B = numpy.sqrt(
-            (bb_lon_max - my_lon)**2.0 + (my_lat - bb_lat_min)**2.0
-            )
-        dist_C = numpy.sqrt(
-            (my_lon - bb_lon_min)**2.0 + (bb_lat_max - my_lat)**2.0
-            )
-        dist_D = numpy.sqrt(
-            (my_lon - bb_lon_min)**2.0 + (my_lat - bb_lat_min)**2.0
-            )
-        min_dist = min([dist_A, dist_B, dist_C, dist_D])
-
-        # Determine centroid based on min distance:
-        if dist_A == min_dist:
-            my_centroid = (bb_lon_max, bb_lat_max)
-        elif dist_B == min_dist:
-            my_centroid = (bb_lon_max, bb_lat_min)
-        elif dist_C == min_dist:
-            my_centroid = (bb_lon_min, bb_lat_max)
-        elif dist_D == min_dist:
-            my_centroid = (bb_lon_min, bb_lat_min)
-
-    # Return nearest centroid:
-    return my_centroid
-
-
 def simpson(my_array, h):
     """
     Name:     simpson
@@ -583,86 +482,6 @@ def simpson(my_array, h):
         s += 2.0*my_array[j]
     s = (s*h)/3.0
     return s
-
-
-def summary_file_init(summary_file):
-    """
-    Name:     summary_file_init
-    Input:    str, output file (summary_file)
-    Output:   None.
-    Features: Creates a new summary file with header line
-    """
-    summary_header = (
-        "%s,%s,%s,%s,%s,"        # 01--05
-        "%s,%s,%s,%s,%s,"        # 06--10
-        "%s,%s,%s,%s,%s,"        # 11--15
-        "%s,%s,%s,%s,%s,"        # 16--20
-        "%s,%s,%s,%s,%s,"        # 21--25
-        "%s,%s,%s,%s,%s,"        # 26--30
-        "%s,%s,%s,%s,%s,"        # 31--35
-        "%s,%s,%s,%s,%s,"        # 36--40
-        "%s,%s,%s,%s,%s,"        # 41--45
-        "%s,%s,%s,%s,%s,"        # 46--50
-        "%s,%s,%s,%s,%s,"        # 51--55
-        "%s,%s,%s,%s,"           # 56--59
-        "%s,%s,%s,%s,"           # 60--63
-        "%s,%s,%s,%s,%s,%s,"     # 64--69
-        "%s,%s,%s,%s,%s,%s,"     # 70--75
-        "%s,%s,%s,%s,%s,%s,"     # 76--81
-        "%s,%s,%s,%s,%s,%s,"     # 82--87
-        "%s,%s,%s,%s,%s,%s,"     # 88--93
-        "%s,%s,%s,%s,%s,%s,"     # 94--99
-        "%s,%s,%s,%s\n"          # 100--103
-        ) % (
-        "name", "month",   "n_obs", "n_h",    "n_l",               # 01--05
-        "foo_est_obs_h",   "foo_opt_obs_h",   "foo_err_obs_h",     # 06--08
-        "foo_t_obs_h",     "foo_p_obs_h",                          # 09--10
-        "foo_est_ro_h",    "foo_opt_ro_h",    "foo_err_ro_h",      # 11--13
-        "foo_t_ro_h",      "foo_p_ro_h",                           # 14--15
-        "alpha_est_obs_h", "alpha_opt_obs_h", "alpha_err_obs_h",   # 16--18
-        "alpha_t_obs_h",   "alpha_p_obs_h",                        # 19--20
-        "alpha_est_ro_h",  "alpha_opt_ro_h",  "alpha_err_ro_h",    # 21--23
-        "alpha_t_ro_h",    "alpha_p_ro_h",                         # 24--25
-        "alpha_est_obs_l", "alpha_opt_obs_l", "alpha_err_obs_l",   # 26--28
-        "alpha_t_obs_l",   "alpha_p_obs_l",                        # 29--30
-        "alpha_est_ro_l",  "alpha_opt_ro_l",  "alpha_err_ro_l",    # 31--33
-        "alpha_t_ro_l",    "alpha_p_ro_l",                         # 34--35
-        "r_est_obs_h",     "r_opt_obs_h",     "r_err_obs_h",       # 36--38
-        "r_t_obs_h",       "r_p_obs_h",                            # 39--40
-        "r_est_ro_h",      "r_opt_ro_h",      "r_err_ro_h",        # 41--43
-        "r_t_ro_h",        "r_p_ro_h",                             # 44--45
-        "r_est_obs_l",     "r_opt_obs_l",     "r_err_obs_l",       # 46--48
-        "r_t_obs_l",       "r_p_obs_l",                            # 49--50
-        "r_est_ro_l",      "r_opt_ro_l",      "r_err_ro_l",        # 51--53
-        "r_t_ro_l",        "r_p_ro_l",                             # 54--55
-        "r2_obs_h",        "r2_ro_h",                              # 56--57
-        "rmse_obs_h",      "rmse_ro_h",                            # 58--59
-        "r2_obs_l",        "r2_ro_l",                              # 60--61
-        "rmse_obs_l",      "rmse_ro_l",                            # 62--63
-        "min_ppfd_obs",    "max_ppfd_obs",    "ave_ppfd_obs",      # 64--66
-        "std_ppfd_obs",    "skw_ppfd_obs",    "krt_ppfd_obs",      # 67--69
-        "min_ppfd_ro_h",   "max_ppfd_ro_h",   "ave_ppfd_ro_h",     # 70--72
-        "std_ppfd_ro_h",   "skw_ppfd_ro_h",   "krt_ppfd_ro_h",     # 73--75
-        "min_ppfd_ro_l",   "max_ppfd_ro_l",   "ave_ppfd_ro_l",     # 76--78
-        "std_ppfd_ro_l",   "skw_ppfd_ro_l",   "krt_ppfd_ro_l",     # 79--81
-        "min_nee_obs",     "max_nee_obs",     "ave_nee_obs",       # 82--84
-        "std_nee_obs",     "skw_nee_obs",     "krt_nee_obs",       # 85--87
-        "min_nee_ro_h",    "max_nee_ro_h",    "ave_nee_ro_h",      # 88--90
-        "std_nee_ro_h",    "skw_nee_ro_h",    "krt_nee_ro_h",      # 91--93
-        "min_nee_ro_l",    "max_nee_ro_l",    "ave_nee_ro_l",      # 94--96
-        "std_nee_ro_l",    "skw_nee_ro_l",    "krt_nee_ro_l",      # 97--99
-        "pearson_r_obs",   "pearson_r_ro_h",  "pearson_r_ro_l",  # 100--102
-        "model_select"                                           # 103
-        )
-    # Open file for writing:
-    try:
-        SFILE = open(summary_file, 'w')
-    except IOError:
-        print("Cannot open file '%s' for writting" % (summary_file))
-        raise
-    else:
-        SFILE.write(summary_header)
-        SFILE.close()
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -777,46 +596,6 @@ def daily_gpp(station, cur_date):
         day_gpp_err = numpy.nan
 
     return (day_gpp, day_gpp_err)
-
-
-def flux_to_grid(flux_station):
-    """
-    Name:     flux_to_grid
-    Input:    str, station name (flux_station)
-    Output:   int, grid station ID (grid_station)
-    Features: Returns grid station ID based on the location of a given flux
-              tower
-    Depends:  - connectSQL
-              - get_lon_lat
-              - grid_centroid
-    """
-    # Get lat and lon of flux tower:
-    (fst_lon, fst_lat) = get_lon_lat(flux_station)
-
-    # Determine grid centroid lon and lat:
-    (grd_lon, grd_lat) = grid_centroid(fst_lon, fst_lat)
-
-    # Get grid station name based on centroid coordinates:
-    params = ("grid", grd_lon, grd_lat)
-    q = (
-        "SELECT met_data.stationid "
-        "FROM met_data "
-        "WHERE met_data.geom = %s "
-        "AND met_data.lon = %s "
-        "AND met_data.lat = %s;"
-        )
-
-    # Connect to database:
-    con = connectSQL()
-    if con is not None:
-        cur = con.cursor()
-
-        # Execute query and return results:
-        cur.execute(q, params)
-        grid_station = cur.fetchone()[0]
-        con.close()
-
-        return grid_station
 
 
 def gapfill_ppfd_day(station, cur_date, to_write, out_file):
@@ -1062,270 +841,6 @@ def get_daily_ppfd(station, start_date):
         return (time_vals, ppfd_vals)
 
 
-def get_data_point(msvidx, time_point):
-    """
-    Name:     get_data_points
-    Input:    - str, msvidx (msvidx)
-              - datetime.date (time_point)
-    Output:   float/numpy.ndarray (my_result)
-    Features: Returns data point or array of data for a given msvidx (i.e.,
-              station and variable) and time
-    Depends:  connectSQL
-    """
-    # SQL query params:
-    params = (msvidx, time_point)
-
-    # Define SQL query:
-    q = (
-        "SELECT data_set.data "
-        "FROM data_set "
-        "WHERE data_set.msvidx = %s "
-        "AND data_set.datetime = %s;"
-        )
-
-    # Connect to database and start a cursor:
-    con = connectSQL()
-    if con is not None:
-        cur = con.cursor()
-
-        # Execute query and return result:
-        cur.execute(q, params)
-        if cur.rowcount == 1:
-            my_result = cur.fetchone()[0]
-        elif cur.rowcount > 1:
-            my_result = numpy.array([])
-            for record in cur:
-                my_result = numpy.append(my_result, record[0])
-        else:
-            my_result = None
-            print("No data found in function get_data_point")
-
-        return my_result
-
-
-def get_dates(station):
-    """
-    Name:     get_dates
-    Input:    str, station name (station)
-    Output:   tuple, starting and ending dates
-              - datetime.date, starting date (sd)
-              - datetime.date, ending date (ed)
-    Features: Returns the starting and ending dates of NEE-PPFD data pairs for
-              a given station
-    Depends:  - connectSQL
-              - get_msvidx
-    """
-    # Get msvidx values for specified station:
-    ppfdi = get_msvidx(station, 'PPFD_f')
-    neei = get_msvidx(station, 'NEE_f')
-
-    # SQL query parameters:
-    params = (ppfdi, neei)
-
-    # Define start date query:
-    q1 = (
-        "SELECT data_set.datetime "
-        "FROM data_set "
-        "WHERE data_set.msvidx = %s OR data_set.msvidx = %s "
-        "ORDER BY data_set.datetime ASC LIMIT 1;"
-        )
-
-    # Define end date query:
-    q2 = (
-        "SELECT data_set.datetime "
-        "FROM data_set "
-        "WHERE data_set.msvidx = %s "
-        "OR data_set.msvidx = %s "
-        "ORDER BY data_set.datetime DESC LIMIT 1;"
-        )
-
-    # Connect to database and start a cursor:
-    con = connectSQL()
-    if con is not None:
-        cur = con.cursor()
-
-        # Get start date from datetime object:
-        cur.execute(q1, params)
-        sd = cur.fetchone()[0].date()
-
-        # Get end date from datetime object:
-        cur.execute(q2, params)
-        ed = cur.fetchone()[0].date()
-
-        # Make the starting date begin at day 1
-        sd = sd.replace(day=1)
-
-        # Return results:
-        con.close()
-
-        return (sd, ed)
-
-
-def get_lon_lat(station):
-    """
-    Name:     get_lon_lat
-    Input:    str, station name (station)
-    Output:   tuple, lon-lat pair
-              - float, longitude (my_lon)
-              - float, latitude (my_lat)
-    Features: Return longitude and latitude pair for a given station based on
-              the GePiSaT database meta-data table
-    Depends:  connectSQL
-    """
-    # Query paramters:
-    params = (station,)
-
-    # SQL query:
-    q = (
-        "SELECT met_data.lon, met_data.lat "
-        "FROM met_data "
-        "WHERE met_data.stationid = %s;"
-        )
-
-    # Connect to database and start a cursor:
-    con = connectSQL()
-    if con is not None:
-        cur = con.cursor()
-
-        # Execute query and return results:
-        cur.execute(q, params)
-        my_lon, my_lat = cur.fetchone()
-        con.close()
-        return (my_lon, my_lat)
-
-
-def get_msvidx(station, variable):
-    """
-    Name:     get_msvidx
-    Input:    - str, station name (station)
-              - str, variable name (variable)
-    Output:   string, msvidx (result)
-    Features: Returns the msvidx from the GePiSaT database based on the station
-              and variable name
-    Depends:  connectSQL
-    """
-    # Define query:
-    q = (
-        "SELECT var_list.msvidx "
-        "FROM var_list "
-        "WHERE var_list.stationid = %s "
-        "AND var_list.varname = %s;"
-        )
-
-    # SQL query parameters:
-    params = (station, variable)
-
-    # Connect to database and star cursor:
-    con = connectSQL()
-    if con is not None:
-        cur = con.cursor()
-
-        # Execute query and fetch results:
-        cur.execute(q, params)
-        try:
-            result = cur.fetchone()[0]
-        except:
-            print(("Could not return an msvidx value for station '%s' and "
-                   "variable '%s'") % (station, variable))
-            result = ""
-        finally:
-            con.close()
-            return result
-
-
-def get_pressure(s):
-    """
-    Name:     get_pressure
-    Input:    str, station name (s)
-    Output:   - float, elevation, m (z)
-              - float, atmospheric pressure, Pa (patm)
-    Features: Returns the atmospheric pressure based on the elevation of a
-              given station
-    Depends:  - connectSQL
-              - flux_to_grid
-              - get_data_point
-              - get_msvidx
-    Ref:      Allen et al. (1998)
-    """
-    # Define constants:
-    kPo = 101325    # standard atmosphere, Pa (Allen, 1973)
-    kTo = 288.15    # base temperature, K (Berberan-Santos et al., 1997)
-    kL = 0.0065     # temperature lapse rate, K/m (Allen, 1973)
-    kG = 9.80665    # gravitational acceleration, m/s^2 (Allen, 1973)
-    kR = 8.3143     # universal gas constant, J/mol/K (Allen, 1973)
-    kMa = 0.028963  # molecular weight of dry air, kg/mol (Tsilingiris, 2008)
-
-    # Define query w/ parameters:
-    params = (s,)
-    q = (
-        "SELECT met_data.ele "
-        "FROM met_data "
-        "WHERE met_data.stationid = %s;"
-        )
-
-    # Connect to database:
-    con = connectSQL()
-    if con is not None:
-        cur = con.cursor()
-
-        # Execute query and return results:
-        cur.execute(q, params)
-        station_ele = cur.fetchone()[0]
-        con.close()
-    else:
-        station_ele = -9999
-
-    # Check to see that elevation is valid:
-    if float(station_ele) == -9999:
-        # Find CRU Elv:
-        elv_sd = datetime.date(2006, 6, 1)
-        hdg_station = flux_to_grid(s)
-        elv_msvidx = get_msvidx(hdg_station, 'Elv')
-        elv_data = get_data_point(elv_msvidx, elv_sd)
-        station_ele = elv_data
-
-    # Convert elevation to pressure, Pa:
-    z = float(station_ele)
-    patm = kPo*(1.0 - kL*z/kTo)**(kG*kMa/(kR*kL))
-
-    return (z, patm)
-
-
-def get_stations():
-    """
-    Name:     get_stations
-    Input:    None.
-    Output:   list, station names (results)
-    Features: Returns a list of flux station names from GePiSaT database
-    Depends:  connectSQL
-    """
-    # Define query:
-    q = (
-        "SELECT stationid "
-        "FROM met_data "
-        "WHERE dim=0 "
-        "AND geom=%s "
-        "ORDER BY stationid ASC;"
-        )
-
-    params = ("point",)
-
-    # Connect to database and start cursor:
-    con = connectSQL()
-    if con is not None:
-        cur = con.cursor()
-
-        # Execute query and fetch results:
-        cur.execute(q, params)
-        results = []
-        for record in cur:
-            results.append(record[0])  # <- extract record from tuple
-
-        con.close()
-
-        return results
-
-
 def monthly_ppfd_nee(station, start_date):
     """
     Name:     monthly_ppfd_nee
@@ -1397,42 +912,34 @@ def monthly_ppfd_nee(station, start_date):
 ###############################################################################
 if __name__ == "__main__":
     # Define output directory:
-    output_dir = "out"
+    my_data = DATA()
+    my_data.output_dir = "./out"
 
     # Get list of all flux station names:
-    #stations = get_stations()
-    stations = ['CZ-wet', ]
+    # my_data.find_stations()
+    my_data.stations = ['CZ-wet', ]
 
     # Initialize summary statistics file:
-    summary_file = os.path.join(output_dir, "summary_statistics.txt")
-    summary_file_init(summary_file)
+    my_data.create_summary_file("summary_statistics.txt")
 
     # Create/initialize LUE class instance:
     my_lue = LUE()
-    lue_out_file = os.path.join(output_dir, "LUE_All-Stations.txt")
 
     # Iterate through stations:
-    for station in stations:
+    for station in my_data.stations:
         # Initialize station's LUE & daily GPP output file:
-        lue_file = "%s_%s.txt" % (station, "LUE")
-        lue_file = os.path.join(output_dir, lue_file)
-        gpp_file = "%s_%s.txt" % (station, "GPP-daily")
-        gpp_file = os.path.join(output_dir, gpp_file)
+        lue_file = my_data.get_lue_file(station)
+        gpp_file = my_data.get_gpp_file(station)
 
         # Get first/last dates for station data:
-        sd, ed = get_dates(station)
+        sd, ed = my_data.find_date_range(station)
 
         # Get flux station's corresponding 0.5-degree grid station:
-        hdg_station = flux_to_grid(station)
-
-        # Get station's variable msvidx values:
-        co2_msvidx = "US-MLO.21"
-        cpa_msvidx = get_msvidx(hdg_station, 'alpha')
-        fpar_msvidx = get_msvidx(hdg_station, 'FAPAR')
-        tair_msvidx = get_msvidx(hdg_station, 'Tc')
-        vpd_msvidx = get_msvidx(hdg_station, 'VPD')
+        hdg_station = my_data.find_station_grid(station)
 
         # Get station's elevation & atmospheric pressure:
+
+        # !!!!! STOPPED HERE --- SEE DATA CLASS'S find_elv_pressure
         elv, patm = get_pressure(station)
 
         # Process each month in time:
@@ -1481,6 +988,11 @@ if __name__ == "__main__":
                     co2_annual = get_data_point(co2_msvidx, annual_sd)  # ppm
 
                     # Retrieve monthly gridded data:
+                    co2_msvidx = "US-MLO.21"
+                    cpa_msvidx = get_msvidx(hdg_station, 'alpha')
+                    fpar_msvidx = get_msvidx(hdg_station, 'FAPAR')
+                    tair_msvidx = get_msvidx(hdg_station, 'Tc')
+                    vpd_msvidx = get_msvidx(hdg_station, 'VPD')
                     cpa_month = get_data_point(cpa_msvidx, sd)      # unitless
                     fpar_month = get_data_point(fpar_msvidx, sd)    # unitless
                     tair_month = get_data_point(tair_msvidx, sd)    # deg C
@@ -1504,7 +1016,7 @@ if __name__ == "__main__":
                 monthly_parti = STAGE1(monthly_ppfd, monthly_nee, station, sd)
 
             # Save class summary statistics:
-            SFILE = open(summary_file, 'a')
+            SFILE = open(my_data.summary_file, 'a')
             SFILE.write(monthly_parti.summary_statistics())
             SFILE.close()
 

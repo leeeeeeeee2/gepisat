@@ -4,7 +4,7 @@
 #
 # VERSION 2.2.0-dev
 #
-# LAST UPDATES: 2016-04-01
+# LAST UPDATES: 2016-05-13
 #
 # ---------
 # citation:
@@ -1315,7 +1315,7 @@ class STAGE1:
             self.min_nee_ro_l,        self.max_nee_ro_l,             # 94--95
             self.ave_nee_ro_l,        self.std_nee_ro_l,             # 96--97
             self.skw_nee_ro_l,        self.krt_nee_ro_l,             # 98--99
-            self.r_obs,               self.r_ro_h,                  # 100--101
+            self.r_obs,               self.r_ro_h,                 # 100--101
             self.r_ro_l,              self.mod_select              # 102--103
             )
 

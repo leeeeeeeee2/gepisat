@@ -367,140 +367,6 @@ class DATA(object):
         self.stations = self.fh.get_stations()
         self.logger.debug("Found %d stations!", len(self.stations))
 
-    def gapfill_daily_ppfd(self, cur_date, to_save=False):
-        """
-        @TODO
-        """
-        # Check if output file exists:
-        if to_save:
-            out_file = ""
-            if not os.path.isfile(out_file):
-                header = "Timestamp,PPFDobs,PPFDgf\n"
-                try:
-                    f = open(out_file, "w")
-                except IOError:
-                    print("Cannot write to file '%s'" % (out_file))
-                else:
-                    f.write(header)
-                    f.close()
-
-        # Initialize monthly gapless PPFD array & associated timestamps:
-        daily_ppfd_gapless = numpy.array([])
-        daily_timestamp_hh = numpy.array([])
-
-        # Get daily PPFD values (in a numpy.array) from database:
-        (daily_ts, daily_ppfd) = get_daily_ppfd(station, cur_date)
-
-        # Check to see if any gaps are present in current day's observations:
-        number_obs = len(daily_ppfd)
-        if number_obs < 49:
-            # Gaps are present:
-            gapfill_dict = {}
-
-            # Create start and end datetime objects for this day:
-            start_time = datetime.datetime(cur_date.year,
-                                           cur_date.month,
-                                           cur_date.day,
-                                           0, 0, 0)
-
-            end_time = datetime.datetime(cur_date.year,
-                                         cur_date.month,
-                                         cur_date.day,
-                                         23, 59, 59)
-
-            # Initialize dictionary values with half-hourly timestamp keys:
-            cur_time = start_time
-            while cur_time < end_time:
-                my_time = "%s" % cur_time.time()
-                gapfill_dict[my_time] = 0.0
-
-                # Add datetime object to array of monthly timestamps:
-                daily_timestamp_hh = numpy.append(daily_timestamp_hh, [cur_time, ])
-
-                cur_time = cur_time + datetime.timedelta(minutes=30)
-
-            # Convert date to Julian day:
-            jday = cur_date.timetuple().tm_yday
-
-            # Calculate daily ET solar radiation curve:
-            (flux_lon, flux_lat) = get_lon_lat(station)
-            et_solar = SOLAR_TOA(flux_lat, flux_lon)
-            et_solar.calculate_daily_fluxes(jday, cur_date.year)
-
-            # Get satellite measurement of solar rad (SWdown) [W m-2]:
-            grid_station = flux_to_grid(station)
-            grid_msvidx = get_msvidx(grid_station, 'SWdown')
-            grid_srad = get_data_point(grid_msvidx, cur_date)
-
-            # Convert to daily shortwave radiation [J m-2]:
-            # NOTE: if None, then gridded data not available, set equal to modeled
-            if grid_srad is not None:
-                grid_srad *= (86400.0)
-            else:
-                grid_srad = et_solar.ho_jm2
-
-            # Calculate scaling factor (i.e., observed/modeled):
-            if et_solar.ho_jm2 != 0:
-                sfactor = grid_srad/et_solar.ho_jm2
-            else:
-                sfactor = 1.0
-
-            # Add scaled half-hourly PPFD to dictionary [umol m-2 s-1]:
-            for i in range(48):
-                val = et_solar.ppfd_hh[i]
-                my_time = "%s" % et_solar.local_time[i].time()
-                gapfill_dict[my_time] = sfactor*val
-
-            # Add observations to gapfill dictionary & save for output:
-            ppfd_obs = {}
-            for i in range(number_obs):
-                my_time = "%s" % daily_ts[i].time()
-                gapfill_dict[my_time] = daily_ppfd[i]
-                ppfd_obs[my_time] = daily_ppfd[i]
-
-            # Save to PPFD time series:
-            daily_ppfd_gapless = numpy.append(
-                daily_ppfd_gapless,
-                [gapfill_dict[x] for x in sorted(gapfill_dict.keys())]
-            )
-
-            # Write to file:
-            if to_save:
-                for t in sorted(gapfill_dict.keys()):
-                    if t in ppfd_obs.keys():
-                        obs = ppfd_obs[t]
-                    else:
-                        obs = -9999.0
-                    gfv = gapfill_dict[t]
-                    dt = "%s %s" % (cur_date, t)
-                    try:
-                        f = open(out_file, 'a')
-                    except IOError:
-                        print("Cannot append to file '%s'" % (out_file))
-                    else:
-                        f.write("%s,%f,%f\n" % (dt, obs, gfv))
-                        f.close()
-        else:
-            # No gaps; append daily series
-            #   NOTE: drop last entry from daily_ppfd (midnight next day)
-            daily_ppfd_gapless = daily_ppfd[0:-1]
-            daily_timestamp_hh = daily_ts[0:-1]
-
-            # Write to file:
-            if to_save:
-                for i in range(len(daily_ts) - 1):
-                    dt = "%s" % daily_ts[i]
-                    obs = daily_ppfd[i]
-                    try:
-                        f = open(out_file, 'a')
-                    except IOError:
-                        print("Cannot append to file '%s'" % (out_file))
-                    else:
-                        f.write("%s,%0.3f,%0.3f\n" % (dt, obs, obs))
-                        f.close()
-
-        return (daily_timestamp_hh, daily_ppfd_gapless)
-
     def gapfill_monthly_ppfd(self, sd, to_save=False):
         """
         @TODO
@@ -520,7 +386,7 @@ class DATA(object):
         cur_date = sd
         while cur_date < end_date:
             # Gapfill daily PPFD
-            (daily_time, daily_ppfd) = self.gapfill_daily_ppfd(cur_date, False)
+            (daily_time, daily_ppfd) = self.fh.gapfill_daily_ppfd(cur_date)
 
             # Append data to monthly arrays:
             gf_dates = numpy.append(gf_dates, daily_time)
@@ -707,9 +573,100 @@ class GPSQL(object):
             raise IOError(
                 "Failed to fetch grid for station '%s'" % (flux_station))
 
+    def gapfill_daily_ppfd(self, cur_date):
+        """
+        @TODO
+        """
+        self.logger.debug("Gapfilling %s", cur_date)
+
+        # Initialize gapless PPFD array & associated datetimes:
+        gf_ppfd = numpy.array([])
+        gf_dates = numpy.array([])
+
+        # Get daily PPFD values (in a numpy.array) from database:
+        # @TODO: create get_daily_ppfd function
+        (daily_ts, daily_ppfd) = self.get_daily_ppfd(cur_date)
+
+        # Check to see if any gaps are present in current day's observations:
+        number_obs = len(daily_ppfd)
+        if number_obs < 49:
+            # Gaps are present:
+            gapfill_dict = {}
+
+            # Create start and end datetime objects for this day:
+            start_time = datetime.datetime(
+                cur_date.year, cur_date.month, cur_date.day, 0, 0, 0)
+
+            end_time = datetime.datetime(
+                cur_date.year, cur_date.month, cur_date.day, 23, 59, 59)
+
+            # Initialize dictionary values with half-hourly timestamp keys:
+            cur_time = start_time
+            while cur_time < end_time:
+                my_time = "%s" % (cur_time.time())
+                gapfill_dict[my_time] = 0.0
+
+                # Add datetime object to array of monthly timestamps:
+                gf_dates = numpy.append(gf_dates, [cur_time, ])
+
+                cur_time += datetime.timedelta(minutes=30)
+
+            # Convert date to Julian day:
+            jday = cur_date.timetuple().tm_yday
+
+            # Calculate daily ET solar radiation curve:
+            (flux_lon, flux_lat) = get_lon_lat(station)
+            et_solar = SOLAR_TOA(flux_lat, flux_lon)
+            et_solar.calculate_daily_fluxes(jday, cur_date.year)
+
+            # Get satellite measurement of solar rad (SWdown) [W m-2]:
+            grid_station = flux_to_grid(station)
+            grid_msvidx = get_msvidx(grid_station, 'SWdown')
+            grid_srad = get_data_point(grid_msvidx, cur_date)
+
+            # Convert to daily shortwave radiation [J m-2]:
+            # NOTE: if None, then gridded data is not available, so set it
+            #       equal to modeled
+            if grid_srad is not None:
+                grid_srad *= (86400.0)
+            else:
+                grid_srad = et_solar.ho_jm2
+
+            # Calculate scaling factor (i.e., observed/modeled):
+            if et_solar.ho_jm2 != 0:
+                sfactor = grid_srad/et_solar.ho_jm2
+            else:
+                sfactor = 1.0
+
+            # Add scaled half-hourly PPFD to dictionary [umol m-2 s-1]:
+            for i in range(48):
+                val = et_solar.ppfd_hh[i]
+                my_time = "%s" % et_solar.local_time[i].time()
+                gapfill_dict[my_time] = sfactor*val
+
+            # Add observations to gapfill dictionary & save for output:
+            ppfd_obs = {}
+            for i in range(number_obs):
+                my_time = "%s" % daily_ts[i].time()
+                gapfill_dict[my_time] = daily_ppfd[i]
+                ppfd_obs[my_time] = daily_ppfd[i]
+
+            # Save to PPFD time series:
+            gf_ppfd = numpy.append(
+                gf_ppfd,
+                [gapfill_dict[x] for x in sorted(gapfill_dict.keys())])
+
+        else:
+            # No gaps; append daily series
+            #   NOTE: drop last entry from daily_ppfd (midnight next day)
+            gf_ppfd = daily_ppfd[0:-1]
+            gf_dates = daily_ts[0:-1]
+
+        return (gf_dates, gf_ppfd)
+
     def get_data_point(self, station, var, tp):
         """
-        Name:     get_data_points
+        Name:     GPSQL.get_data_points
         Input:    - str, station name (station)
                   - str, variable name (var)
                   - datetime.date, time point (tp)

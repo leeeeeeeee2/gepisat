@@ -4,7 +4,7 @@
 #
 # VERSION 2.2.0-dev
 #
-# LAST UPDATED: 2016-05-13
+# LAST UPDATED: 2016-05-20
 #
 # ---------
 # citation:
@@ -117,6 +117,7 @@
 #  - ppfd and nee records flipped in monthly_ppfd_nee tuples [13.07.18]
 #    --> for some reason ppfd and nee are received in the main code in the
 #        opposite order as sent
+#    --> due to the order of the msvidx (NEE comes before PPFD) [16.05.20]
 # VERSION 0.2.1
 #  - updated update_guess:
 #    --> based on first round of summary statistics [13.07.20]
@@ -424,9 +425,10 @@ import numpy
 
 from data import DATA
 from db_setup import connectSQL
-from flux_parti import STAGE1
+from flux_parti import FLUX_PARTI
 from lue import LUE
 from solar import SOLAR_TOA
+from utilities import add_one_month
 
 
 ###############################################################################
@@ -444,22 +446,6 @@ def add_one_day(dt0):
     """
     dt1 = dt0 + datetime.timedelta(days=1)
     return dt1
-
-
-def add_one_month(dt0):
-    """
-    Name:     add_one_month
-    Input:    datetime.date (dt0)
-    Output:   datetime.date (dt3)
-    Features: Adds one month to datetime
-    Ref:      A. Balogh (2010), ActiveState Code
-              http://code.activestate.com/recipes/577274-subtract-or-add-a-
-              month-to-a-datetimedate-or-datet/
-    """
-    dt1 = dt0.replace(day=1)
-    dt2 = dt1 + datetime.timedelta(days=32)
-    dt3 = dt2.replace(day=1)
-    return dt3
 
 
 def simpson(my_array, h):
@@ -561,6 +547,8 @@ def daily_gpp(station, cur_date):
               - partition
               - gapfill_ppfd_day
               - calc_daily_gpp
+
+    @TODO:    incorporate DATA class here somehow
     """
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Get the monthly partitioning parameters
@@ -573,7 +561,7 @@ def daily_gpp(station, cur_date):
 
     # Calculate partitioning parameters:
     if mo_nee and mo_ppfd:
-        mo_parti = STAGE1(mo_ppfd, mo_nee, station, month_date)
+        mo_parti = FLUX_PARTI(mo_ppfd, mo_nee, station, month_date)
         mo_parti.partition(to_write=False, rm_out=True)
 
         # ~~~~~~~~~~~~~~~~~~~
@@ -841,72 +829,6 @@ def get_daily_ppfd(station, start_date):
         return (time_vals, ppfd_vals)
 
 
-def monthly_ppfd_nee(station, start_date):
-    """
-    Name:     monthly_ppfd_nee
-    Input:    - str, station name (station)
-              - datetime.date (start_date)
-    Output:   tuple, PPFD and NEE observations
-              - numpy.ndarray, PPFD (ppfd_vals)
-              - numpy.ndarray, NEE (nee_vals)
-    Features: Returns one month of PPFD-NEE observation pairs for a given
-              station and month
-    Depends:  - add_one_month
-              - connectSQL
-              - get_msvidx
-    """
-    # Get msvidx values for specified station
-    ppfd_idx = get_msvidx(station, 'PPFD_f')
-    nee_idx = get_msvidx(station, 'NEE_f')
-
-    # Increment start date one month:
-    end_date = add_one_month(start_date)
-
-    # SQL query parameters:
-    params = (ppfd_idx, nee_idx, start_date, end_date, ppfd_idx, nee_idx)
-
-    # Define query
-    # NOTE: okay to use string concatenation % because ppfd and nee are
-    # function return values:
-    q = (
-        "SELECT * "
-        "FROM crosstab('"
-        "select data_set.datetime, data_set.msvidx, data_set.data "
-        "from data_set "
-        "where data_set.msvidx = ''%s'' "
-        "or data_set.msvidx = ''%s'' "
-        "and data_set.datetime between date ''%s'' and date ''%s'' "
-        "order by 1,2', "
-        "'select distinct data_set.msvidx from data_set "
-        "where data_set.msvidx = ''%s'' "
-        "or data_set.msvidx = ''%s'' order by 1') "
-        "AS ct(row_name TIMESTAMP, ppfd FLOAT, nee FLOAT);"
-        ) % params
-
-    # Connect to database and start a cursor:
-    con = connectSQL()
-    if con is not None:
-        cur = con.cursor()
-
-        # Execute query and fetch results:
-        cur.execute(q)
-        ppfd_vals = numpy.array([])
-        nee_vals = numpy.array([])
-        if cur.rowcount > 0:
-            for record in cur:
-                ppfd = record[1]
-                nee = record[2]
-
-                # Only save matched pairs:
-                if (ppfd and nee):
-                    nee_vals = numpy.append(nee_vals, nee)
-                    ppfd_vals = numpy.append(ppfd_vals, ppfd)
-
-        con.close()
-
-        return (ppfd_vals, nee_vals)
-
-
 ###############################################################################
 # MAIN PROGRAM
 ###############################################################################
@@ -927,32 +849,26 @@ if __name__ == "__main__":
 
     # Iterate through stations:
     for station in my_data.stations:
-        # Initialize station's LUE & daily GPP output file:
-        lue_file = my_data.get_lue_file(station)
-        gpp_file = my_data.get_gpp_file(station)
-
-        # Get first/last dates for station data:
-        sd, ed = my_data.find_date_range(station)
-
-        # Get flux station's corresponding 0.5-degree grid station:
-        hdg_station = my_data.find_station_grid(station)
-
-        # Get station's elevation & atmospheric pressure:
-
-        # !!!!! STOPPED HERE --- SEE DATA CLASS'S find_elv_pressure
-        elv, patm = get_pressure(station)
+        # Initialize station data:
+        my_data.set_working_station(station)
 
         # Process each month in time:
+        sd = my_data.start_date
+        ed = my_date.end_date
         while sd < ed:
             # Get PPFD and NEE array pairs [umol m-2 s-1]:
-            #   NOTE: accepts in opposite order as sent
-            monthly_nee, monthly_ppfd = monthly_ppfd_nee(station, sd)
+            monthly_nee, monthly_ppfd = my_data.find_monthly_nee_ppfd(sd)
+
+            # Initialize a FLUX_PARTI class:
+            my_parter = FLUX_PARTI(monthly_ppfd, monthly_nee, station, sd)
 
             # Process if enough data was found:
             if (len(monthly_ppfd) > 3 and len(monthly_nee) > 3):
-                # Perform GPP partitioning (returns FLUX_PARTI class object):
-                monthly_parti = STAGE1(monthly_ppfd, monthly_nee, station, sd)
-                monthly_parti.partition(to_write=False, rm_out=True)
+
+                # Perform GPP partitioning:
+                my_parter.partition(True)
+
+                # !!!!! STOPPED HERE - @TODO - !!!!!!!
 
                 # Perform half-hourly PPFD gapfilling (umol m-2 s-1):
                 (gf_time, gf_ppfd) = gapfill_ppfd_month(station,
@@ -960,13 +876,13 @@ if __name__ == "__main__":
                                                         to_write=False)
 
                 # Calculate half-hourly GPP (umol m-2 s-1)
-                gf_gpp, gf_gpp_err = monthly_parti.calc_gpp(gf_ppfd)
+                gf_gpp, gf_gpp_err = my_parter.calc_gpp(gf_ppfd)
 
                 # Calculate daily GPP (mol m-2):
                 # gpp_daily = calc_daily_gpp(gf_time, gf_gpp, gf_gpp_err)
 
                 # Continue processing if partitioning was successful:
-                if monthly_parti.mod_select > 0:
+                if my_parter.mod_select > 0:
                     # The new LUE model:
                     # GPP = f(PPFD, fAPAR, VPD, CPA, Tair, Patm, CO2)
                     #  - monthly variables: PPFD, fAPAR, CPA, VPD, Tair
@@ -1011,13 +927,10 @@ if __name__ == "__main__":
                                            co2_annual,              # ppm
                                            patm,                    # Pa
                                            elv)                     # m
-            else:
-                # Create an 'empty' class:
-                monthly_parti = STAGE1(monthly_ppfd, monthly_nee, station, sd)
 
             # Save class summary statistics:
             SFILE = open(my_data.summary_file, 'a')
-            SFILE.write(monthly_parti.summary_statistics())
+            SFILE.write(my_parter.summary_statistics())
             SFILE.close()
 
             # Increment date:

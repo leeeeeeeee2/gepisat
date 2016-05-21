@@ -2,7 +2,7 @@
 #
 # const.py
 #
-# LAST UPDATED: 2016-05-13
+# LAST UPDATED: 2016-05-20
 #
 # ~~~~~~~~~
 # citation:
@@ -28,6 +28,6 @@ kL = 0.0065     # temperature lapse rate, K/m (Allen, 1973)
 kMa = 0.028963  # molecular weight of dry air, kg/mol (Tsilingiris, 2008)
 komega = 283.0  # longitude of perihelion for 2000 CE, degrees (Berger, 1978)
 kPo = 101325    # standard atmosphere, Pa (Allen, 1973)
-kR = 8.31447     # universal gas constant, J/mol/K (Moldover et al., 1988)
+kR = 8.31447    # universal gas constant, J/mol/K (Moldover et al., 1988)
 kTo = 288.15    # base temperature, K (Berberan-Santos et al., 1997)
 pir = (numpy.pi/180.0)

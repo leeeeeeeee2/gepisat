@@ -4,7 +4,7 @@
 #
 # VERSION 2.2.0-dev
 #
-# LAST UPDATED: 2016-05-13
+# LAST UPDATED: 2016-05-20
 #
 # ---------
 # citation:
@@ -22,13 +22,9 @@ import os
 
 import numpy
 
-from const import kPo
-from const import kTo
-from const import kL
-from const import kG
-from const import kR
-from const import kMa
 from db_setup import connectSQL
+from utilities import add_one_month
+from utilities import elv2pres
 from utilities import init_summary_dict
 from utilities import grid_centroid
 
@@ -42,6 +38,9 @@ class DATA(object):
     Features: This class performs the data IO
     History   Version 2.2.0-dev
               - class inherits object for Python2/3 compatibility [16.05.13]
+              - created end and start date properties [16.05.20]
+              - created set working station function [16.05.20]
+              - created find elv, pressure, & monthly NEE:PPFD pairs [16.05.20]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -72,6 +71,16 @@ class DATA(object):
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Property Definitions
     # ////////////////////////////////////////////////////////////////////////
+    @property
+    def end_date(self):
+        """Current station's end date"""
+        if self.fh._enddate is not None:
+            return self.fh._enddate
+        else:
+            print("No end date found; please set working station.")
+            self.logger.warning("End date not set; returning epoch")
+            return datetime.date(2000, 1, 1)
+
     @property
     def lue_file(self):
         """LUE summary file with output directory"""
@@ -119,6 +128,16 @@ class DATA(object):
                 else:
                     self.logger.error("Directory %s does not exist!", temp_val)
                     raise IOError("Output directory does not exist!")
+
+    @property
+    def start_date(self):
+        """Current station's starting date"""
+        if self.fh._startdate is not None:
+            return self.fh._startdate
+        else:
+            print("No start date found; please set working station.")
+            self.logger.warning("Start date not set; returning epoch")
+            return datetime.date(2000, 1, 1)
 
     @property
     def stations(self):
@@ -198,8 +217,8 @@ class DATA(object):
         Name:     DATA.find_date_range
         Inputs:   str, station name (station)
         Outputs:  tuple, starting and ending dates
-        Features: Searches for starting and ending dates for a given station's
-                  available data
+        Features: Convenience function that searches for starting and ending
+                  dates for a given station's available data
         """
         try:
             (sd, ed) = self.fh.get_date_range(station)
@@ -218,16 +237,39 @@ class DATA(object):
 
     def find_elv_pressure(self, station):
         """
-        @TODO
+        Name:     DATA.find_elv_pressure
+        Inputs:   str, station name (station)
+        Outputs:  tuple of floats
+                  * float, elevation, m
+                  * float, atm. pressure, Pa
+        Features: Convenience function for getting a station's elevation and
+                  pressure.
         """
-        elv, atm = self.fh.get_elap(station)
+        return self.fh.get_elap(station)
+
+    def find_monthly_nee_ppfd(self, start_date):
+        """
+        Name:     DATA.find_monthly_nee_ppfd
+        Inputs:   datetime.date, starting date of the search month (start_date)
+        Outputs:  tuple of arrays
+                  * numpy.ndarray, NEE
+                  * numpy.ndarray, PPFD
+        Features: Returns tuple of data arrays corresponding to the current
+                  flux station's NEE and PPFD pairs for a given month
+        """
+        if self.fh._station is not None:
+            return self.fh.get_monthly_flux_pairs(self.fh._station, start_date)
+        else:
+            self.logger.error("No working station set.")
+            raise IOError("No flux station found! Please set working station.")
 
     def find_station_grid(self, station):
         """
         Name:     DATA.find_station_grid
         Inputs:   str, station name (station)
         Outputs:  str, grid name
-        Features: Returns the grid name for a given station
+        Features: Convenience function that returns the grid name for a given
+                  station
         """
         try:
             grid = self.fh.flux_to_grid(station)
@@ -294,9 +336,39 @@ class DATA(object):
         my_result = self.fh.get_data_point(station, var, tp)
         return my_result
 
+    def print_current_vals(self):
+        """
+        @TODO: create data properties that references each of these
+        """
+        print("Station: %s" % (self.fh._station))
+        print("  lon:   %0.3f deg" % (self.fh._lon))
+        print("  lat:   %0.3f deg" % (self.fh._lat))
+        print("  elv:   %0.3f m" % (self.fh._elv))
+        print("  P:     %0.3f kPa" % (1e-3*self.fh._atmpres))
+        print("  start: %s" % (self.fh._startdate))
+        print("  end:   %s" % (self.fh._enddate))
+        print("  grid:  %s" % (self.fh._grid))
+
+    def set_working_station(self, station):
+        """
+        Name:     DATA.set_working_station
+        Inputs:   str, flux station (station)
+        Outputs:  None.
+        Features: Prepares station parameters
+        """
+        if station in self.stations:
+            self.logger.info("Setting up for station %s", station)
+            # Set station in file handle:
+            self.fh.set_working_station(station)
+
+            # self._workingstation = station
+            # self._startdate, self._enddate = self.find_date_range(station)
+            # self._grid = self.find_station_grid(station)
+            # self._elv, self._atmpres = self.find_elv_pressure(station)
+
     def write_summary(self):
         """
-        Name:     DATA.create_summary_file
+        Name:     DATA.write_summary
         Inputs:   None.
         Outputs:  None.
         Features: Writes summary values to file
@@ -330,6 +402,9 @@ class GPSQL(object):
     Features: This class performs data IO with the GePiSaT PSQL database
     History:  Version 2.2.0-dev
               - class inherits object for Python2/3 compatibility [16.05.13]
+              - added get monthly NEE:PPFD pairs [16.05.20]
+              - created reset properties function [16.05.20]
+              - created set working station function [16.05.20]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -343,6 +418,7 @@ class GPSQL(object):
         # Create a class logger
         self.logger = logging.getLogger(__name__)
         self.logger.info("GPSQL class initialized")
+        self.reset_properties()
 
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
@@ -360,6 +436,8 @@ class GPSQL(object):
         """
         # Get lat and lon of flux tower:
         (fst_lon, fst_lat) = self.get_lon_lat(flux_station)
+        self._lon = fst_lon
+        self._lat = fst_lat
 
         # Determine grid centroid lon and lat:
         (grd_lon, grd_lat) = grid_centroid(fst_lon, fst_lat)
@@ -432,6 +510,7 @@ class GPSQL(object):
                 my_result = None
                 self.logger.warning("No data found!")
         else:
+            my_result = None
             self.logger.warning("Failed to connect to GePiSaT database")
 
         return my_result
@@ -448,9 +527,13 @@ class GPSQL(object):
         Depends:  - connectSQL
                   - get_msvidx
         """
-        # Get msvidx values for specified station:
-        ppfdi = self.get_msvidx(station, 'PPFD_f')
-        neei = self.get_msvidx(station, 'NEE_f')
+        if station == self._station:
+            ppfdi = self._ppfd_msv
+            neei = self._nee_msv
+        else:
+            # Get msvidx values for specified station:
+            ppfdi = self.get_msvidx(station, 'PPFD_f')
+            neei = self.get_msvidx(station, 'NEE_f')
 
         # SQL query parameters:
         params = (ppfdi, neei)
@@ -506,6 +589,7 @@ class GPSQL(object):
         Features: Returns the elevation and atmospheric pressure for a given
                   station
         Depends:  - connectSQL
+                  - elv2pres
                   - flux_to_grid
                   - get_data_point
         Ref:      Allen et al. (1998)
@@ -540,14 +624,21 @@ class GPSQL(object):
         # Check to see that elevation is valid:
         if float(station_ele) == -9999:
             # Find CRU Elv:
+            self.logger.debug("Trying grid elevation for station %s", station)
             elv_sd = datetime.date(2006, 6, 1)
             hdg_station = self.flux_to_grid(station)
             elv_data = self.get_data_point(hdg_station, 'Elv', elv_sd)
-            station_ele = elv_data
+            if elv_data is None:
+                station_ele = -9999
+            else:
+                station_ele = elv_data
 
         # Convert elevation to pressure, Pa:
         z = float(station_ele)
-        patm = kPo*(1.0 - kL*z/kTo)**(kG*kMa/(kR*kL))
+        if z == -9999:
+            patm = -9999
+        else:
+            patm = elv2pres(z)
 
         return (z, patm)
 
@@ -588,6 +679,87 @@ class GPSQL(object):
         else:
             self.logger.error("Failed to connect to GePiSaT database!")
             raise IOError("Failed to connect to GePiSaT database!")
+
+    def get_monthly_flux_pairs(self, station, start_date):
+        """
+        Name:     get_monthly_flux_pairs
+        Input:    - str, station name (station)
+                  - datetime.date (start_date)
+        Output:   tuple, PPFD and NEE observations
+                  - numpy.ndarray, NEE (nee_vals)
+                  - numpy.ndarray, PPFD (ppfd_vals)
+        Features: Returns one month of PPFD-NEE observation pairs for a given
+                  station and month
+        Depends:  - add_one_month
+                  - connectSQL
+                  - get_msvidx
+        """
+        if station == self._station:
+            ppfd_idx = self._ppfd_msv
+            nee_idx = self._nee_msv
+        else:
+            # Get msvidx values for specified station
+            ppfd_idx = self.get_msvidx(station, 'PPFD_f')
+            nee_idx = self.get_msvidx(station, 'NEE_f')
+
+        # Increment start date one month:
+        end_date = add_one_month(start_date)
+
+        # SQL query parameters:
+        # NOTE: nee msvidx comes before ppfd msvidx (i.e., 01 v. 15)
+        params = (nee_idx, ppfd_idx, start_date, end_date, nee_idx, ppfd_idx)
+
+        # Define query
+        # NOTE: okay to use string concatenation because ppfd and nee are
+        # function return values:
+        q = (
+            "SELECT * "
+            "FROM crosstab('"
+            "select datetime, msvidx, data from data_set "
+            "where msvidx = ''%s'' "
+            "or msvidx = ''%s'' "
+            "and datetime between date ''%s'' and date ''%s'' "
+            "order by 1, 2', "
+            "'select distinct msvidx from data_set "
+            "where msvidx = ''%s'' "
+            "or msvidx = ''%s'' order by 1') "
+            "AS ct(row_name TIMESTAMP, nee FLOAT, ppfd FLOAT);"
+            ) % params
+
+        # Initialize empty arrays:
+        nee_vals = numpy.array([])
+        ppfd_vals = numpy.array([])
+
+        # Connect to database and start a cursor:
+        self.logger.debug("Connecting to GePiSaT database ...")
+        con = connectSQL()
+        if con is not None:
+            cur = con.cursor()
+
+            try:
+                # Execute query and fetch results:
+                cur.execute(q)
+            except:
+                self.logger.exception("Search failed.")
+                raise
+            else:
+                if cur.rowcount > 0:
+                    for record in cur:
+                        # NOTE: nee is ordered before ppfd because nee's
+                        #       msvidx value (i.e., *.01) comes before ppfd's
+                        #       msvidx value (i.e., *.15)
+                        _, nee, ppfd = record
+
+                        # Only save matched pairs:
+                        if ppfd is not None and nee is not None:
+                            nee_vals = numpy.append(nee_vals, nee)
+                            ppfd_vals = numpy.append(ppfd_vals, ppfd)
+            finally:
+                con.close()
+        else:
+            self.logger.warning("Failed to connect to GePiSaT database")
+
+        return (nee_vals, ppfd_vals)
 
     def get_msvidx(self, station, variable):
         """
@@ -669,10 +841,77 @@ class GPSQL(object):
 
         return results
 
+    def reset_properties(self):
+        """
+        Name:     GPSQL.reset_properties
+        Inputs:   None.
+        Outputs:  None.
+        Features: Resets the station properties
+        """
+        self._station = None
+        self._grid = None
+        self._lon = None
+        self._lat = None
+        self._elv = None
+        self._atmpres = None
+        self._startdate = None
+        self._enddate = None
+        self._ppfd_msv = None
+        self._nee_msv = None
 
-###############################################################################
-# FUNCTIONS
-###############################################################################
+    def set_working_station(self, station):
+        """
+        Name:     GPSQL.set_working_station
+        Inputs:   str, flux station (station)
+        Outputs:  None.
+        Features: Sets the appropriate class variables for a given station
+        Depends:  - flux_to_grid
+                  - get_date_range
+                  - get_elap
+        """
+        self.logger.debug("Setting up station %s ...", station)
+        self._station = station
+
+        # Set PPFD and NEE msvidx values:
+        self._ppfd_msv = self.get_msvidx(station, "PPFD_f")
+        self._nee_msv = self.get_msvidx(station, "NEE_f")
+        self.logger.debug("Found PPFD msvidx %s", self._ppfd_msv)
+        self.logger.debug("Found NEE msvidx %s", self._nee_msv)
+
+        # Search for equivalent grid station (also sets lon and lat):
+        try:
+            self._grid = self.flux_to_grid(station)
+        except IOError:
+            self.logger.error(("Search failed. Check to make certain that "
+                               "your credentials for the database are "
+                               "correct."))
+            self._grid = None
+        except:
+            self.logger.exception("Encountered unknown error.")
+            raise
+        else:
+            self.logger.debug("Found grid %s", self._grid)
+
+        # Search for starting and ending dates:
+        try:
+            self._startdate, self._enddate = self.get_date_range(station)
+        except IOError:
+            self.logger.error(("Search failed. Check to make certain that "
+                               "your credentials for the database are "
+                               "correct."))
+            self._startdate = None
+            self._enddate = None
+        except:
+            self.logger.exception("Encountered unknown error.")
+            raise
+        else:
+            self.logger.debug("Found date range %s to %s" % (
+                self._startdate, self._enddate))
+
+        # Set elevation and pressure:
+        self._elv, self._atmpres = self.get_elap(station)
+        self.logger.debug("Found elevation, %f m, and pressure, %f Pa" % (
+            self._elv, self._atmpres))
 
 
 ###############################################################################
@@ -696,8 +935,15 @@ if __name__ == '__main__':
     my_data = DATA()
     my_data.output_dir = "/home/user/Desktop/temp/out"
     my_stations = my_data.find_stations()
-    for station in my_data.stations:
-        grid_station = my_data.find_station_grid(station)
-        print("%s,%s" % (station, grid_station))
+    station = my_data.stations[1]
+    my_data.set_working_station(station)
+    sd = my_data.start_date
+    nee, ppfd = my_data.find_monthly_nee_ppfd(sd)
+    for i in range(len(nee)):
+        print("NEE: %f; PPFD: %f" % (nee[i], ppfd[i]))
+
+    # for station in my_data.stations:
+    #    my_data.set_working_station(station)
+    #    my_data.print_current_vals()
     # my_data.create_summary_file("summary_statistics.txt")
     # my_data.write_summary()

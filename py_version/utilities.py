@@ -2,7 +2,7 @@
 #
 # utilities.py
 #
-# LAST UPDATED: 2016-05-13
+# LAST UPDATED: 2016-05-20
 #
 # ---------
 # citation:
@@ -20,12 +20,34 @@ import logging
 import numpy
 import scipy.stats
 
+from const import kPo
+from const import kTo
+from const import kL
+from const import kG
+from const import kR
+from const import kMa
 from const import pir
 
 
 ###############################################################################
 # FUNCTIONS
 ###############################################################################
+def add_one_month(dt0):
+    """
+    Name:     add_one_month
+    Input:    datetime.date (dt0)
+    Output:   datetime.date (dt3)
+    Features: Adds one month to datetime
+    Ref:      A. Balogh (2010), ActiveState Code
+              http://code.activestate.com/recipes/577274-subtract-or-add-a-
+              month-to-a-datetimedate-or-datet/
+    """
+    dt1 = dt0.replace(day=1)
+    dt2 = dt1 + datetime.timedelta(days=32)
+    dt3 = dt2.replace(day=1)
+    return dt3
+
+
 def calc_statistics(my_array):
     """
     Name:     calc_statistics
@@ -56,14 +78,11 @@ def calc_statistics(my_array):
             std_val = 1e-4
 
         skew_val = (
-            sum((my_array - ave_val)**3) /
-            ((len(my_array) - 1)*std_val**3)
-            )
+            sum((my_array - ave_val)**3)/((len(my_array) - 1)*std_val**3))
         kurt_val = (
-            sum((my_array - ave_val)**4) /
-            ((len(my_array) - 1)*std_val**4) - 3
-            )
+            sum((my_array - ave_val)**4)/((len(my_array) - 1)*std_val**4) - 3)
     else:
+        logging.warning("Insufficient data for stats calculation")
         # Maintain initial quantity values:
         max_val = 0.0
         min_val = 0.0
@@ -103,11 +122,137 @@ def dsin(x):
     return numpy.sin(x*pir)
 
 
-def goodness_of_fit(modvals, obsvals, nparams):
+def elv2pres(z):
+    """
+    Name:     elv2pres
+    Input:    float, elevation above sea level (z), m
+    Output:   float, atmospheric pressure, Pa
+    Features: Calculates atm. pressure for a given elevation
+    Depends:  Global constants:
+              - kPo, base press.   - kTo, base temp.
+              - kL, lapse rate     - kMa, mole. wt. of air
+              - kG, std. gravity   - kR, gas const.
+    Ref:      Allen et al. (1998)
+    """
+    logging.debug("estimating atmospheric pressure at %f m", z)
+    p = kPo*(1.0 - kL*z/kTo)**(kG*kMa/(kR*kL))
+    return p
+
+
+def get_hm_estimates(max_n, min_n, std_n, max_p, min_p):
+    """
+    Name:     get_hm_estimates
+    Inputs:   - float, maximum NEE value (max_n)
+              - float, minimum NEE value (min_n)
+              - float, std. dev. of NEE values (std_n)
+              - float, maximum PPFD value (max_p)
+              - float, minimum PPFD value (min_p)
+    Outputs:  tuple of estimates
+    Features: Returns estimate values for hyperbolic model fitting based
+              on given data statistics
+    """
+    hm_foo = 3.83*std_n
+    hm_r = 0.69*std_n
+    try:
+        hm_alpha = 1.96*(max_n - min_n)/(max_p - min_p)
+    except ZeroDivisionError:
+        hm_alpha = 1.96*(max_n - min_n)/1.0e-3
+    else:
+        if abs(hm_alpha) <= 5.0e-4:
+            hm_alpha = 1.0e-3
+
+    return (hm_foo, hm_alpha, hm_r)
+
+
+def get_lm_estimates(max_n, min_n, ave_n, std_n, max_p, min_p, ave_p, std_p):
+    """
+    Name:     get_lm_estimates
+    Inputs:   - float, maximum NEE value (max_n)
+              - float, minimum NEE value (min_n)
+              - float, average NEE value (ave_n)
+              - float, std. deviation of NEE values (std_n)
+              - float, maximum PPFD value (max_p)
+              - float, minimum PPFD value (min_p)
+              - float, average PPFD value (ave_p)
+              - float, std. deviation of PPFD values (std_p)
+    Outputs:  tuple of estimates
+    Features: Returns estimate values for linear model fitting based on
+              given data statistics
+    """
+    lm_r = 0.899*std_n + 0.827*ave_n + 0.00628*ave_p - 0.008*std_p
+    try:
+        lm_alpha = 0.672*(max_n - min_n)/(max_p - min_p)
+    except ZeroDivisionError:
+        lm_alpha = 0.672*(max_n - min_n)/1.0e-3
+    else:
+        if abs(lm_alpha) <= 5.0e-4:
+            lm_alpha = 1.0e-3
+
+    return (lm_alpha, lm_r)
+
+
+def get_outliers(fit, obs, np):
+    """
+    Name:     get_outliers
+    Input:    - numpy.ndarray, model fitted values (fit)
+              - numpy.ndarray, observations (obs)
+              - int, number of parameters (np)
+    Output:   tuple of indexes
+    Features: Returns indexes of outliers found using Peirce's criterion
+    Depends:  - goodness_of_fit
+              - peirce_dev
+    """
+    # Calculate mean-square error:
+    mse, rmse, rsqr = goodness_of_fit(fit, obs, np)
+
+    # Calculate the square errors:
+    sq_errors = (obs - fit)**2.0
+
+    # Set Peirce values:
+    peirce_cap_n = len(obs)
+    peirce_lc_n = 1
+    peirce_m = np
+
+    # Calculate tolerance
+    peirce_x2 = peirce_dev(peirce_cap_n, peirce_lc_n, peirce_m)
+    peirce_delta2 = mse*peirce_x2
+
+    # Find if/where exceedance occurs:
+    outliers_index = numpy.where(sq_errors > peirce_delta2)
+    outliers_found = len(outliers_index[0])
+
+    # Run check again if no outliers are found in first attempt:
+    if (outliers_found == 0):
+        peirce_lc_n = 2
+        peirce_x2 = peirce_dev(peirce_cap_n, peirce_lc_n, peirce_m)
+        peirce_delta2 = mse*peirce_x2
+        outliers_index = numpy.where(sq_errors > peirce_delta2)
+        outliers_found = len(outliers_index[0])
+
+        # Reset n
+        peirce_lc_n = 1
+
+    # Increment n until it is greater than number of outliers found:
+    while (peirce_lc_n <= outliers_found):
+        peirce_lc_n += 1
+
+        # Check that n < N:
+        if peirce_lc_n >= peirce_cap_n:
+            peirce_lc_n = outliers_found + 1.0
+        else:
+            peirce_x2 = peirce_dev(peirce_cap_n, peirce_lc_n, peirce_m)
+            peirce_delta2 = mse*peirce_x2
+            outliers_index = numpy.where(sq_errors > peirce_delta2)
+            outliers_found = len(outliers_index[0])
+
+    return outliers_index
+
+
+def goodness_of_fit(fit, obs, nparams):
     """
     Name:     goodness_of_fit
-    Input:    - numpy.ndarray, modeled values (modvals)
-              - numpy.ndarray, observed values (obsvals)
+    Input:    - numpy.ndarray, modeled values (fit)
+              - numpy.ndarray, observed values (obs)
               - int, number of model parameters (nparams)
     Output:   tuple, goodness of fit statistics
               - float, mean squared error (mse)
@@ -123,25 +268,24 @@ def goodness_of_fit(modvals, obsvals, nparams):
 
     # Check that both have the same number of values and that the length
     # is greater than 4, no divide by zero issues:
-    if len(obsvals) > 4 and len(modvals) == len(obsvals):
+    if len(obs) > 4 and len(fit) == len(obs):
+        n = len(obs)
+
         # Sum of the squared error (SSE):
-        sse = sum((obsvals - modvals)**2.0)
+        sse = sum((obs - fit)**2.0)
 
         # Mean squared error:
-        mse = float(sse)/(len(obsvals) - nparams)
+        mse = float(sse)/(n - nparams)
 
         # Total sum of the squares (SST):
-        sst = sum((obsvals - float(sum(obsvals))/len(obsvals))**2.0)
+        sst = sum((obs - float(sum(obs))/n)**2.0)
 
         # R-squared:
         # r2 = 1.0 - float(sse)/sst
-        r2_adj = 1.0 - (
-            float(sse)/sst*(len(obsvals) - 1.0) /
-            float(len(obsvals) - nparams - 1.0)
-            )
+        r2_adj = 1.0 - (float(sse)/sst*(n - 1.0) / float(n - nparams - 1.0))
 
         # RMSE:
-        rmse = numpy.sqrt(float(sse)/len(obsvals))
+        rmse = numpy.sqrt(float(sse)/n)
 
     return (mse, rmse, r2_adj)
 
@@ -250,8 +394,6 @@ def init_summary_dict():
     Inputs:   None.
     Outputs:  dict, summary fields
     Features: Returns an empty summary dictionary
-
-    @TODO:    write getters and setters in flux_parti for this dictionary
     """
     summary_dict = {
         1: {"name": "name", "val": ""},
@@ -260,63 +402,63 @@ def init_summary_dict():
         4: {"name": "n_h", "val": 0},
         5: {"name": "n_l", "val": 0},
         6: {"name": "foo_est_obs_h", "val": -9999.0},
-        7: {"name": "foo_opt_obs_h", "val": 1.0},
+        7: {"name": "foo_opt_obs_h", "val": -9999.0},
         8: {"name": "foo_err_obs_h", "val": 0.0},
         9: {"name": "foo_t_obs_h", "val": 0.0},
         10: {"name": "foo_p_obs_h", "val": 0.0},
         11: {"name": "foo_est_ro_h", "val": -9999.0},
-        12: {"name": "foo_opt_ro_h", "val": 1.0},
+        12: {"name": "foo_opt_ro_h", "val": -9999.0},
         13: {"name": "foo_err_ro_h", "val": 0.0},
         14: {"name": "foo_t_ro_h", "val": 0.0},
         15: {"name": "foo_p_ro_h", "val": 0.0},
         16: {"name": "alpha_est_obs_h", "val": -9999.0},
-        17: {"name": "alpha_opt_obs_h", "val": 1.0},
+        17: {"name": "alpha_opt_obs_h", "val": -9999.0},
         18: {"name": "alpha_err_obs_h", "val": 0.0},
         19: {"name": "alpha_t_obs_h", "val": 0.0},
         20: {"name": "alpha_p_obs_h", "val": 0.0},
         21: {"name": "alpha_est_ro_h", "val": -9999.0},
-        22: {"name": "alpha_opt_ro_h", "val": 1.0},
+        22: {"name": "alpha_opt_ro_h", "val": -9999.0},
         23: {"name": "alpha_err_ro_h", "val": 0.0},
         24: {"name": "alpha_t_ro_h", "val": 0.0},
         25: {"name": "alpha_p_ro_h", "val": 0.0},
         26: {"name": "alpha_est_obs_l", "val": -9999.0},
-        27: {"name": "alpha_opt_obs_l", "val": 1.0},
+        27: {"name": "alpha_opt_obs_l", "val": -9999.0},
         28: {"name": "alpha_err_obs_l", "val": 0.0},
         29: {"name": "alpha_t_obs_l", "val": 0.0},
         30: {"name": "alpha_p_obs_l", "val": 0.0},
         31: {"name": "alpha_est_ro_l", "val": -9999.0},
-        32: {"name": "alpha_opt_ro_l", "val": 1.0},
+        32: {"name": "alpha_opt_ro_l", "val": -9999.0},
         33: {"name": "alpha_err_ro_l", "val": 0.0},
         34: {"name": "alpha_t_ro_l", "val": 0.0},
         35: {"name": "alpha_p_ro_l", "val": 0.0},
         36: {"name": "r_est_obs_h", "val": -9999.0},
-        37: {"name": "r_opt_obs_h", "val": 1.0},
+        37: {"name": "r_opt_obs_h", "val": -9999.0},
         38: {"name": "r_err_obs_h", "val": 0.0},
         39: {"name": "r_t_obs_h", "val": 0.0},
         40: {"name": "r_p_obs_h", "val": 0.0},
         41: {"name": "r_est_ro_h", "val": -9999.0},
-        42: {"name": "r_opt_ro_h", "val": 1.0},
+        42: {"name": "r_opt_ro_h", "val": -9999.0},
         43: {"name": "r_err_ro_h", "val": 0.0},
         44: {"name": "r_t_ro_h", "val": 0.0},
         45: {"name": "r_p_ro_h", "val": 0.0},
         46: {"name": "r_est_obs_l", "val": -9999.0},
-        47: {"name": "r_opt_obs_l", "val": 1.0},
+        47: {"name": "r_opt_obs_l", "val": -9999.0},
         48: {"name": "r_err_obs_l", "val": 0.0},
         49: {"name": "r_t_obs_l", "val": 0.0},
         50: {"name": "r_p_obs_l", "val": 0.0},
         51: {"name": "r_est_ro_l", "val": -9999.0},
-        52: {"name": "r_opt_ro_l", "val": 1.0},
+        52: {"name": "r_opt_ro_l", "val": -9999.0},
         53: {"name": "r_err_ro_l", "val": 0.0},
         54: {"name": "r_t_ro_l", "val": 0.0},
         55: {"name": "r_p_ro_l", "val": 0.0},
-        56: {"name": "r2_obs_h", "val": 0.0},
-        57: {"name": "r2_ro_h", "val": 0.0},
-        58: {"name": "rmse_obs_h", "val": 0.0},
-        59: {"name": "rmse_ro_h", "val": 0.0},
-        60: {"name": "r2_obs_l", "val": 0.0},
-        61: {"name": "r2_ro_l", "val": 0.0},
-        62: {"name": "rmse_obs_l", "val": 0.0},
-        63: {"name": "rmse_ro_l", "val": 0.0},
+        56: {"name": "r2_obs_h", "val": -9999.0},
+        57: {"name": "r2_ro_h", "val": -9999.0},
+        58: {"name": "rmse_obs_h", "val": -9999.0},
+        59: {"name": "rmse_ro_h", "val": -9999.0},
+        60: {"name": "r2_obs_l", "val": -9999.0},
+        61: {"name": "r2_ro_l", "val": -9999.0},
+        62: {"name": "rmse_obs_l", "val": -9999.0},
+        63: {"name": "rmse_ro_l", "val": -9999.0},
         64: {"name": "min_ppfd_obs", "val": 0.0},
         65: {"name": "max_ppfd_obs", "val": 0.0},
         66: {"name": "ave_ppfd_obs", "val": 0.0},
@@ -356,9 +498,51 @@ def init_summary_dict():
         100: {"name": "pearson_r_obs", "val": 0.0},
         101: {"name": "pearson_r_ro_h", "val": 0.0},
         102: {"name": "pearson_r_ro_l", "val": 0.0},
-        103: {"name": "model_select", "val": 0}
+        103: {"name": "model_select", "val": None}
     }
     return summary_dict
+
+
+def hyp_model(x, Foo, alpha, R):
+    """
+    Name:     hyp_model
+    Inputs:   - numpy.ndarray, monthly PPFD (x)
+              - float, hyperbolic parameter (Foo)
+              - float, hyperbolic parameter (alpha)
+              - float, hyperbolic parameter (R)
+    Outputs:  numpy.ndarray, modeled NEE
+    Features: Returns array of NEE based on the hyperbolic flux partitioning
+              model in the form: f(x) = (ax + b)/(bx + c)
+    Ref:      Eq. 15, GePiSaT Documentation
+    """
+    a = 1.0*(alpha*R) - 1.0*(alpha*Foo)
+    b = 1.0*(Foo*R)
+    c = 1.0*alpha
+    d = 1.0*Foo
+
+    numerator = 1.0*(a*x) + b
+    denominator = 1.0*(c*x) + d
+
+    # Compensate for zero division by adding a small number to each value:
+    denominator[numpy.where(denominator == 0)] += 1.0e-6
+
+    return (numerator/denominator)
+
+
+def lin_model(x, alpha, R):
+    """
+    Name:     lin_model
+    Input:    - numpy.ndarray, monthly PPFD (x)
+              - float, linear parameter (alpha)
+              - float, linear parameter (R)
+    Output:   - numpy.ndarray, modeled NEE
+    Features: Returns array of NEE based on the linear flux partitioning model
+              in the form: f(x) = ax + b
+    Ref:      Eq. 14, GePiSaT Documentation
+    """
+    a = -1.0*alpha
+    b = R
+    return (a*x + b)
 
 
 def pearsons_r(x, y):
@@ -378,15 +562,17 @@ def pearsons_r(x, y):
     # Initialize Pearson's r:
     pearsonsr = -9999.0
 
-    # Make certain both arrays have equal lengths:
-    if len(x) == len(y):
+    # Make certain both arrays have enough points for regression and are of
+    # equal lengths:
+    if len(x) > 2 and len(x) == len(y):
         try:
             slope, intrcp, pearsonsr, p, sterr = scipy.stats.linregress(x, y)
         except:
             logging.exception("Error calculating Pearson's r")
-            return -9999.0
         else:
-            return pearsonsr
+            logging.debug("Pearson's r = %f", pearsonsr)
+
+    return pearsonsr
 
 
 def peirce_dev(peirce_cap_n, peirce_lc_n, peirce_m):

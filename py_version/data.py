@@ -4,7 +4,7 @@
 #
 # VERSION 2.2.0-dev
 #
-# LAST UPDATED: 2016-05-20
+# LAST UPDATED: 2016-05-21
 #
 # ---------
 # citation:
@@ -12,6 +12,8 @@
 # I. C. Prentice, T. W. Davis, X. M. P. Gilbert, B. D. Stocker, B. J. Evans,
 # H. Wang, and T. F. Keenan, "The Global ecosystem in Space and Time (GePiSaT)
 # Model of the Terrestrial Biosphere," (in progress).
+
+# @TODO: gapfilling methods
 
 ###############################################################################
 # IMPORT MODULES
@@ -23,6 +25,8 @@ import os
 import numpy
 
 from db_setup import connectSQL
+from solar import SOLAR_TOA
+from utilities import add_one_day
 from utilities import add_one_month
 from utilities import elv2pres
 from utilities import init_summary_dict
@@ -41,6 +45,7 @@ class DATA(object):
               - created end and start date properties [16.05.20]
               - created set working station function [16.05.20]
               - created find elv, pressure, & monthly NEE:PPFD pairs [16.05.20]
+              - added properties for fh attributes [16.05.21]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -72,12 +77,77 @@ class DATA(object):
     # Class Property Definitions
     # ////////////////////////////////////////////////////////////////////////
     @property
+    def station(self):
+        """Current working station"""
+        if self.fh._station is not None:
+            return self.fh._station
+        else:
+            self.logger.error("Trying to access station before setting!")
+            raise RuntimeError("Station is not set!")
+
+    @station.setter
+    def station(self, val):
+        raise NotImplementedError("You can not set this parameter this way.")
+
+    @property
+    def lon(self):
+        """Current working station's longitude"""
+        if self.fh._station is not None and self.fh._lon is not None:
+            return self.fh._lon
+        else:
+            self.logger.error("Station or its lon is not set!")
+            raise RuntimeError("Station and/or station lon is not set!")
+
+    @lon.setter
+    def lon(self, val):
+        raise NotImplementedError("You can not set this parameter this way.")
+
+    @property
+    def lat(self):
+        """Current working station's latitide"""
+        if self.fh._station is not None and self.fh._lat is not None:
+            return self.fh._lat
+        else:
+            self.logger.error("Station or its lat is not set!")
+            raise RuntimeError("Station and/or station lat is not set!")
+
+    @lat.setter
+    def lat(self, val):
+        raise NotImplementedError("You can not set this parameter this way.")
+
+    @property
+    def elv(self):
+        """Current working station's elevation"""
+        if self.fh._station is not None and self.fh._elv is not None:
+            return self.fh._elv
+        else:
+            self.logger.error("Station or its elevation is not set!")
+            raise RuntimeError("Station and/or station elv is not set!")
+
+    @elv.setter
+    def elv(self, val):
+        raise NotImplementedError("You can not set this parameter this way.")
+
+    @property
+    def atmpres(self):
+        """Current working station's atm. pressure"""
+        if self.fh._station is not None and self.fh._atmpres is not None:
+            return self.fh._atmpres
+        else:
+            self.logger.error("Station or its atm. pressure is not set!")
+            raise RuntimeError("Station and/or station atmpres is not set!")
+
+    @atmpres.setter
+    def atmpres(self, val):
+        raise NotImplementedError("You can not set this parameter this way.")
+
+    @property
     def end_date(self):
-        """Current station's end date"""
+        """Current working station's end date"""
         if self.fh._enddate is not None:
             return self.fh._enddate
         else:
-            print("No end date found; please set working station.")
+            print("No end date found; try setting working station.")
             self.logger.warning("End date not set; returning epoch")
             return datetime.date(2000, 1, 1)
 
@@ -297,6 +367,170 @@ class DATA(object):
         self.stations = self.fh.get_stations()
         self.logger.debug("Found %d stations!", len(self.stations))
 
+    def gapfill_daily_ppfd(self, cur_date, to_save=False):
+        """
+        @TODO
+        """
+        # Check if output file exists:
+        if to_save:
+            out_file = ""
+            if not os.path.isfile(out_file):
+                header = "Timestamp,PPFDobs,PPFDgf\n"
+                try:
+                    f = open(out_file, "w")
+                except IOError:
+                    print("Cannot write to file '%s'" % (out_file))
+                else:
+                    f.write(header)
+                    f.close()
+
+        # Initialize monthly gapless PPFD array & associated timestamps:
+        daily_ppfd_gapless = numpy.array([])
+        daily_timestamp_hh = numpy.array([])
+
+        # Get daily PPFD values (in a numpy.array) from database:
+        (daily_ts, daily_ppfd) = get_daily_ppfd(station, cur_date)
+
+        # Check to see if any gaps are present in current day's observations:
+        number_obs = len(daily_ppfd)
+        if number_obs < 49:
+            # Gaps are present:
+            gapfill_dict = {}
+
+            # Create start and end datetime objects for this day:
+            start_time = datetime.datetime(cur_date.year,
+                                           cur_date.month,
+                                           cur_date.day,
+                                           0, 0, 0)
+
+            end_time = datetime.datetime(cur_date.year,
+                                         cur_date.month,
+                                         cur_date.day,
+                                         23, 59, 59)
+
+            # Initialize dictionary values with half-hourly timestamp keys:
+            cur_time = start_time
+            while cur_time < end_time:
+                my_time = "%s" % cur_time.time()
+                gapfill_dict[my_time] = 0.0
+
+                # Add datetime object to array of monthly timestamps:
+                daily_timestamp_hh = numpy.append(daily_timestamp_hh, [cur_time, ])
+
+                cur_time = cur_time + datetime.timedelta(minutes=30)
+
+            # Convert date to Julian day:
+            jday = cur_date.timetuple().tm_yday
+
+            # Calculate daily ET solar radiation curve:
+            (flux_lon, flux_lat) = get_lon_lat(station)
+            et_solar = SOLAR_TOA(flux_lat, flux_lon)
+            et_solar.calculate_daily_fluxes(jday, cur_date.year)
+
+            # Get satellite measurement of solar rad (SWdown) [W m-2]:
+            grid_station = flux_to_grid(station)
+            grid_msvidx = get_msvidx(grid_station, 'SWdown')
+            grid_srad = get_data_point(grid_msvidx, cur_date)
+
+            # Convert to daily shortwave radiation [J m-2]:
+            # NOTE: if None, then gridded data not available, set equal to modeled
+            if grid_srad is not None:
+                grid_srad *= (86400.0)
+            else:
+                grid_srad = et_solar.ho_jm2
+
+            # Calculate scaling factor (i.e., observed/modeled):
+            if et_solar.ho_jm2 != 0:
+                sfactor = grid_srad/et_solar.ho_jm2
+            else:
+                sfactor = 1.0
+
+            # Add scaled half-hourly PPFD to dictionary [umol m-2 s-1]:
+            for i in range(48):
+                val = et_solar.ppfd_hh[i]
+                my_time = "%s" % et_solar.local_time[i].time()
+                gapfill_dict[my_time] = sfactor*val
+
+            # Add observations to gapfill dictionary & save for output:
+            ppfd_obs = {}
+            for i in range(number_obs):
+                my_time = "%s" % daily_ts[i].time()
+                gapfill_dict[my_time] = daily_ppfd[i]
+                ppfd_obs[my_time] = daily_ppfd[i]
+
+            # Save to PPFD time series:
+            daily_ppfd_gapless = numpy.append(
+                daily_ppfd_gapless,
+                [gapfill_dict[x] for x in sorted(gapfill_dict.keys())]
+            )
+
+            # Write to file:
+            if to_save:
+                for t in sorted(gapfill_dict.keys()):
+                    if t in ppfd_obs.keys():
+                        obs = ppfd_obs[t]
+                    else:
+                        obs = -9999.0
+                    gfv = gapfill_dict[t]
+                    dt = "%s %s" % (cur_date, t)
+                    try:
+                        f = open(out_file, 'a')
+                    except IOError:
+                        print("Cannot append to file '%s'" % (out_file))
+                    else:
+                        f.write("%s,%f,%f\n" % (dt, obs, gfv))
+                        f.close()
+        else:
+            # No gaps; append daily series
+            #   NOTE: drop last entry from daily_ppfd (midnight next day)
+            daily_ppfd_gapless = daily_ppfd[0:-1]
+            daily_timestamp_hh = daily_ts[0:-1]
+
+            # Write to file:
+            if to_save:
+                for i in range(len(daily_ts) - 1):
+                    dt = "%s" % daily_ts[i]
+                    obs = daily_ppfd[i]
+                    try:
+                        f = open(out_file, 'a')
+                    except IOError:
+                        print("Cannot append to file '%s'" % (out_file))
+                    else:
+                        f.write("%s,%0.3f,%0.3f\n" % (dt, obs, obs))
+                        f.close()
+
+        return (daily_timestamp_hh, daily_ppfd_gapless)
+
+    def gapfill_monthly_ppfd(self, sd, to_save=False):
+        """
+        @TODO
+        """
+        # Initialize monthly gapless PPFD array & associated datetimes:
+        gf_ppfd = numpy.array([])
+        gf_dates = numpy.array([])
+
+        # Calculate the end date:
+        end_date = add_one_month(sd)
+
+        # Create output file (if to_write):
+        # @TODO what to do about this file?
+        # out_file = "%s-GF_%s.txt" % (self.station, sd)
+
+        # Iterate through each day of the month:
+        cur_date = sd
+        while cur_date < end_date:
+            # Gapfill daily PPFD
+            (daily_time, daily_ppfd) = self.gapfill_daily_ppfd(cur_date, False)
+
+            # Append data to monthly arrays:
+            gf_dates = numpy.append(gf_dates, daily_time)
+            gf_ppfd = numpy.append(gf_ppfd, daily_ppfd)
+
+            # Increment day
+            cur_date = add_one_day(cur_date)
+
+        return (gf_dates, gf_ppfd)
+
     def get_gpp_file(self, station):
         """
         Name:     DATA.get_gpp_file
@@ -338,15 +572,15 @@ class DATA(object):
 
     def print_current_vals(self):
         """
-        @TODO: create data properties that references each of these
+        Features: Convenience function for print data properties
         """
-        print("Station: %s" % (self.fh._station))
-        print("  lon:   %0.3f deg" % (self.fh._lon))
-        print("  lat:   %0.3f deg" % (self.fh._lat))
-        print("  elv:   %0.3f m" % (self.fh._elv))
-        print("  P:     %0.3f kPa" % (1e-3*self.fh._atmpres))
-        print("  start: %s" % (self.fh._startdate))
-        print("  end:   %s" % (self.fh._enddate))
+        print("Station: %s" % (self.station))
+        print("  lon:   %0.3f deg" % (self.lon))
+        print("  lat:   %0.3f deg" % (self.lat))
+        print("  elv:   %0.3f m" % (self.elv))
+        print("  P:     %0.3f kPa" % (1e-3*self.atmpres))
+        print("  start: %s" % (self.start_date))
+        print("  end:   %s" % (self.end_date))
         print("  grid:  %s" % (self.fh._grid))
 
     def set_working_station(self, station):
@@ -405,6 +639,7 @@ class GPSQL(object):
               - added get monthly NEE:PPFD pairs [16.05.20]
               - created reset properties function [16.05.20]
               - created set working station function [16.05.20]
+              - changed logger name [16.05.21]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -416,7 +651,7 @@ class GPSQL(object):
         Features: Initialize the class
         """
         # Create a class logger
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger("GPSQL")
         self.logger.info("GPSQL class initialized")
         self.reset_properties()
 
@@ -869,6 +1104,9 @@ class GPSQL(object):
                   - get_date_range
                   - get_elap
         """
+        self.logger.debug("Resetting working station properties ...")
+        self.reset_properties()
+
         self.logger.debug("Setting up station %s ...", station)
         self._station = station
 

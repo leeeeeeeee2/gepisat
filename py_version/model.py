@@ -4,7 +4,7 @@
 #
 # VERSION 2.2.0-dev
 #
-# LAST UPDATED: 2016-05-20
+# LAST UPDATED: 2016-05-21
 #
 # ---------
 # citation:
@@ -437,17 +437,6 @@ from utilities import add_one_month
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #                         Base Functions:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-def add_one_day(dt0):
-    """
-    Name:     add_one_day
-    Input:    datetime.date (dt0)
-    Output:   datetime.date (dt1)
-    Features: Adds one day to datetime
-    """
-    dt1 = dt0 + datetime.timedelta(days=1)
-    return dt1
-
-
 def simpson(my_array, h):
     """
     Name:     simpson

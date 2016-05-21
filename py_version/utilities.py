@@ -2,7 +2,7 @@
 #
 # utilities.py
 #
-# LAST UPDATED: 2016-05-20
+# LAST UPDATED: 2016-05-21
 #
 # ---------
 # citation:
@@ -32,6 +32,17 @@ from const import pir
 ###############################################################################
 # FUNCTIONS
 ###############################################################################
+def add_one_day(dt0):
+    """
+    Name:     add_one_day
+    Input:    datetime.date (dt0)
+    Output:   datetime.date (dt1)
+    Features: Adds one day to datetime
+    """
+    dt1 = dt0 + datetime.timedelta(days=1)
+    return dt1
+
+
 def add_one_month(dt0):
     """
     Name:     add_one_month
@@ -245,6 +256,7 @@ def get_outliers(fit, obs, np):
             outliers_index = numpy.where(sq_errors > peirce_delta2)
             outliers_found = len(outliers_index[0])
 
+    logging.debug("Found %d outliers", outliers_found)
     return outliers_index
 
 

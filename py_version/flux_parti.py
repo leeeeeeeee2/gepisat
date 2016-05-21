@@ -4,7 +4,7 @@
 #
 # VERSION 2.2.0-dev
 #
-# LAST UPDATES: 2016-05-20
+# LAST UPDATES: 2016-05-21
 #
 # ---------
 # citation:
@@ -60,12 +60,6 @@ class FLUX_PARTI(object):
               - moved the vast majority of function and attributes to
                 utilites script and PARTI_STATS class [16.05.20]
     """
-    # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-    # Class Variable Definitions
-    # ////////////////////////////////////////////////////////////////////////
-    # Model selection:
-    mod_select = 0
-
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
     # ////////////////////////////////////////////////////////////////////////
@@ -217,6 +211,7 @@ class PARTI_STATS(object):
     """
     Name:     PARTI_STATS
     Features: This class holds all the statistics values for FLUX_PARTI
+              (see init_summary_dict in utilities for complementary list)
     History   Version 2.2.0-dev
               - created [16.05.20]
     """
@@ -1665,7 +1660,7 @@ class PARTI_STATS(object):
 
     def print_summary(self):
         """
-        TEMPORARY FUNCTION
+        Features: Convenience function for printing the full summary dict
         """
         for k in sorted(list(self.summary.keys())):
             name = self.summary[k]['name']

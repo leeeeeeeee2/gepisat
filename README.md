@@ -69,13 +69,17 @@ This directory contains the main GePiSaT model Python code.
     * Reads monthly meteorological data from database
     * Estimates LUE
 
-## main_r/
+### main_r/
 This directory contains the R code function definitions for the production model (P-model), which is based on some of the methods in GePiSaT.
 
 * __pmodel.R__
     * Function definitions
 
-## tools/
+### results/
+This directory contains the result files from GePiSaT model runs.
+See the README for details.
+
+### tools/
 This directory holds a variety of analyzing, plotting and processing tools.
 
 * __analysis/__

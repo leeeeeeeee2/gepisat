@@ -1,4 +1,8 @@
-# GePiSaT runs coordinate with different versions of the code as follows:
+# README
+
+## GePiSaT Results
+
+### GePiSaT runs coordinate with different versions of the code as follows:
 
 | Run | Version |
 | --- | ------- |
@@ -16,7 +20,7 @@
 | 15 | v.1.3.0 |
 
 
-# The column headers in the results are defined as follows:
+### The column headers in the results are defined as follows:
 
 | Name | Description |
 | :--: | :---------- |

@@ -257,12 +257,14 @@ calc_dgpp <- function( fapar, dppfd, mlue ) {
 }
 
 
-calc_drd <- function( fapar, meanmppfd, mrd_unitiabs ){
+calc_drd <- function( lai, meanmppfd, mrd_unitiabs ){
   ##//////////////////////////////////////////////////////////////////
   ## Calculates daily dark respiration (Rd) based on monthly mean 
   ## PPFD (assumes acclimation on a monthly time scale) (mol CO2).
   ## meanmppfd is monthly mean PPFD, averaged over daylight seconds (mol m-2 s-1)
   ##------------------------------------------------------------------
+  fapar <- get_fapar( lai )
+
   ## Dark respiration takes place during night and day (24 hours)
   drd <- fapar * meanmppfd * mrd_unitiabs * 60.0 * 60.0 * 24.0
 
@@ -270,10 +272,12 @@ calc_drd <- function( fapar, meanmppfd, mrd_unitiabs ){
 }
 
 
-calc_dtransp <- function( fapar, dppfd, transp_unitiabs ) {
+calc_dtransp <- function( lai, dppfd, transp_unitiabs ) {
   ##//////////////////////////////////////////////////////////////////
   ## Calculates daily GPP (mol H2O).
   ##------------------------------------------------------------------
+  fapar <- get_fapar( lai )
+
   ## GPP is light use efficiency multiplied by absorbed light and C-P-alpha
   dtransp <- fapar * dppfd * transp_unitiabs
 
@@ -281,7 +285,7 @@ calc_dtransp <- function( fapar, dppfd, transp_unitiabs ) {
 }
 
 
-calc_vcmax <- function( lai, vcmax_unitiabs, meanmppfd ) {
+calc_vcmax <- function( lai, meanmppfd, vcmax_unitiabs ) {
   ##//////////////////////////////////////////////////////////////////
   ## Calculates leaf-level metabolic N content per unit leaf area as a
   ## function of Vcmax25.
@@ -289,7 +293,7 @@ calc_vcmax <- function( lai, vcmax_unitiabs, meanmppfd ) {
   fapar <- get_fapar( lai )
 
   ## Calculate leafy-scale Rubisco-N as a function of LAI and current LUE
-  vcmax <- max( fapar * meanmppfd[] * vcmax_unitiabs[] ) / lai
+  vcmax <- fapar * meanmppfd * vcmax_unitiabs / lai
 
   return( vcmax )
 
@@ -459,6 +463,20 @@ calc_mprime <- function( m ){
   # Check for negatives:
   if (mpi > 0){ mpi <- sqrt(mpi) }
   return(mpi)    
+}
+
+
+get_fapar <- function( lai ){
+  ##////////////////////////////////////////////////////////////////
+  ## Function returns fractional plant cover an individual
+  ## Eq. 7 in Sitch et al., 2003
+  ##----------------------------------------------------------------
+  kbeer <- 0.5
+
+  fapar <- ( 1.0 - exp( -1.0 * kbeer * lai ) )
+
+  return( fapar )
+
 }
 
 

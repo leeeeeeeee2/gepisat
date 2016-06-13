@@ -1,10 +1,19 @@
+# GePiSaT: Global ecosystem Production in Space and Time
+----------------------------------------------------------------------------
+
+This program implements (a) a flux partitioning method to calculate GPP and Re from FLUXNET measurements of net ecosystem CO2 exchange, and (b) a model for predicting GPP and photosynthetic capacity using a Light Use Efficiency model based on a cost optimisation approach (Prentice et al., 2014).
+
+# Table of Contents
+-------------------
+[TOC]
+
 # README
 ---------------
-* LAST UPDATED: 2015-11-20
+* LAST UPDATED: 2016-03-24
 * TEAM: labprentice
 * REPO: gepisat (private)
 
-## Contents
+# Repository Structure
 --------------------
 ### check/
 This directory holds consistency checks for the various P-model and GePiSaT versions.

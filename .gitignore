@@ -1,0 +1,9 @@
+# Ignore TeX compile files:
+*.aux
+*.bbl
+*.blg
+*.log
+*.ps
+*.dvi
+*.toc
+*.idx

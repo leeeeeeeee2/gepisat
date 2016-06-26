@@ -2,7 +2,7 @@
 #
 # utilities.py
 #
-# LAST UPDATED: 2016-05-21
+# LAST UPDATED: 2016-06-10
 #
 # ---------
 # citation:
@@ -302,7 +302,7 @@ def goodness_of_fit(fit, obs, nparams):
     return (mse, rmse, r2_adj)
 
 
-def grid_centroid(my_lon, my_lat):
+def grid_centroid(my_lon, my_lat, grid_res=0.5):
     """
     Name:     grid_centroid
     Input:    - float, longitude (my_lon)
@@ -314,11 +314,10 @@ def grid_centroid(my_lon, my_lat):
               is selected by default
     """
     # Create lists of regular latitude and longitude:
-    grid_res = 0.5
     lat_min = -90 + 0.5*grid_res
     lon_min = -180 + 0.5*grid_res
-    lat_dim = 360
-    lon_dim = 720
+    lat_dim = int(180./grid_res)
+    lon_dim = int(360./grid_res)
     lats = [lat_min + y*grid_res for y in range(lat_dim)]
     lons = [lon_min + x*grid_res for x in range(lon_dim)]
 

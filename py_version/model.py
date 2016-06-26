@@ -769,62 +769,15 @@ def gapfill_ppfd_month(station, start_date, to_write):
     return (monthly_timestamp_hh, monthly_ppfd_gapless)
 
 
-def get_daily_ppfd(station, start_date):
-    """
-    Name:     get_daily_ppfd
-    Input:    - str, station name (station)
-              - datetime.date, date of interest (start_date)
-    Output:   tuple, arrays of time stamps and PPFD data
-              - numpy.ndarray, timestamps (time_vals)
-              - numpy.ndarray, associated PPFD (ppfd_vals)
-    Features: Returns the half-hourly timestamps and PPFD observations for a
-              given day
-    Depends:  - add_one_day
-              - connectSQL
-              - get_msvidx
-    """
-    # Get msvidx value for PPFD:
-    ppfd_idx = get_msvidx(station, 'PPFD_f')
-
-    # SQL query parameters:
-    params = (ppfd_idx, start_date, add_one_day(start_date))
-
-    # Define query:
-    q = (
-        "SELECT data_set.datetime, data_set.data "
-        "FROM data_set "
-        "WHERE data_set.msvidx = %s "
-        "AND data_set.datetime BETWEEN DATE %s AND DATE %s "
-        "ORDER BY data_set.datetime ASC;"
-        )
-
-    # Connect to database and start a cursor:
-    con = connectSQL()
-    if con is not None:
-        cur = con.cursor()
-
-        # Execute query and store results:
-        cur.execute(q, params)
-        ppfd_vals = numpy.array([])
-        time_vals = numpy.array([])
-        if cur.rowcount > 0:
-            for record in cur:
-                time_vals = numpy.append(time_vals, record[0])
-                ppfd_vals = numpy.append(ppfd_vals, record[1])
-
-        # Close connection and return results:
-        con.close()
-
-        return (time_vals, ppfd_vals)
-
-
 ###############################################################################
 # MAIN PROGRAM
 ###############################################################################
 if __name__ == "__main__":
     # Define output directory:
     my_data = DATA()
-    my_data.output_dir = "./out"
+    output_dir = os.path.join(
+        os.path.expanduser("~"), "Desktop", "temp", "out")
+    my_data.set_output_directory(output_dir)
 
     # Get list of all flux station names:
     # my_data.find_stations()
@@ -857,12 +810,10 @@ if __name__ == "__main__":
                 # Perform GPP partitioning:
                 my_parter.partition(True)
 
-                # !!!!! STOPPED HERE - @TODO - !!!!!!!
-
                 # Perform half-hourly PPFD gapfilling (umol m-2 s-1):
-                (gf_time, gf_ppfd) = gapfill_ppfd_month(station,
-                                                        sd,
-                                                        to_write=False)
+                (gf_time, gf_ppfd) = my_data.gapfill_monthly_ppfd(sd)
+
+                # !!!!! STOPPED HERE - @TODO - !!!!!!!
 
                 # Calculate half-hourly GPP (umol m-2 s-1)
                 gf_gpp, gf_gpp_err = my_parter.calc_gpp(gf_ppfd)

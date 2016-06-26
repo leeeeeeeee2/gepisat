@@ -4,7 +4,7 @@
 #
 # VERSION 2.2.0-dev
 #
-# LAST UPDATED: 2016-04-01
+# LAST UPDATED: 2016-06-26
 #
 # ---------
 # citation:
@@ -44,6 +44,8 @@ class SOLAR_TOA:
               - import global constants [16.04.01]
               - import utility functions [16.04.01]
               - updated methods to mirror SPLASH [16.04.01]
+              - fixed xrange for Python2/3 support [16.06.26]
+              - fixed bad logging statement [16.06.26]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -111,7 +113,7 @@ class SOLAR_TOA:
                 "Day of year outside range of validity (1 to 366)!")
         else:
             self.day = n
-            local_hh = numpy.array([0.5*i for i in xrange(48)])
+            local_hh = numpy.array([0.5*i for i in range(48)])
             self.local_time = numpy.array([
                 datetime.datetime(self.year, 1, 1, 0, 0, 0) +
                 datetime.timedelta(days=(n-1)) +
@@ -187,7 +189,6 @@ class SOLAR_TOA:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         w_hh = (360./24.)*(ts_hh - 12.0)
         self.w_hh = w_hh
-        self.logger.info("hour angle set to %f", w_hh)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 10. Calculate variable substitutes (u and v), unitless

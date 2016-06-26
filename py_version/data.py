@@ -4,7 +4,7 @@
 #
 # VERSION 2.2.0-dev
 #
-# LAST UPDATED: 2016-05-21
+# LAST UPDATED: 2016-06-26
 #
 # ---------
 # citation:
@@ -46,6 +46,8 @@ class DATA(object):
               - created set working station function [16.05.20]
               - created find elv, pressure, & monthly NEE:PPFD pairs [16.05.20]
               - added properties for fh attributes [16.05.21]
+              - finished gapfill monthly PPFD function [16.06.26]
+              - output directory setter moved to function [16.06.26]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -178,26 +180,7 @@ class DATA(object):
 
     @output_dir.setter
     def output_dir(self, val):
-        if isinstance(val, str):
-            if os.path.isdir(val):
-                self.logger.debug("Output directory set to %s", val)
-                self._outputdir = val
-            else:
-                self.logger.error("Directory %s does not exist!", val)
-                raise IOError("Output directory does not exist!")
-        else:
-            try:
-                temp_val = str(val)
-            except:
-                self.logger.exception("Failed to read output directory.")
-                raise
-            else:
-                if os.path.isdir(temp_val):
-                    self.logger.debug("Output directory set to %s", temp_val)
-                    self._outputdir = temp_val
-                else:
-                    self.logger.error("Directory %s does not exist!", temp_val)
-                    raise IOError("Output directory does not exist!")
+        raise NotImplementedError("You can not set this parameter this way.")
 
     @property
     def start_date(self):
@@ -369,7 +352,18 @@ class DATA(object):
 
     def gapfill_monthly_ppfd(self, sd, to_save=False):
         """
-        @TODO
+        Name:     DATA.gapfill_monthly_ppfd
+        Inputs:   - datetime.date, date (sd)
+                  - bool, write to file flag (to_save)
+        Outputs:  tuple
+                  - numpy.ndarray, timestamps
+                  - numpy.ndarray, PPFD values
+        Features: Returns half-hourly gapfilled photosynthetic photon flux
+                  density (PPFD) and associated timestamps for a given month
+        Depends:  - add_one_month
+                  - add_one_day
+
+        @TODO:    Output file handling?
         """
         # Initialize monthly gapless PPFD array & associated datetimes:
         gf_ppfd = numpy.array([])
@@ -378,15 +372,12 @@ class DATA(object):
         # Calculate the end date:
         end_date = add_one_month(sd)
 
-        # Create output file (if to_write):
-        # @TODO what to do about this file?
-        # out_file = "%s-GF_%s.txt" % (self.station, sd)
-
         # Iterate through each day of the month:
         cur_date = sd
         while cur_date < end_date:
             # Gapfill daily PPFD
-            (daily_time, daily_ppfd) = self.fh.gapfill_daily_ppfd(cur_date)
+            (daily_time, daily_ppfd) = self.fh.gapfill_daily_ppfd(cur_date,
+                                                                  to_save)
 
             # Append data to monthly arrays:
             gf_dates = numpy.append(gf_dates, daily_time)
@@ -449,6 +440,36 @@ class DATA(object):
         print("  end:   %s" % (self.end_date))
         print("  grid:  %s" % (self.fh._grid))
 
+    def set_output_directory(self, my_dir):
+        """
+        Name:     DATA.set_output_directory
+        Inputs:   str, output directory (my_dir)
+        Outputs:  None.
+        Features: Assigns the output directory
+        """
+        if isinstance(my_dir, str):
+            if os.path.isdir(my_dir):
+                self.logger.debug("Output directory set to %s", my_dir)
+                self.fh.set_working_directory(my_dir)
+                self._outputdir = my_dir
+            else:
+                self.logger.error("Directory %s does not exist!", my_dir)
+                raise IOError("Output directory does not exist!")
+        else:
+            try:
+                temp_dir = my_dir.decode("utf-8")
+            except:
+                self.logger.exception("Failed to read output directory.")
+                raise
+            else:
+                if os.path.isdir(temp_dir):
+                    self.logger.debug("Output directory set to %s", temp_dir)
+                    self.fh.set_working_directory(my_dir)
+                    self._outputdir = temp_dir
+                else:
+                    self.logger.error("Directory %s does not exist!", temp_dir)
+                    raise IOError("Output directory does not exist!")
+
     def set_working_station(self, station):
         """
         Name:     DATA.set_working_station
@@ -460,7 +481,6 @@ class DATA(object):
             self.logger.info("Setting up for station %s", station)
             # Set station in file handle:
             self.fh.set_working_station(station)
-
             # self._workingstation = station
             # self._startdate, self._enddate = self.find_date_range(station)
             # self._grid = self.find_station_grid(station)
@@ -506,6 +526,9 @@ class GPSQL(object):
               - created reset properties function [16.05.20]
               - created set working station function [16.05.20]
               - changed logger name [16.05.21]
+              - created get daily PPFD function [16.06.26]
+              - finished gapfill daily PPFD function [16.06.26]
+              - created output directory [16.06.26]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -573,18 +596,38 @@ class GPSQL(object):
             raise IOError(
                 "Failed to fetch grid for station '%s'" % (flux_station))
 
-    def gapfill_daily_ppfd(self, cur_date):
+    def gapfill_daily_ppfd(self, cur_date, to_save=False):
         """
-        @TODO
+        Name:     GPSQL.gapfill_daily_ppfd
+        Inputs:   - datetime.date, date (cur_date)
+                  - [OPTIONAL] bool, write results to file flag (to_save)
+        Outputs:  tuple
+                  - numpy.ndarray, timestamps
+                  - numpy.ndarray, gapfilled PPFD values,
+        Features: Returns half-hourly gapfilled photosynthetic photon flux
+                  density (PPFD) and associated timestamps; write results to
+                  file if requested
         """
         self.logger.debug("Gapfilling %s", cur_date)
+
+        # Assign output file and write header line if requested:
+        out_file = "%s_%s_gapfill.txt" % (self._station, cur_date)
+        out_path = os.path.join(self._outputdir, out_file)
+        if to_save:
+            header_line = "Timestamp,ObsPPFD_umol.m2,GFPPFD_umol.m2\n"
+            try:
+                f = open(out_path, "w")
+            except:
+                self.logger.exception("Cannot write to file '%s'", out_path)
+            else:
+                f.write(header_line)
+                f.close()
 
         # Initialize gapless PPFD array & associated datetimes:
         gf_ppfd = numpy.array([])
         gf_dates = numpy.array([])
 
         # Get daily PPFD values (in a numpy.array) from database:
-        # @TODO: create get_daily_ppfd function
         (daily_ts, daily_ppfd) = self.get_daily_ppfd(cur_date)
 
         # Check to see if any gaps are present in current day's observations:
@@ -615,14 +658,11 @@ class GPSQL(object):
             jday = cur_date.timetuple().tm_yday
 
             # Calculate daily ET solar radiation curve:
-            (flux_lon, flux_lat) = get_lon_lat(station)
-            et_solar = SOLAR_TOA(flux_lat, flux_lon)
+            et_solar = SOLAR_TOA(self._lat, self._lon)
             et_solar.calculate_daily_fluxes(jday, cur_date.year)
 
             # Get satellite measurement of solar rad (SWdown) [W m-2]:
-            grid_station = flux_to_grid(station)
-            grid_msvidx = get_msvidx(grid_station, 'SWdown')
-            grid_srad = get_data_point(grid_msvidx, cur_date)
+            grid_srad = self.get_data_point(self._grid, 'SWdown', cur_date)
 
             # Convert to daily shortwave radiation [J m-2]:
             # NOTE: if None, then gridded data is not available, so set it
@@ -630,12 +670,14 @@ class GPSQL(object):
             if grid_srad is not None:
                 grid_srad *= (86400.0)
             else:
+                self.logger.warning("Grid %s shortwave not found!", self._grid)
                 grid_srad = et_solar.ho_jm2
 
             # Calculate scaling factor (i.e., observed/modeled):
             if et_solar.ho_jm2 != 0:
                 sfactor = grid_srad/et_solar.ho_jm2
             else:
+                self.logger.warning("Zero solar irradiation at %s!", cur_date)
                 sfactor = 1.0
 
             # Add scaled half-hourly PPFD to dictionary [umol m-2 s-1]:
@@ -654,15 +696,89 @@ class GPSQL(object):
             # Save to PPFD time series:
             gf_ppfd = numpy.append(
                 gf_ppfd,
-                [gapfill_dict[x] for x in sorted(gapfill_dict.keys())])
+                [gapfill_dict[x] for x in sorted(list(gapfill_dict.keys()))])
 
+            if to_save:
+                for t in sorted(list(gapfill_dict.keys())):
+                    if t in ppfd_obs.keys():
+                        obs = ppfd_obs[t]
+                    else:
+                        obs = numpy.nan
+                    gfv = gapfill_dict[t]
+                    dt = "%s %s" % (cur_date, t)
+                    try:
+                        f = open(out_path, 'a')
+                    except IOError:
+                        self.logger.exception(
+                            "Failed to appending to '%s'", out_path)
+                    else:
+                        f.write("%s,%f,%f\n" % (dt, obs, gfv))
+                        f.close()
         else:
             # No gaps; append daily series
             #   NOTE: drop last entry from daily_ppfd (midnight next day)
             gf_ppfd = daily_ppfd[0:-1]
             gf_dates = daily_ts[0:-1]
 
+            if to_save:
+                for i in range(len(daily_ts) - 1):
+                    dt = "%s" % daily_ts[i]
+                    obs = daily_ppfd[i]
+                    try:
+                        f = open(out_path, 'a')
+                    except IOError:
+                        self.logger.exception(
+                            "Failed to appending to '%s'", out_path)
+                    else:
+                        f.write("%s,%0.3f,%0.3f\n" % (dt, obs, obs))
+                        f.close()
+
         return (gf_dates, gf_ppfd)
+
+    def get_daily_ppfd(self, start_date):
+        """
+        Name:     GPSQL.get_daily_ppfd
+        Inputs:   datetime.date, date (start_date)
+        Outputs:  tuple
+                  - numpy.ndarray, time stamps
+                  - numpy.ndarray, PPFD values
+        Features: Returns daily photosynthetic photon flux density (PPFD) and
+                  associated timestamps arrays for a given date
+        Depends:  connectSQL
+        """
+        # Define query:
+        q = ("SELECT data_set.datetime, data_set.data "
+             "FROM data_set "
+             "WHERE data_set.msvidx = %s "
+             "AND data_set.datetime BETWEEN DATE %s AND DATE %s "
+             "ORDER BY data_set.datetime ASC;")
+        params = (self._ppfd_msv, start_date, add_one_day(start_date))
+
+        # Initialize return arrays:
+        ppfd_vals = numpy.array([])
+        time_vals = numpy.array([])
+
+        # Connect to database and start a cursor:
+        self.logger.debug("Connecting to GePiSaT database ...")
+        con = connectSQL()
+        if con is not None:
+            cur = con.cursor()
+
+            # Execute query and store results:
+            cur.execute(q, params)
+            if cur.rowcount > 0:
+                for record in cur:
+                    time_vals = numpy.append(time_vals, record[0])
+                    ppfd_vals = numpy.append(ppfd_vals, record[1])
+            else:
+                self.logger.warning("No data found!")
+
+            # Close connection and return results:
+            con.close()
+        else:
+            self.logger.warning("Failed to connect to GePiSaT database")
+
+        return (time_vals, ppfd_vals)
 
     def get_data_point(self, station, var, tp):
         """
@@ -1040,16 +1156,28 @@ class GPSQL(object):
         Outputs:  None.
         Features: Resets the station properties
         """
-        self._station = None
-        self._grid = None
-        self._lon = None
-        self._lat = None
-        self._elv = None
-        self._atmpres = None
-        self._startdate = None
-        self._enddate = None
-        self._ppfd_msv = None
-        self._nee_msv = None
+        self._station = None       # flux station
+        self._grid = None          # grid station
+        self._lon = None           # longitude
+        self._lat = None           # latitide
+        self._elv = None           # elevation
+        self._atmpres = None       # atmospheric pressure
+        self._startdate = None     # station's data starting date
+        self._enddate = None       # station's data ending date
+        self._ppfd_msv = None      # database index for station PPFD
+        self._nee_msv = None       # database index for station NEE
+
+    def set_working_directory(self, my_dir):
+        """
+        Name:     GPSQL.set_working_directory
+        Inputs:   str, existing directory (my_dir)
+        Outputs:  None.
+        Features: Assigns output/working directory
+        """
+        if os.path.isdir(my_dir):
+            self._outputdir = my_dir
+        else:
+            raise IOError("Directory '%s' does not exist!", my_dir)
 
     def set_working_station(self, station):
         """
@@ -1128,14 +1256,17 @@ if __name__ == '__main__':
 
     # DEBUG
     my_data = DATA()
-    my_data.output_dir = "/home/user/Desktop/temp/out"
+    output_dir = os.path.join(
+        os.path.expanduser("~"), "Desktop", "temp", "out")
+    my_data.set_output_directory(output_dir)
     my_stations = my_data.find_stations()
     station = my_data.stations[1]
     my_data.set_working_station(station)
     sd = my_data.start_date
-    nee, ppfd = my_data.find_monthly_nee_ppfd(sd)
-    for i in range(len(nee)):
-        print("NEE: %f; PPFD: %f" % (nee[i], ppfd[i]))
+    gf_time, gf_ppfd = my_data.gapfill_monthly_ppfd(sd, True)
+    # nee, ppfd = my_data.find_monthly_nee_ppfd(sd)
+    # for i in range(len(nee)):
+    #    print("NEE: %f; PPFD: %f" % (nee[i], ppfd[i]))
 
     # for station in my_data.stations:
     #    my_data.set_working_station(station)

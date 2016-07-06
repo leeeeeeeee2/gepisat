@@ -4,7 +4,7 @@
 #
 # VERSION 2.2.0-dev
 #
-# LAST UPDATED: 2016-06-26
+# LAST UPDATED: 2016-07-06
 #
 # ---------
 # citation:
@@ -31,6 +31,7 @@ from utilities import add_one_month
 from utilities import elv2pres
 from utilities import init_summary_dict
 from utilities import grid_centroid
+from utilities import simpson
 
 
 ###############################################################################
@@ -48,6 +49,8 @@ class DATA(object):
               - added properties for fh attributes [16.05.21]
               - finished gapfill monthly PPFD function [16.06.26]
               - output directory setter moved to function [16.06.26]
+              - updated logging statements [16.07.06]
+              - created sub to daily gpp function [16.07.06]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -362,8 +365,6 @@ class DATA(object):
                   density (PPFD) and associated timestamps for a given month
         Depends:  - add_one_month
                   - add_one_day
-
-        @TODO:    Output file handling?
         """
         # Initialize monthly gapless PPFD array & associated datetimes:
         gf_ppfd = numpy.array([])
@@ -428,9 +429,7 @@ class DATA(object):
         return my_result
 
     def print_current_vals(self):
-        """
-        Features: Convenience function for print data properties
-        """
+        """Convenience function for printing data properties"""
         print("Station: %s" % (self.station))
         print("  lon:   %0.3f deg" % (self.lon))
         print("  lat:   %0.3f deg" % (self.lat))
@@ -485,6 +484,91 @@ class DATA(object):
             # self._startdate, self._enddate = self.find_date_range(station)
             # self._grid = self.find_station_grid(station)
             # self._elv, self._atmpres = self.find_elv_pressure(station)
+
+    def sub_to_daily_gpp(self, ts, gpp, gpp_err, to_save=False):
+        """
+        Name:     calc_daily_gpp
+        Inputs:   - numpy.ndarray, half-hourly datetimes for a month (ts)
+                  - numpy.ndarray, half-hourly gap-filled GPP, umol/m2/s (gpp)
+                  - numpy.ndarray, half-hourly GPP model errors (gpp_err)
+                  - [optional] bool, whether to save to file (to_save)
+        Output:   numpy.ndarray, multidimensional array
+                  > 'Timestamp' daily timestamps
+                  > 'GPP' daily GPP, mol/m2
+                  > 'GPP_err' daily GPP error, mol/m2
+        Features: Returns time stamped daily GPP and its associated errors
+        Depends:  - add_one_day
+                  - simpson
+        """
+        # Get starting and ending dates:
+        starting_date = ts[0]
+        ending_date = ts[-1]
+
+        # Assign output file and write header line if requested:
+        out_file = "%s_%s-%s_daily_GPP.txt" % (
+            self.station, starting_date, ending_date)
+        out_path = os.path.join(self.outputdir, out_file)
+        if to_save:
+            header_line = "Timestamp,GPP_mol.m2,GPP_err_mol.m2\n"
+            try:
+                f = open(out_path, "w")
+            except:
+                self.logger.exception("Cannot write to file '%s'", out_path)
+            else:
+                f.write(header_line)
+                f.close()
+
+        # Iterate through days:
+        cur_date = starting_date
+        while (cur_date < ending_date):
+            # Find GPP values associated with current day:
+            my_idx = numpy.where(
+                (ts >= cur_date) & (ts < add_one_day(cur_date)))
+            my_gpp = gpp[my_idx]
+            my_gpp_err = gpp_err[my_idx]
+
+            # Integrate to daily:
+            sec_in_hh = 1800   # seconds in a half-hour (i.e., simpson's h)
+            day_gpp = simpson(my_gpp, sec_in_hh)
+            day_gpp_err = simpson(my_gpp_err, sec_in_hh)
+            # @TODO: should this be clipped to a min of zero?
+
+            # Convert from umol to moles:
+            day_gpp *= 1e-6
+            day_gpp_err *= 1e-6
+
+            # Save results:
+            if to_save:
+                try:
+                    f = open(out_path, 'a')
+                except IOError:
+                    self.logger.exception(
+                        "Failed to appending to '%s'", out_path)
+                else:
+                    f.write("%s,%f,%f\n" % (cur_date, day_gpp, day_gpp_err))
+                finally:
+                    f.close()
+
+            if cur_date == starting_date:
+                gpp_daily = numpy.array(
+                    (cur_date.date(), day_gpp, day_gpp_err),
+                    dtype={'names': ('Timestamp', 'GPP', 'GPP_err'),
+                           'formats': ('O', 'f4', 'f4')},
+                    ndmin=1
+                )
+            else:
+                temp_array = numpy.array(
+                    (cur_date.date(), day_gpp, day_gpp_err),
+                    dtype={'names': ('Timestamp', 'GPP', 'GPP_err'),
+                           'formats': ('O', 'f4', 'f4')},
+                    ndmin=1
+                )
+                gpp_daily = numpy.append(gpp_daily, temp_array, axis=0)
+
+            # Increment current day:
+            cur_date = add_one_day(cur_date)
+
+        return gpp_daily
 
     def write_summary(self):
         """
@@ -634,6 +718,7 @@ class GPSQL(object):
         number_obs = len(daily_ppfd)
         if number_obs < 49:
             # Gaps are present:
+            self.logger.debug("Gaps found.")
             gapfill_dict = {}
 
             # Create start and end datetime objects for this day:
@@ -656,6 +741,7 @@ class GPSQL(object):
 
             # Convert date to Julian day:
             jday = cur_date.timetuple().tm_yday
+            self.logger.debug("DOY = %d", jday)
 
             # Calculate daily ET solar radiation curve:
             et_solar = SOLAR_TOA(self._lat, self._lon)
@@ -672,6 +758,7 @@ class GPSQL(object):
             else:
                 self.logger.warning("Grid %s shortwave not found!", self._grid)
                 grid_srad = et_solar.ho_jm2
+            self.logger.debug("Using observed radiation, %f J m^-2", grid_srad)
 
             # Calculate scaling factor (i.e., observed/modeled):
             if et_solar.ho_jm2 != 0:
@@ -679,6 +766,7 @@ class GPSQL(object):
             else:
                 self.logger.warning("Zero solar irradiation at %s!", cur_date)
                 sfactor = 1.0
+            self.logger.debug("Scaling factor set to %f", sfactor)
 
             # Add scaled half-hourly PPFD to dictionary [umol m-2 s-1]:
             for i in range(48):
@@ -715,7 +803,9 @@ class GPSQL(object):
                         f.write("%s,%f,%f\n" % (dt, obs, gfv))
                         f.close()
         else:
-            # No gaps; append daily series
+            self.logger.debug("No gaps found.")
+
+            # Append daily series
             #   NOTE: drop last entry from daily_ppfd (midnight next day)
             gf_ppfd = daily_ppfd[0:-1]
             gf_dates = daily_ts[0:-1]

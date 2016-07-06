@@ -509,7 +509,7 @@ def init_summary_dict():
         100: {"name": "pearson_r_obs", "val": 0.0},
         101: {"name": "pearson_r_ro_h", "val": 0.0},
         102: {"name": "pearson_r_ro_l", "val": 0.0},
-        103: {"name": "model_select", "val": None}
+        103: {"name": "model_select", "val": 0}
     }
     return summary_dict
 
@@ -637,3 +637,25 @@ def peirce_dev(peirce_cap_n, peirce_lc_n, peirce_m):
     else:
         x2 = 0.0
     return x2
+
+
+def simpson(my_array, h):
+    """
+    Name:     simpson
+    Input:    - numpy.ndarray (my_array)
+              - int, step-length (h)
+    Features: Returns the numerical integration over an array by applying
+              Simpson's (composite) rule for numerical integration, i.e.
+              int(fx) = (h/3)*[f(x0) + 4f(x1) + 2f(x2) + 4f(x3) ... f(xn)]
+    Note:     n should be even, but if it is not, the first and last values of
+              the array are typically zero, so no harm done
+    """
+    n = len(my_array)
+    s = my_array[0] + my_array[-1]
+
+    for i in range(1, n, 2):
+        s += 4.0*my_array[i]
+    for j in range(2, n-1, 2):
+        s += 2.0*my_array[j]
+    s = (s*h)/3.0
+    return s

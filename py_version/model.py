@@ -4,7 +4,7 @@
 #
 # VERSION 2.2.0-dev
 #
-# LAST UPDATED: 2016-05-21
+# LAST UPDATED: 2016-07-06
 #
 # ---------
 # citation:
@@ -374,14 +374,15 @@
 #  - imports connectSQL from db_setup [16.01.17]
 #  - moved partition function to STAGE1 class [16.04.01]
 #  - separated function from init for SOLAR class [16.04.01]
+#  - up to calculating GPP and daily integrations
 #
 # -----
 # todo:
 # -----
-# - Create a constants file
-# - Separate utility functions to their own file & import them
-# - Add logging
-# - Consider creating a data class to handle the interfact between the main
+# x Create a constants file
+# x Separate utility functions to their own file & import them
+# x Add logging
+# x Consider creating a data class to handle the interfact between the main
 #   model and the necessary input variables
 #   + this will allow alternative means of getting input data (e.g., read from
 #     file) to be implemented
@@ -417,371 +418,31 @@
 ###############################################################################
 # IMPORT MODULES
 ###############################################################################
-import datetime
 import os.path
 
-# import psycopg2
-import numpy
-
 from data import DATA
-from db_setup import connectSQL
 from flux_parti import FLUX_PARTI
 from lue import LUE
-from solar import SOLAR_TOA
 from utilities import add_one_month
-
-
-###############################################################################
-# FUNCTIONS
-###############################################################################
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#                         Base Functions:
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-def simpson(my_array, h):
-    """
-    Name:     simpson
-    Input:    - numpy.ndarray (my_array)
-              - int, step-length (h)
-    Features: Returns the numerical integration over an array by applying
-              Simpson's (composite) rule for numerical integration, i.e.
-              int(fx) = (h/3)*[f(x0) + 4f(x1) + 2f(x2) + 4f(x3) ... f(xn)]
-    Note:     n should be even, but if it is not, the first and last values of
-              radiation curve are typically zero, so no harm done
-    """
-    n = len(my_array)
-    s = my_array[0] + my_array[-1]
-
-    for i in xrange(1, n, 2):
-        s += 4.0*my_array[i]
-    for j in xrange(2, n-1, 2):
-        s += 2.0*my_array[j]
-    s = (s*h)/3.0
-    return s
-
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#                         Dependant Functions:
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-def calc_daily_gpp(ts, gpp, gpp_err):
-    """
-    Name:     calc_daily_gpp
-    Inputs:   - numpy.ndarray, half-hourly time stamps for a given month (ts)
-              - numpy.ndarray, half-hourly gap-filled GPP, umol/m2/s (gpp)
-              - numpy.ndarray, half-hourly GPP model errors (gpp_err)
-    Output:   numpy.ndarray, multidimensional array
-              > 'Timestamp' daily timestamps
-              > 'GPP' daily GPP, mol/m2
-              > 'GPP_err' daily GPP error, mol/m2
-    Features: Returns time stamped daily GPP and its associated errors
-    Depends:  - add_one_day
-              - simpson
-
-    @TODO: write to file option?
-    """
-    # Get starting and ending dates:
-    starting_date = ts[0]
-    ending_date = ts[-1]
-
-    # Iterate through days:
-    cur_date = starting_date
-    while (cur_date < ending_date):
-        # Find GPP values associated with current day:
-        my_idx = numpy.where(
-            (ts >= cur_date) & (ts < add_one_day(cur_date)))[0]
-        my_gpp = [gpp[i] for i in my_idx]
-        my_gpp_err = [gpp_err[i] for i in my_idx]
-
-        # Integrate to daily:
-        # @TODO: should this be clipped to a min of zero?
-        day_gpp = simpson(numpy.array(my_gpp), 1800)
-        day_gpp_err = simpson(numpy.array(my_gpp_err), 1800)
-
-        # Convert from umol to moles:
-        day_gpp *= 1e-6
-        day_gpp_err *= 1e-6
-
-        # Save results:
-        if cur_date == starting_date:
-            gpp_daily = numpy.array(
-                (cur_date.date(), day_gpp, day_gpp_err),
-                dtype={'names': ('Timestamp', 'GPP', 'GPP_err'),
-                       'formats': ('O', 'f4', 'f4')},
-                ndmin=1
-            )
-        else:
-            temp_array = numpy.array(
-                (cur_date.date(), day_gpp, day_gpp_err),
-                dtype={'names': ('Timestamp', 'GPP', 'GPP_err'),
-                       'formats': ('O', 'f4', 'f4')},
-                ndmin=1
-            )
-            gpp_daily = numpy.append(gpp_daily, temp_array, axis=0)
-
-        # Increment current day:
-        cur_date = add_one_day(cur_date)
-
-    return gpp_daily
-
-
-def daily_gpp(station, cur_date):
-    """
-    Name:     daily_gpp
-    Inputs:   - str, flux station name (station)
-              - datetime.date, current date (cur_date)
-    Output:   float, daily GPP, mol/m^2
-              > 'nan' for months without observations (i.e., no partitioning)
-    Features: Calculates the GPP and associated error for a given day and
-              station
-    Depends:  - monthly_ppfd_nee
-              - partition
-              - gapfill_ppfd_day
-              - calc_daily_gpp
-
-    @TODO:    incorporate DATA class here somehow
-    """
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # Get the monthly partitioning parameters
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    # Set datetime to start of the month:
-    month_date = cur_date.replace(day=1)
-
-    # Get monthly NEE and PPFD observations from database:
-    mo_nee, mo_ppfd = monthly_ppfd_nee(station, month_date)
-
-    # Calculate partitioning parameters:
-    if mo_nee and mo_ppfd:
-        mo_parti = FLUX_PARTI(mo_ppfd, mo_nee, station, month_date)
-        mo_parti.partition(to_write=False, rm_out=True)
-
-        # ~~~~~~~~~~~~~~~~~~~
-        # Calculate daily GPP
-        # ~~~~~~~~~~~~~~~~~~~
-        # Get gapfilled PPFD [umol m^-2 m^-1]:
-        (hh_ts, hh_ppfd) = gapfill_ppfd_day(station=station,
-                                            cur_date=cur_date,
-                                            to_write=False,
-                                            out_file='/dev/null')
-
-        # Convert PPFD to GPP [umol m^-2 s^-1]:
-        hh_gpp, hh_gpp_err = mo_parti.calc_gpp(hh_ppfd)
-
-        # Calculate daily GPP (mol/m2):
-        day_ts, day_gpp, day_gpp_err = calc_daily_gpp(hh_ts, hh_gpp,
-                                                      hh_gpp_err)[0]
-    else:
-        day_gpp = numpy.nan
-        day_gpp_err = numpy.nan
-
-    return (day_gpp, day_gpp_err)
-
-
-def gapfill_ppfd_day(station, cur_date, to_write, out_file):
-    """
-    Name:     gapfill_ppfd_day
-    Input:    - str, station name (station)
-              - datetime.date (cur_date)
-              - int, boolean for writing to file (to_write)
-              - str, output file name (out_file)
-    Output:   - numpy.ndarray of datetime objects (monthly_timestamp_hh)
-              - numpy.ndarray of gapfilled PPFD (monthly_ppfd_gapless)
-    Features: Returns array of half-hourly gapless PPFD (umol m-2 s-1) for a
-              given station and day and associated timestamps; prints
-              observations and gapfilled PPFD to file
-    Depends:  - flux_to_grid
-              - get_daily_ppfd
-              - get_data_point
-              - get_lon_lat
-              - get_msvidx
-              - SOLAR
-    """
-    # Check if output file exists:
-    if to_write:
-        if not os.path.isfile(out_file):
-            header = "Timestamp,PPFDobs,PPFDgf\n"
-            try:
-                f = open(out_file, "w")
-            except IOError:
-                print("Cannot write to file '%s'" % (out_file))
-            else:
-                f.write(header)
-                f.close()
-
-    # Initialize monthly gapless PPFD array & associated timestamps:
-    daily_ppfd_gapless = numpy.array([])
-    daily_timestamp_hh = numpy.array([])
-
-    # Get daily PPFD values (in a numpy.array) from database:
-    (daily_ts, daily_ppfd) = get_daily_ppfd(station, cur_date)
-
-    # Check to see if any gaps are present in current day's observations:
-    number_obs = len(daily_ppfd)
-    if number_obs < 49:
-        # Gaps are present:
-        gapfill_dict = {}
-
-        # Create start and end datetime objects for this day:
-        start_time = datetime.datetime(cur_date.year,
-                                       cur_date.month,
-                                       cur_date.day,
-                                       0, 0, 0)
-
-        end_time = datetime.datetime(cur_date.year,
-                                     cur_date.month,
-                                     cur_date.day,
-                                     23, 59, 59)
-
-        # Initialize dictionary values with half-hourly timestamp keys:
-        cur_time = start_time
-        while cur_time < end_time:
-            my_time = "%s" % cur_time.time()
-            gapfill_dict[my_time] = 0.0
-
-            # Add datetime object to array of monthly timestamps:
-            daily_timestamp_hh = numpy.append(daily_timestamp_hh, [cur_time, ])
-
-            cur_time = cur_time + datetime.timedelta(minutes=30)
-
-        # Convert date to Julian day:
-        jday = cur_date.timetuple().tm_yday
-
-        # Calculate daily ET solar radiation curve:
-        (flux_lon, flux_lat) = get_lon_lat(station)
-        et_solar = SOLAR_TOA(flux_lat, flux_lon)
-        et_solar.calculate_daily_fluxes(jday, cur_date.year)
-
-        # Get satellite measurement of solar rad (SWdown) [W m-2]:
-        grid_station = flux_to_grid(station)
-        grid_msvidx = get_msvidx(grid_station, 'SWdown')
-        grid_srad = get_data_point(grid_msvidx, cur_date)
-
-        # Convert to daily shortwave radiation [J m-2]:
-        # NOTE: if None, then gridded data not available, set equal to modeled
-        if grid_srad is not None:
-            grid_srad *= (86400.0)
-        else:
-            grid_srad = et_solar.ho_jm2
-
-        # Calculate scaling factor (i.e., observed/modeled):
-        if et_solar.ho_jm2 != 0:
-            sfactor = grid_srad/et_solar.ho_jm2
-        else:
-            sfactor = 1.0
-
-        # Add scaled half-hourly PPFD to dictionary [umol m-2 s-1]:
-        for i in range(48):
-            val = et_solar.ppfd_hh[i]
-            my_time = "%s" % et_solar.local_time[i].time()
-            gapfill_dict[my_time] = sfactor*val
-
-        # Add observations to gapfill dictionary & save for output:
-        ppfd_obs = {}
-        for i in range(number_obs):
-            my_time = "%s" % daily_ts[i].time()
-            gapfill_dict[my_time] = daily_ppfd[i]
-            ppfd_obs[my_time] = daily_ppfd[i]
-
-        # Save to PPFD time series:
-        daily_ppfd_gapless = numpy.append(
-            daily_ppfd_gapless,
-            [gapfill_dict[x] for x in sorted(gapfill_dict.keys())]
-        )
-
-        # Write to file:
-        if to_write:
-            for t in sorted(gapfill_dict.keys()):
-                if t in ppfd_obs.keys():
-                    obs = ppfd_obs[t]
-                else:
-                    obs = -9999.0
-                gfv = gapfill_dict[t]
-                dt = "%s %s" % (cur_date, t)
-                try:
-                    f = open(out_file, 'a')
-                except IOError:
-                    print("Cannot append to file '%s'" % (out_file))
-                else:
-                    f.write("%s,%f,%f\n" % (dt, obs, gfv))
-                    f.close()
-    else:
-        # No gaps; append daily series
-        #   NOTE: drop last entry from daily_ppfd (midnight next day)
-        daily_ppfd_gapless = daily_ppfd[0:-1]
-        daily_timestamp_hh = daily_ts[0:-1]
-
-        # Write to file:
-        if to_write:
-            for i in range(len(daily_ts) - 1):
-                dt = "%s" % daily_ts[i]
-                obs = daily_ppfd[i]
-                try:
-                    f = open(out_file, 'a')
-                except IOError:
-                    print("Cannot append to file '%s'" % (out_file))
-                else:
-                    f.write("%s,%0.3f,%0.3f\n" % (dt, obs, obs))
-                    f.close()
-
-    return (daily_timestamp_hh, daily_ppfd_gapless)
-
-
-def gapfill_ppfd_month(station, start_date, to_write):
-    """
-    Name:     gapfill_ppfd_month
-    Input:    - str, station name (station)
-              - datetime.date (start_date)
-              - int, write to file boolean (to_write)
-    Output:   - numpy.ndarray of datetime objects (monthly_timestamp_hh)
-              - numpy.ndarray of gapfilled PPFD (monthly_ppfd_gapless)
-    Features: Returns array of half-hourly gapless PPFD (umol m-2 s-1) for a
-              given station and month and associated timestamps; prints
-              gap-filled PPFD to file
-    Depends:  - add_one_day
-              - add_one_month
-              - gapfill_ppfd_day
-    """
-    # Initialize monthly gapless PPFD array & associated timestamps:
-    monthly_ppfd_gapless = numpy.array([])
-    monthly_timestamp_hh = numpy.array([])
-
-    # Calculate the end date:
-    end_date = add_one_month(start_date)
-
-    # Create output file (if to_write):
-    out_file = "out/%s-GF_%s.txt" % (station, start_date)
-
-    # Iterate through each day of the month:
-    cur_date = start_date
-    while cur_date < end_date:
-        # Gapfill daily PPFD
-        (gf_daily_time, gf_daily_ppfd) = gapfill_ppfd_day(station=station,
-                                                          cur_date=cur_date,
-                                                          to_write=to_write,
-                                                          out_file=out_file)
-        # Append data to monthly arrays:
-        monthly_timestamp_hh = numpy.append(monthly_timestamp_hh,
-                                            gf_daily_time)
-        monthly_ppfd_gapless = numpy.append(monthly_ppfd_gapless,
-                                            gf_daily_ppfd)
-
-        # Increment day
-        cur_date = add_one_day(cur_date)
-
-    return (monthly_timestamp_hh, monthly_ppfd_gapless)
+from utilities import simpson
 
 
 ###############################################################################
 # MAIN PROGRAM
 ###############################################################################
 if __name__ == "__main__":
-    # Define output directory:
+    # Initialize data class for handling all data IO operations, which
+    # includes connecting to the GePiSaT database:
     my_data = DATA()
+
+    # Define output directory:
     output_dir = os.path.join(
         os.path.expanduser("~"), "Desktop", "temp", "out")
     my_data.set_output_directory(output_dir)
 
     # Get list of all flux station names:
-    # my_data.find_stations()
-    my_data.stations = ['CZ-wet', ]
+    # my_data.find_stations()         # use this function to search the DB
+    my_data.stations = ['CZ-wet', ]   # or manually define stations here
 
     # Initialize summary statistics file:
     my_data.create_summary_file("summary_statistics.txt")
@@ -796,7 +457,7 @@ if __name__ == "__main__":
 
         # Process each month in time:
         sd = my_data.start_date
-        ed = my_date.end_date
+        ed = my_data.end_date
         while sd < ed:
             # Get PPFD and NEE array pairs [umol m-2 s-1]:
             monthly_nee, monthly_ppfd = my_data.find_monthly_nee_ppfd(sd)
@@ -808,26 +469,29 @@ if __name__ == "__main__":
             if (len(monthly_ppfd) > 3 and len(monthly_nee) > 3):
 
                 # Perform GPP partitioning:
-                my_parter.partition(True)
+                my_parter.partition(outliers=True)
 
                 # Perform half-hourly PPFD gapfilling (umol m-2 s-1):
-                (gf_time, gf_ppfd) = my_data.gapfill_monthly_ppfd(sd)
-
-                # !!!!! STOPPED HERE - @TODO - !!!!!!!
+                (gf_time, gf_ppfd) = my_data.gapfill_monthly_ppfd(
+                    sd, to_save=True)
 
                 # Calculate half-hourly GPP (umol m-2 s-1)
                 gf_gpp, gf_gpp_err = my_parter.calc_gpp(gf_ppfd)
 
                 # Calculate daily GPP (mol m-2):
-                # gpp_daily = calc_daily_gpp(gf_time, gf_gpp, gf_gpp_err)
+                if False:
+                    gpp_daily = my_data.sub_to_daily_gpp(
+                        gf_time, gf_gpp, gf_gpp_err, to_save=True)
 
                 # Continue processing if partitioning was successful:
-                if my_parter.mod_select > 0:
+                if my_parter.best_model > 0:
                     # The new LUE model:
                     # GPP = f(PPFD, fAPAR, VPD, CPA, Tair, Patm, CO2)
                     #  - monthly variables: PPFD, fAPAR, CPA, VPD, Tair
                     #  - annual variables: CO2
                     #  - constants in time: Patm=f(elevation)
+
+                    # !!!!! STOPPED HERE - @TODO - !!!!!!!
 
                     # Integrate PPFD & GPP [umol m-2]; dt=30 min (1800 s)
                     ppfd_month = simpson(gf_ppfd.clip(min=0), 1800)

@@ -4,7 +4,7 @@
 #
 # VERSION 2.2.0-dev
 #
-# LAST UPDATES: 2016-05-21
+# LAST UPDATES: 2016-07-06
 #
 # ---------
 # citation:
@@ -12,9 +12,6 @@
 # I. C. Prentice, T. W. Davis, X. M. P. Gilbert, B. D. Stocker, B. J. Evans,
 # H. Wang, and T. F. Keenan, "The Global ecosystem in Space and Time (GePiSaT)
 # Model of the Terrestrial Biosphere," (in progress).
-
-# @TODO:
-# * update calc_gpp function
 
 ###############################################################################
 # IMPORT MODULES
@@ -58,7 +55,10 @@ class FLUX_PARTI(object):
               - reduced function calls by adding modes [16.04.01]
               - added object inheritance for Python2/3 support [16.05.20]
               - moved the vast majority of function and attributes to
-                utilites script and PARTI_STATS class [16.05.20]
+                utilities script and PARTI_STATS class [16.05.20]
+              - changed partition variable to outliers [16.07.06]
+              - updated calc gpp function [16.07.06]
+              - created best model class property [16.07.06]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -90,6 +90,18 @@ class FLUX_PARTI(object):
         self.stats.get_initial_guess()
 
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+    # Class Property Definitions
+    # ////////////////////////////////////////////////////////////////////////
+    @property
+    def best_model(self):
+        """Best model based on fitness statistics"""
+        return self.stats.model_select
+
+    @best_model.setter
+    def best_model(self, val):
+        raise NotImplementedError("You can not set this parameter this way.")
+
+    # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
     # ////////////////////////////////////////////////////////////////////////
     def calc_gpp(self, ppfd):
@@ -100,38 +112,44 @@ class FLUX_PARTI(object):
                   - numpy.ndarray, modeled GPP (gpp)
                   - numpy.ndarray, associated error (gpp_err)
         Features: Returns GPP (umol m-2 s-1) and associated error based on the
-                  best model
-        Ref:      Chapters 11.2 & 11.3, GePiSaT Documentation
+                  best fitted model
         """
-        self.logger.debug(
-            "calculating GPP for model selection %d", self.mod_select)
+        self.logger.debug("calculating GPP for model %d", self.best_model)
 
         # Get model selection:
-        if (self.mod_select == 1 or self.mod_select == 2):
+        if (self.best_model == 1 or self.best_model == 2):
             model = "H"
-        elif (self.mod_select == 3 or self.mod_select == 4):
+        elif (self.best_model == 3 or self.best_model == 4):
             model = "L"
 
         # Get outlier selection:
-        if (self.mod_select == 1 or self.mod_select == 3):
+        if (self.best_model == 1 or self.best_model == 3):
             outlier = 0
-        elif (self.mod_select == 2 or self.mod_select == 4):
+        elif (self.best_model == 2 or self.best_model == 4):
             outlier = 1
 
-        if self.mod_select == 0:
+        if self.best_model == 0:
             # Default to hyperbolic model with outliers removed estimates
-            (foo, alpha, r) = self.hm_estimates_ro
-            (foo_err, alpha_err, r_err) = (0., 0., 0.)
+            foo = self.stats.foo_est_obs_h
+            foo_err = 0.0
+            alpha = self.stats.alpha_est_obs_h
+            alpha_err = 0.0
 
             if foo == 0 or alpha == 0:
+                self.logger.debug(
+                    "No best model, defaulting to linear observed model")
+
                 # Use linear estimates instead:
-                (alpha, r) = self.lm_estimates_ro
-                (alpha_err, r_err) = (0., 0.)
+                alpha = self.stats.alpha_est_obs_l
+                alpha_err = 0.
 
                 # Calculate GPP and GPP err:
                 gpp = (alpha*ppfd)
                 gpp_err = (ppfd*alpha_err)
             else:
+                self.logger.debug(
+                    "No best model, defaulting to hyperbolic observed model")
+
                 # Variable substitutes:
                 apf = alpha*ppfd + foo
                 afp = alpha*foo*ppfd
@@ -141,19 +159,29 @@ class FLUX_PARTI(object):
                 gpp = afp/apf
                 gpp_err = numpy.sqrt(
                     (alpha_err**2)*((foo*ppfd*apf - afpp)/(apf**2))**2 +
-                    (foo_err**2)*((alpha*ppfd*apf - afp)/(apf**2))**2
-                )
+                    (foo_err**2)*((alpha*ppfd*apf - afp)/(apf**2))**2)
 
             # Clip out negative values of GPP:
             gpp = gpp.clip(min=0)
         elif model.upper() == "H":
             # Retrieve parameters for hyperbolic model:
             if outlier == 0:
-                (foo, alpha, r) = self.hm_optimized
-                (foo_err, alpha_err, r_err) = self.hm_optim_err
+                self.logger.debug("Using optimized hyperbolic model")
+                foo = self.stats.foo_opt_obs_h
+                foo_err = self.stats.foo_err_obs_h
+                alpha = self.stats.alpha_opt_obs_h
+                alpha_err = self.stats.alpha_err_obs_h
+                # (foo, alpha, r) = self.hm_optimized
+                # (foo_err, alpha_err, r_err) = self.hm_optim_err
             elif outlier == 1:
-                (foo, alpha, r) = self.hm_optimized_ro
-                (foo_err, alpha_err, r_err) = self.hm_optim_err_ro
+                self.logger.debug(
+                    "Using optimized hyperbolic model with outliers removed")
+                foo = self.stats.foo_opt_ro_h
+                foo_err = self.stats.foo_err_ro_h
+                alpha = self.stats.alpha_opt_ro_h
+                alpha_err = self.stats.alpha_err_ro_h
+                # (foo, alpha, r) = self.hm_optimized_ro
+                # (foo_err, alpha_err, r_err) = self.hm_optim_err_ro
 
             # Variable substitutes:
             apf = alpha*ppfd + foo
@@ -169,11 +197,18 @@ class FLUX_PARTI(object):
         elif model.upper() == "L":
             # Retrieve parameters for linear model:
             if outlier == 0:
-                (alpha, r) = self.lm_optimized
-                (alpha_err, r_err) = self.lm_optim_err
+                self.logger.debug("Using optimized linear model")
+                alpha = self.stats.alpha_opt_obs_l
+                alpha_err = self.stats.alpha_err_obs_l
+                # (alpha, r) = self.lm_optimized
+                # (alpha_err, r_err) = self.lm_optim_err
             elif outlier == 1:
-                (alpha, r) = self.lm_optimized_ro
-                (alpha_err, r_err) = self.lm_optim_err_ro
+                self.logger.debug(
+                    "Using optimized linear model with outliers removed")
+                alpha = self.stats.alpha_opt_ro_l
+                alpha_err = self.stats.alpha_err_ro_l
+                # (alpha, r) = self.lm_optimized_ro
+                # (alpha_err, r_err) = self.lm_optim_err_ro
 
             # Calculate GPP:
             gpp = (alpha*ppfd)
@@ -182,7 +217,7 @@ class FLUX_PARTI(object):
         # Return GPP
         return (gpp, gpp_err)
 
-    def partition(self, rm_out=False):
+    def partition(self, outliers=False):
         """
         Name:     FLUX_PARTI.partition
         Input:    [optional] bool, whether to remove outliers (rm_out)
@@ -196,7 +231,7 @@ class FLUX_PARTI(object):
         self.stats.fit_hm_obs()
         self.stats.fit_lm_obs()
 
-        if rm_out:
+        if outliers:
             self.logger.debug("finding outliers ...")
             self.stats.find_outliers()
             self.logger.debug(
@@ -1813,6 +1848,7 @@ class PARTI_STATS(object):
             # Eliminate those with poor R2:
             m_failed = [k for k, v in r2_dict.items() if v < r2_thresh]
             for m in m_failed:
+                self.logger.debug("%s failed r-squared test", m)
                 model_dict[m] = 1
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1823,31 +1859,39 @@ class PARTI_STATS(object):
                 value_dict['obs_h']['foo'] < 0 or
                 value_dict['obs_h']['alpha'] > 1 or
                 value_dict['obs_h']['alpha'] < 0):
+            self.logger.debug("obs_h failed validity test")
             model_dict['obs_h'] = 1
         if (value_dict['ro_h']['foo'] > 100 or
                 value_dict['ro_h']['foo'] < 0 or
                 value_dict['ro_h']['alpha'] > 1 or
                 value_dict['ro_h']['alpha'] < 0):
+            self.logger.debug("ro_h failed validity test")
             model_dict['ro_h'] = 1
 
         # -- linear:
         if (value_dict['obs_l']['alpha'] > 1 or
                 value_dict['obs_l']['alpha'] < 0):
+            self.logger.debug("obs_l failed validity test")
             model_dict['obs_l'] = 1
         if (value_dict['ro_l']['alpha'] > 1 or
                 value_dict['ro_l']['alpha'] < 0):
+            self.logger.debug("ro_l failed validity test")
             model_dict['ro_l'] = 1
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # THIRD CRITERIA--- PARAMETER SIGNIFICANCE
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         if (p_dict['obs_h'] > p_thresh).any():
+            self.logger.debug("obs_h failed significance test")
             model_dict['obs_h'] = 1
         if (p_dict['ro_h'] > p_thresh).any():
+            self.logger.debug("ro_h failed significance test")
             model_dict['ro_h'] = 1
         if (p_dict['obs_l'] > p_thresh).any():
+            self.logger.debug("obs_l failed significance test")
             model_dict['obs_l'] = 1
         if (p_dict['ro_l'] > p_thresh).any():
+            self.logger.debug("ro_l failed significance test")
             model_dict['ro_l'] = 1
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1857,6 +1901,7 @@ class PARTI_STATS(object):
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         mods = [k for k, v in model_dict.items() if v == 0]
         howmany = len(mods)
+        self.logger.debug("Good models found: %d", howmany)
 
         if howmany > 0:
             # At least one model passed the initial criteria
@@ -1919,10 +1964,10 @@ class PARTI_STATS(object):
                     else:
                         best_model = select_dict['obs_h']
         else:
-            best_model = None
+            best_model = 0
 
         # Save model selection:
-        self.logger.debug("Best model = %s", best_model)
+        self.logger.info("Best model is %s", best_model)
         self.model_select = best_model
 
     def update_guess(self):

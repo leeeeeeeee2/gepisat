@@ -3,8 +3,28 @@
 # solar.py
 #
 # VERSION 3.0.0-dev
-#
 # LAST UPDATED: 2016-07-22
+#
+# ~~~~~~~~
+# license:
+# ~~~~~~~~
+# Copyright (C) 2016 Prentice Lab
+#
+# This file is part of the GePiSaT (Global ecosystem Production in Space and
+# Time) model.
+#
+# GePiSaT is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# GePiSaT is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with GePiSaT.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ---------
 # citation:
@@ -21,14 +41,14 @@ import logging
 
 import numpy
 
-from const import ke
-from const import keps
-from const import kfFEC
-from const import kGsc
-from const import komega
-from const import pir
-from utilities import dcos
-from utilities import dsin
+from .const import ke
+from .const import keps
+from .const import kfFEC
+from .const import kGsc
+from .const import komega
+from .const import pir
+from .utilities import dcos
+from .utilities import dsin
 
 
 ###############################################################################
@@ -46,6 +66,7 @@ class SOLAR_TOA:
               - updated methods to mirror SPLASH [16.04.01]
               - fixed xrange for Python2/3 support [16.06.26]
               - fixed bad logging statement [16.06.26]
+              - moved to gepisat package [16.07.22]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization

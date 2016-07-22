@@ -3,8 +3,28 @@
 # stats.py
 #
 # VERSION 3.0.0-dev
+# LAST UPDATED: 2016-07-22
 #
-# LAST UPDATES: 2016-07-22
+# ~~~~~~~~
+# license:
+# ~~~~~~~~
+# Copyright (C) 2016 Prentice Lab
+#
+# This file is part of the GePiSaT (Global ecosystem Production in Space and
+# Time) model.
+#
+# GePiSaT is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# GePiSaT is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with GePiSaT.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ---------
 # citation:
@@ -24,15 +44,15 @@ import numpy
 import scipy
 from scipy.optimize import curve_fit
 
-from utilities import calc_statistics
-from utilities import get_hm_estimates
-from utilities import get_lm_estimates
-from utilities import get_outliers
-from utilities import goodness_of_fit
-from utilities import hyp_model
-from utilities import init_summary_dict
-from utilities import lin_model
-from utilities import pearsons_r
+from .utilities import calc_statistics
+from .utilities import get_hm_estimates
+from .utilities import get_lm_estimates
+from .utilities import get_outliers
+from .utilities import goodness_of_fit
+from .utilities import hyp_model
+from .utilities import init_summary_dict
+from .utilities import lin_model
+from .utilities import pearsons_r
 
 
 ###############################################################################
@@ -47,6 +67,7 @@ class PARTI_STATS(object):
               - created [16.05.20]
               - moved to its own module [16.07.22]
               - created summary string property [16.07.22]
+              - moved to gepisat package [16.07.22]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization

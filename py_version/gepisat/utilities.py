@@ -2,7 +2,29 @@
 #
 # utilities.py
 #
-# LAST UPDATED: 2016-06-10
+# VERSION 3.0.0-dev
+# LAST UPDATED: 2016-07-22
+#
+# ~~~~~~~~
+# license:
+# ~~~~~~~~
+# Copyright (C) 2016 Prentice Lab
+#
+# This file is part of the GePiSaT (Global ecosystem Production in Space and
+# Time) model.
+#
+# GePiSaT is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# GePiSaT is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with GePiSaT.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ---------
 # citation:
@@ -20,13 +42,13 @@ import logging
 import numpy
 import scipy.stats
 
-from const import kPo
-from const import kTo
-from const import kL
-from const import kG
-from const import kR
-from const import kMa
-from const import pir
+from .const import kPo
+from .const import kTo
+from .const import kL
+from .const import kG
+from .const import kR
+from .const import kMa
+from .const import pir
 
 
 ###############################################################################

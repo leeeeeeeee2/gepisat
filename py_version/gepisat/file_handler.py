@@ -3,8 +3,28 @@
 # file_handler.py
 #
 # VERSION 3.0.0-dev
-#
 # LAST UPDATED: 2016-07-22
+#
+# ~~~~~~~~
+# license:
+# ~~~~~~~~
+# Copyright (C) 2016 Prentice Lab
+#
+# This file is part of the GePiSaT (Global ecosystem Production in Space and
+# Time) model.
+#
+# GePiSaT is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# GePiSaT is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with GePiSaT.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ---------
 # citation:
@@ -22,12 +42,12 @@ import os
 
 import numpy
 
-from db_setup import connectSQL
-from solar import SOLAR_TOA
-from utilities import add_one_day
-from utilities import add_one_month
-from utilities import elv2pres
-from utilities import grid_centroid
+from .db_util import connectSQL
+from .solar import SOLAR_TOA
+from .utilities import add_one_day
+from .utilities import add_one_month
+from .utilities import elv2pres
+from .utilities import grid_centroid
 
 
 ###############################################################################
@@ -48,6 +68,7 @@ class GPSQL(object):
               - created output directory [16.06.26]
               - moved to file handler module [16.07.22]
               - created get monthly meteorology functions [16.07.22]
+              - moved to gepisat package [16.07.22]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization

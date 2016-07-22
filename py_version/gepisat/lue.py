@@ -2,9 +2,29 @@
 #
 # lue.py
 #
-# VERSION 3.3.0-dev
-#
+# VERSION 3.0.0-dev
 # LAST UPDATED: 2016-07-22
+#
+# ~~~~~~~~
+# license:
+# ~~~~~~~~
+# Copyright (C) 2016 Prentice Lab
+#
+# This file is part of the GePiSaT (Global ecosystem Production in Space and
+# Time) model.
+#
+# GePiSaT is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# GePiSaT is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with GePiSaT.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ---------
 # citation:
@@ -22,17 +42,17 @@ import os
 
 import numpy
 
-from const import kc
-from const import kco
-from const import kphio
-from const import kPo
-from const import kR
-from const import gs25
-from const import dha
-from const import kc25
-from const import ko25
-from const import dhac
-from const import dhao
+from .const import kc
+from .const import kco
+from .const import kphio
+from .const import kPo
+from .const import kR
+from .const import gs25
+from .const import dha
+from .const import kc25
+from .const import ko25
+from .const import dhac
+from .const import dhao
 
 
 ###############################################################################
@@ -48,6 +68,7 @@ class LUE:
               - Python 2/3 supported print statements [16.01.17]
               - moved constants to const.py [16.07.22]
               - fixed xrange for Python 3 support [16.07.22]
+              - moved to gepisat package [16.07.22]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization

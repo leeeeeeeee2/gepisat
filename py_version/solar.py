@@ -2,9 +2,9 @@
 #
 # solar.py
 #
-# VERSION 2.2.0-dev
+# VERSION 3.0.0-dev
 #
-# LAST UPDATED: 2016-06-26
+# LAST UPDATED: 2016-07-22
 #
 # ---------
 # citation:
@@ -40,7 +40,7 @@ class SOLAR_TOA:
     Features: This class calculates the half-hourly extraterrestrial PPFD
               [umol m-2 s-1], and the daily solar irradiation Ho [J m-2]
               based on the SPLASH model
-    History:  Version
+    History:  Version 3.0.0-dev
               - import global constants [16.04.01]
               - import utility functions [16.04.01]
               - updated methods to mirror SPLASH [16.04.01]
@@ -127,8 +127,8 @@ class SOLAR_TOA:
         my_nu, my_lambda = self.berger_tls(n)
         self.my_nu = my_nu
         self.my_lambda = my_lambda
-        self.logger.info("true anomaly, nu, set to %f degrees", my_nu)
-        self.logger.info("true lon, lambda, set to %f degrees", my_lambda)
+        self.logger.debug("true anomaly, nu, set to %f degrees", my_nu)
+        self.logger.debug("true lon, lambda, set to %f degrees", my_lambda)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 3. Calculate distance factor (dr), unitless
@@ -138,8 +138,9 @@ class SOLAR_TOA:
         my_rho = (1.0 - kee)/(1.0 + ke*dcos(my_nu))
         dr = (1.0/my_rho)**2
         self.dr = dr
-        self.logger.info("relative Earth-Sun distance, rho, set to %f", my_rho)
-        self.logger.info("distance factor, dr, set to %f", dr)
+        self.logger.debug(
+            "relative Earth-Sun distance, rho, set to %f", my_rho)
+        self.logger.debug("distance factor, dr, set to %f", dr)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 4. Calculate declination angle (delta), degrees
@@ -148,7 +149,7 @@ class SOLAR_TOA:
         delta = numpy.arcsin(dsin(my_lambda)*dsin(keps))
         delta /= pir
         self.delta = delta
-        self.logger.info("declination, delta, set to %f", delta)
+        self.logger.debug("declination, delta, set to %f", delta)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 5. Calculate time zone hour, hours
@@ -161,7 +162,7 @@ class SOLAR_TOA:
         else:
             tz_hour = int(self.lon/15)
         self.tz_hour = tz_hour
-        self.logger.info("time zone hour set to %d", tz_hour)
+        self.logger.debug("time zone hour set to %d", tz_hour)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 6. Calculate the equation of time, hours
@@ -169,14 +170,14 @@ class SOLAR_TOA:
         # Spencer (1971)
         eot = self.spencer_eot(n)
         self.eot_hour = eot
-        self.logger.info("Equation of Time set to %f", eot)
+        self.logger.debug("Equation of Time set to %f", eot)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 7. Calculate the longitude correction, hours
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         lonc = (15.0*tz_hour - self.lon)/15.0
         self.lc_hour = lonc
-        self.logger.info("longitude corrector set to %f", lonc)
+        self.logger.debug("longitude corrector set to %f", lonc)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 8. Calculate the solar time, hours
@@ -197,8 +198,8 @@ class SOLAR_TOA:
         rv = dcos(delta)*dcos(self.lat)
         self.ru = ru
         self.rv = rv
-        self.logger.info("variable substitute, ru, set to %f", ru)
-        self.logger.info("variable substitute, rv, set to %f", rv)
+        self.logger.debug("variable substitute, ru, set to %f", ru)
+        self.logger.debug("variable substitute, rv, set to %f", rv)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 11. Calculate the sunset hour angle (hs), degrees
@@ -217,7 +218,7 @@ class SOLAR_TOA:
             hs = numpy.arccos(hs)
             hs /= pir
         self.hs = hs
-        self.logger.info("sunset angle, hs, set to %f", hs)
+        self.logger.debug("sunset angle, hs, set to %f", hs)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         # 12. Calculate the half-hourly solar radiation flux, W/m^2

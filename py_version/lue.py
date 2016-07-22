@@ -1,10 +1,10 @@
 #!/usr/bin/python
 #
-# model.py
+# lue.py
 #
-# VERSION 2.2.0-dev
+# VERSION 3.3.0-dev
 #
-# LAST UPDATED: 2016-01-17
+# LAST UPDATED: 2016-07-22
 #
 # ---------
 # citation:
@@ -13,32 +13,26 @@
 # H. Wang, and T. F. Keenan, "The Global ecosystem in Space and Time (GePiSaT)
 # Model of the Terrestrial Biosphere," (in progress).
 #
-# ------------
-# description:
-# ------------
-#
-# -----
-# todo:
-# -----
-# - create a constants file
-#   * kc      0.41     Jmax cost coefficient
-#   * kphio   0.093    quantum efficiency (Long et. al., 1993)
-#   * kPo     101325   standard atmosphere, Pa (Allen, 1973)
-#   * gs25    4.220    gamma-star at 25C, Pa (assuming 25 deg C & 98.716 kPa)
-#   * dha     37830    gamma-star activation energy, J/mol
-#   * kR      8.3145   universal gas constant, J/mol/K
-#   * kc25    39.97    Michaelis-Menten Kc, Pa (assuming 25 deg C & 98.716 kPa)
-#   * ko25    2.748e4  Michaelis-Menten, Pa (assuming 25 deg C & 98.716 kPa)
-#   * dhac    79430    Michaelis-Menten CO2 activation energy, J/mol
-#   * dhao    36380    Michaelis-Menten O2 activation, J/mol
-#   * kco     2.09476e5  atmos. CO2 concentration, ppm (US Standard Atmosphere)
 
 ###############################################################################
 # IMPORT MODULES
 ###############################################################################
-import os.path
+import logging
+import os
 
 import numpy
+
+from const import kc
+from const import kco
+from const import kphio
+from const import kPo
+from const import kR
+from const import gs25
+from const import dha
+from const import kc25
+from const import ko25
+from const import dhac
+from const import dhao
 
 
 ###############################################################################
@@ -49,17 +43,12 @@ class LUE:
     Name:     LUE
     Features: This class stores monthly LUE estimates and writes results to
               file.
-    History   Version 2.2.0-dev
+    History   Version 3.0.0-dev
               - class separated from model [16.01.17]
               - Python 2/3 supported print statements [16.01.17]
+              - moved constants to const.py [16.07.22]
+              - fixed xrange for Python 3 support [16.07.22]
     """
-    # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-    # Class Variable Definitions
-    # ////////////////////////////////////////////////////////////////////////
-    kc = 0.41          # Jmax cost coefficient
-    kphio = 0.093      # quantum efficiency (Long et al., 1993)
-    kPo = 101325.      # standard atmosphere, Pa (Allen, 1973)
-
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
     # ////////////////////////////////////////////////////////////////////////
@@ -68,6 +57,10 @@ class LUE:
         Name:     LUE.__init__
         Features: Initializes dictionaries for the light-use efficiency model
         """
+        # Create a class logger
+        self.logger = logging.getLogger(__name__)
+        self.logger.info("LUE class initialized")
+
         # Dictionary of stations' monthly values & their units:
         # * this is for printing to file
         self.station_vals = {}
@@ -133,7 +126,7 @@ class LUE:
         self.station_lue = {}
 
         # Define standard viscosity of water, Pa s
-        self.n25 = self.viscosity_h2o(25.0, self.kPo)
+        self.n25 = self.viscosity_h2o(25.0, kPo)
 
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
@@ -160,21 +153,39 @@ class LUE:
                   - calc_k
                   - nxgn
                   - viscosity_h2o
-                  - kPo
         """
-        # Check for missing alpha (due to new STASH code):
-        if alpha is None:
-            alpha = -9999.0
-
         # Calculate lue variables & place into tuple:
-        iabs = fpar*ppfd                     # mol/m2, abs. PPFD
-        ca = (1.e-6)*co2*patm                # Pa, atms. CO2
-        gs = self.calc_gstar(tair)           # Pa, photores. comp. point
-        d = (1e3)*vpd                        # Pa, vapor pressure deficit
-        k = self.calc_k(tair, patm)          # Pa, Michaelis-Menten coef.
-        ns = self.viscosity_h2o(tair, patm)  # Pa s, viscosity
-        ns /= self.n25                       # unitless, water viscosity
-        fa = (alpha/1.26)**(0.25)            # unitless, func. of alpha
+        if fpar is not None:
+            iabs = fpar*ppfd                     # mol/m2, abs. PPFD
+        else:
+            iabs = numpy.nan
+
+        if co2 is not None:
+            ca = (1.e-6)*co2*patm                # Pa, atms. CO2
+        else:
+            ca = numpy.nan
+
+        if vpd is not None:
+            d = (1e3)*vpd                        # Pa, vapor pressure deficit
+        else:
+            d = numpy.nan
+
+        if tair is not None:
+            gs = self.calc_gstar(tair)           # Pa, photores. comp. point
+            k = self.calc_k(tair, patm)          # Pa, Michaelis-Menten coef.
+            ns = self.viscosity_h2o(tair, patm)  # Pa s, viscosity
+            ns /= self.n25                       # unitless, water viscosity
+        else:
+            tair = numpy.nan
+            gs = numpy.nan
+            k = numpy.nan
+            ns = numpy.nan
+
+        if alpha is not None:
+            fa = (alpha/1.26)**(0.25)            # unitless, func. of alpha
+        else:
+            fa = numpy.nan
+
         beta1, beta2 = self.beta_estimate(ca, d, k, gs, ns, tair, elv)
         yhat1 = self.nxtgn(iabs, ca, gs, d, k, ns, fa, beta1)
         yhat2 = self.nxtgn(iabs, ca, gs, d, k, ns, fa, beta2)
@@ -233,10 +244,7 @@ class LUE:
                 ndmin=1
             )
             self.station_vals[station] = numpy.append(
-                self.station_vals[station],
-                temp_array,
-                axis=0
-            )
+                self.station_vals[station], temp_array, axis=0)
 
         # ~~~~~~~~~~~~~~~~~~~~~~~
         # Station Variables
@@ -275,10 +283,7 @@ class LUE:
                     ndmin=1
                 )
                 self.st_lue_vars[station] = numpy.append(
-                    self.st_lue_vars[station],
-                    temp_array,
-                    axis=0
-                    )
+                    self.st_lue_vars[station], temp_array, axis=0)
 
     def beta_estimate(self, my_ca, my_d, my_k, my_gs, my_ns, my_t, my_z):
         """
@@ -298,23 +303,28 @@ class LUE:
         if not numpy.isfinite(my_z):
             my_z = 0.
 
-        whe = numpy.exp(
-            1.19
-            + 0.0545*(my_t - 25.)        # T in deg C
-            - 0.5*numpy.log(1e-3*my_d)   # D in kPa
-            - 0.0815*(1e-3*my_z)         # z in km
-        )
-        chi = whe/(1. + whe)
+        vals = numpy.array([my_ca, my_d, my_k, my_gs, my_ns, my_t, my_z])
+        if numpy.isfinite(vals).all():
+            whe = numpy.exp(
+                1.19
+                + 0.0545*(my_t - 25.)        # T in deg C
+                - 0.5*numpy.log(1e-3*my_d)   # D in kPa
+                - 0.0815*(1e-3*my_z)         # z in km
+            )
+            chi = whe/(1. + whe)
 
-        beta_p1 = 1.6*my_ns*my_d*(chi**2)
-        beta_p1 /= (1. - chi)**2
-        beta_p1 /= my_k
+            beta_p1 = 1.6*my_ns*my_d*(chi**2)
+            beta_p1 /= (1. - chi)**2
+            beta_p1 /= my_k
 
-        beta_p2 = 1.6*my_ns*my_d
-        beta_p2 /= (my_k + my_gs)
-        beta_p2 *= (chi*my_ca - my_gs)**2
-        beta_p2 /= (my_ca**2)
-        beta_p2 /= (chi - 1.)**2
+            beta_p2 = 1.6*my_ns*my_d
+            beta_p2 /= (my_k + my_gs)
+            beta_p2 *= (chi*my_ca - my_gs)**2
+            beta_p2 /= (my_ca**2)
+            beta_p2 /= (chi - 1.)**2
+        else:
+            beta_p1 = numpy.nan
+            beta_p2 = numpy.nan
 
         return (beta_p1, beta_p2)
 
@@ -330,11 +340,6 @@ class LUE:
                   functions for models of Rubisco-limited photosynthesis,
                   Plant, Cell and Environment, 24, 253--259.
         """
-        # Define constants
-        gs25 = 4.220  # Pa, assuming 25 deg C & 98.716 kPa)
-        dha = 37830   # J/mol
-        kR = 8.3145   # J/mol/K
-
         gs = gs25*numpy.exp(dha*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
         return gs
 
@@ -350,14 +355,6 @@ class LUE:
                   functions for models of Rubisco-limited photosynthesis,
                   Plant, Cell and Environment, 24, 253--259.
         """
-        # Define constants
-        kc25 = 39.97      # Pa, assuming 25 deg C & 98.716 kPa
-        ko25 = (2.748e4)  # Pa, assuming 25 deg C & 98.716 kPa
-        dhac = 79430      # J/mol
-        dhao = 36380      # J/mol
-        kR = 8.3145       # J/mol/K
-        kco = 2.09476e5   # ppm, US Standard Atmosphere
-
         vc = kc25*numpy.exp(dhac*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
         vo = ko25*numpy.exp(dhao*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
         k = vc*(1 + kco*(1e-6)*patm/vo)
@@ -426,29 +423,29 @@ class LUE:
         Output:   float, estimate of GPP (gpp)
         Features: Returns an estimate of GPP based on the next-generation light
                   and water use efficiency model.
-        Depends:  - kc
-                  - kphio
         """
         # Define default GPP return value:
         gpp = numpy.nan
 
-        # Define variable substitutes:
-        vdcg = ca - gs
-        vacg = ca + 2.*gs
-        vbkg = beta*(k + gs)
-
-        # Check for negatives:
-        if vbkg > 0:
-            vsr = numpy.sqrt(1.6*ns*d/(vbkg))
-
-            # Based on the m' formulation (see Regressing_LUE.pdf)
-            m = vdcg/(vacg + 3.*gs*vsr)
-            mpi = m**2 - self.kc**(2./3.)*(m**(4./3.))
+        vals = numpy.array([iabs, ca, gs, d, k, ns, fa, beta])
+        if numpy.isfinite(vals).all():
+            # Define variable substitutes:
+            vdcg = ca - gs
+            vacg = ca + 2.*gs
+            vbkg = beta*(k + gs)
 
             # Check for negatives:
-            if mpi > 0:
-                mp = numpy.sqrt(mpi)
-                gpp = self.kphio*iabs*fa*mp
+            if vbkg > 0:
+                vsr = numpy.sqrt(1.6*ns*d/(vbkg))
+
+                # Based on the m' formulation (see Regressing_LUE.pdf)
+                m = vdcg/(vacg + 3.*gs*vsr)
+                mpi = m**2 - kc**(2./3.)*(m**(4./3.))
+
+                # Check for negatives:
+                if mpi > 0:
+                    mp = numpy.sqrt(mpi)
+                    gpp = kphio*iabs*fa*mp
 
         return gpp
 
@@ -502,10 +499,10 @@ class LUE:
         # Calculate mu1 (Eq. 12 & Table 3, Huber et al., 2009):
         mu1 = 0.
         ctbar = (1./tbar) - 1.
-        for i in xrange(6):
+        for i in range(6):
             coef1 = numpy.power(ctbar, i)
             coef2 = 0.
-            for j in xrange(7):
+            for j in range(7):
                 coef2 += h_array[j][i]*numpy.power((rbar - 1.), j)
             mu1 += coef1*coef2
         mu1 = numpy.exp(rbar*mu1)
@@ -528,12 +525,14 @@ class LUE:
         Features: Writes to file the monthly values associated with the light
                   use efficiency equation for a given station
         """
+        self.logger.info("Writing LUE values for station %s", station)
+
         # Create file if it doesn't exist:
         if not os.path.isfile(out_file):
             try:
                 f = open(out_file, 'w')
             except IOError:
-                print("Cannot write to file '%s'" % (out_file))
+                self.logger.error("Cannot write to file %s", out_file)
             else:
                 f.write(self.value_header)
                 f.close()
@@ -544,7 +543,7 @@ class LUE:
                 try:
                     f = open(out_file, 'a')
                 except IOError:
-                    print("Cannot append to file '%s'" % (out_file))
+                    self.logger.error("Cannot append to file %s", out_file)
                 else:
                     f.write(("%s,%f,%f,%f,%f,"
                              "%f,%f,%f,%f,%f,"

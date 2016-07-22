@@ -2,7 +2,7 @@
 #
 # const.py
 #
-# LAST UPDATED: 2016-05-20
+# LAST UPDATED: 2016-07-22
 #
 # ~~~~~~~~~
 # citation:
@@ -31,3 +31,13 @@ kPo = 101325    # standard atmosphere, Pa (Allen, 1973)
 kR = 8.31447    # universal gas constant, J/mol/K (Moldover et al., 1988)
 kTo = 288.15    # base temperature, K (Berberan-Santos et al., 1997)
 pir = (numpy.pi/180.0)
+
+kc = 0.41       # Jmax cost coefficient
+kphio = 0.093   # quantum efficiency (Long et. al., 1993)
+gs25 = 4.220    # gamma-star at 25C, Pa (assuming 25 deg C & 98.716 kPa)
+dha = 37830     # gamma-star activation energy, J/mol
+kc25 = 39.97    # Michaelis-Menten Kc, Pa (assuming 25 deg C & 98.716 kPa)
+ko25 = 2.748e4  # Michaelis-Menten, Pa (assuming 25 deg C & 98.716 kPa)
+dhac = 79430    # Michaelis-Menten CO2 activation energy, J/mol
+dhao = 36380    # Michaelis-Menten O2 activation, J/mol
+kco = 2.09476e5   # atmos. CO2 concentration, ppm (US Standard Atmosphere)

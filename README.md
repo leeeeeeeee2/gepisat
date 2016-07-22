@@ -9,9 +9,9 @@ This program implements (a) a flux partitioning method to calculate GPP and Re f
 
 # README
 ---------------
-* LAST UPDATED: 2016-03-24
+* LAST UPDATED: 2016-07-22
 * TEAM: labprentice
-* REPO: gepisat (private)
+* REPO: gepisat (public)
 
 # Repository Structure
 --------------------
@@ -49,25 +49,43 @@ This directory holds the documentation for the GePiSaT model.
 * __tex/__
     * Contains LaTeX section files for documentation
 
-### main_py/
+### py_version/
 This directory contains the main GePiSaT model Python code.
 
-* __table_maker.py__
-    * Data manager script for PostgreSQL database
-    * Reads multiple input file types
-    * Produces variable lists and data sets for db_setup.py
+* __gepisat__
+    * __\_\_init\_\_.py__
+        * gepisat package init script (contains version number)
+    * __const.py__
+        * module with global constants
+    * __data.py__
+        * module with DATA class for file and data IO
+    * __db_util.py__
+        * module containing the connectSQL function
+    * __file\_handler.py__
+        * module with GPGSL (GePiSaT PostGreSQL) file handler (for DATA)
+    * __flux\_parti.py__
+        * module containing the FLUX\_PARTI (flux partitioning) class
+    * __lue.py__
+        * module containing the LUE class for monthly light-use efficiency model variables
+    * __solar.py__
+        * module containing the SOLAR\_TOA class for calculating top of the atmosphere solar irradiation
+    * __utilities.py__
+        * module containing a variety of utility functions
 * __db_setup.py__
     * Setup script for PostgreSQL database
     * Creates tables with appropriate schemas
     * Populates tables with data
+* __table_maker.py__
+    * Data manager script for PostgreSQL database
+    * Reads multiple input file types
+    * Produces variable lists and data sets for db_setup.py
 * __model.py__
     * Main model code
     * Performs monthly flux partitioning of NEE and PPFD observation pairs
     * Gap-fills PPFD observations
     * Calculates GPP based on flux partitioning parameters
     * Integrates PPFD and GPP to monthly totals
-    * Reads monthly meteorological data from database
-    * Estimates LUE
+    * Reads monthly gridded meteorological data
 
 ### main_r/
 This directory contains the R code function definitions for the production model (P-model), which is based on some of the methods in GePiSaT.

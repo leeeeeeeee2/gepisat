@@ -2,9 +2,9 @@
 #
 # model.py
 #
-# VERSION 2.2.0-dev
+# VERSION 3.0.0-dev
 #
-# LAST UPDATED: 2016-07-06
+# LAST UPDATED: 2016-07-22
 #
 # ---------
 # citation:
@@ -361,31 +361,24 @@
 #  - updated get_pressure function to also return elevation [15.02.20]
 #  - fixed time issue in gapfill_ppfd [15.02.20]
 #  - created calc_daily_gpp function [15.02.20]
-# VERSION 2.1.1
+# VERSION 2.2.0
 #  - created gapfill_ppfd_day [15.02.23]
 #  - renamed gapfill_ppfd to gapfill_ppfd_month [15.02.23]
 #    --> moved daily processing & file writing to gapfill_ppfd_day
 #  - updated SOLAR class with local_time class variable [15.02.23]
 #  - created daily_gpp function [15.02.23]
 #  - PEP8 style fixes [15.11.18]
-# VERSION 2.2.0-dev
+# VERSION 3.0.0-dev
 #  - separated individual class files [16.01.17]
 #  - Python 2/3 consistency checks [16.01.17]
 #  - imports connectSQL from db_setup [16.01.17]
-#  - moved partition function to STAGE1 class [16.04.01]
+#  - moved partition function to FLUX_PARTI class [16.04.01]
 #  - separated function from init for SOLAR class [16.04.01]
-#  - up to calculating GPP and daily integrations
+#  - almost finished completing parsing individual class files [16.07.22]
 #
 # -----
 # todo:
 # -----
-# x Create a constants file
-# x Separate utility functions to their own file & import them
-# x Add logging
-# x Consider creating a data class to handle the interfact between the main
-#   model and the necessary input variables
-#   + this will allow alternative means of getting input data (e.g., read from
-#     file) to be implemented
 # - FLUX_PARTI class
 #   + Why not use the optimized obs parameters as the guess for ro?
 #       * if optim fails---you'll have crumby initial guesses
@@ -407,22 +400,15 @@
 #   + Or use Willmott's revised index of agreement
 # - Consider checking for system closure (each station, each month?)
 #   + short equation: Rn + G + LE + H = 0
-# X gapfill_ppfd
-#    X what to do with sfactor when ppfd_integral = 0?
-#    --> currently sfactor set to 1.0 (arbitrarily)
-#    --> DOESN'T MATTER, POLAR NIGHT, ppfd_hh WILL BE ARRAY OF ZEROS
-# X Implement specific model runs, e.g.:
-#    X calculate daily GPP for a given day and station
-#    X create gapfill_ppfd_day & gapfill_ppfd_month
 #
 ###############################################################################
 # IMPORT MODULES
 ###############################################################################
-import os.path
+import logging
+import os
 
 from data import DATA
 from flux_parti import FLUX_PARTI
-from lue import LUE
 from utilities import add_one_month
 from utilities import simpson
 
@@ -431,6 +417,19 @@ from utilities import simpson
 # MAIN PROGRAM
 ###############################################################################
 if __name__ == "__main__":
+    # Create a root logger:
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+
+    # Instantiating logging handler and record format:
+    root_handler = logging.FileHandler("gepisat.log")
+    rec_format = "%(asctime)s:%(levelname)s:%(name)s:%(funcName)s:%(message)s"
+    formatter = logging.Formatter(rec_format, datefmt="%Y-%m-%d %H:%M:%S")
+    root_handler.setFormatter(formatter)
+
+    # Send logging handler to root logger:
+    root_logger.addHandler(root_handler)
+
     # Initialize data class for handling all data IO operations, which
     # includes connecting to the GePiSaT database:
     my_data = DATA()
@@ -446,9 +445,6 @@ if __name__ == "__main__":
 
     # Initialize summary statistics file:
     my_data.create_summary_file("summary_statistics.txt")
-
-    # Create/initialize LUE class instance:
-    my_lue = LUE()
 
     # Iterate through stations:
     for station in my_data.stations:
@@ -472,73 +468,39 @@ if __name__ == "__main__":
                 my_parter.partition(outliers=True)
 
                 # Perform half-hourly PPFD gapfilling (umol m-2 s-1):
-                (gf_time, gf_ppfd) = my_data.gapfill_monthly_ppfd(
-                    sd, to_save=True)
+                gf_time, gf_ppfd = my_data.gapfill_monthly_ppfd(
+                    sd, to_save=False)
 
                 # Calculate half-hourly GPP (umol m-2 s-1)
                 gf_gpp, gf_gpp_err = my_parter.calc_gpp(gf_ppfd)
 
-                # Calculate daily GPP (mol m-2):
+                # OPTIONAL: Calculate daily GPP (mol m-2):
                 if False:
                     gpp_daily = my_data.sub_to_daily_gpp(
                         gf_time, gf_gpp, gf_gpp_err, to_save=True)
 
                 # Continue processing if partitioning was successful:
                 if my_parter.best_model > 0:
-                    # The new LUE model:
-                    # GPP = f(PPFD, fAPAR, VPD, CPA, Tair, Patm, CO2)
-                    #  - monthly variables: PPFD, fAPAR, CPA, VPD, Tair
-                    #  - annual variables: CO2
-                    #  - constants in time: Patm=f(elevation)
-
-                    # !!!!! STOPPED HERE - @TODO - !!!!!!!
-
                     # Integrate PPFD & GPP [umol m-2]; dt=30 min (1800 s)
-                    ppfd_month = simpson(gf_ppfd.clip(min=0), 1800)
-                    gpp_month = simpson(gf_gpp.clip(min=0), 1800)
-                    gpp_month_err = simpson(gf_gpp_err, 1800)
+                    ppfd_mo = simpson(gf_ppfd.clip(min=0), 1800)
+                    gpp_mo = simpson(gf_gpp.clip(min=0), 1800)
+                    gpp_mo_err = simpson(gf_gpp_err, 1800)
 
                     # Convert units from [umol m-2] to [mol m-2]:
-                    ppfd_month *= (1e-6)
-                    gpp_month *= (1e-6)
-                    gpp_month_err *= (1e-6)
+                    ppfd_mo *= (1e-6)
+                    gpp_mo *= (1e-6)
+                    gpp_mo_err *= (1e-6)
 
-                    # Retrieve annual CO2:
-                    annual_sd = sd.replace(month=1)
-                    co2_annual = get_data_point(co2_msvidx, annual_sd)  # ppm
-
-                    # Retrieve monthly gridded data:
-                    co2_msvidx = "US-MLO.21"
-                    cpa_msvidx = get_msvidx(hdg_station, 'alpha')
-                    fpar_msvidx = get_msvidx(hdg_station, 'FAPAR')
-                    tair_msvidx = get_msvidx(hdg_station, 'Tc')
-                    vpd_msvidx = get_msvidx(hdg_station, 'VPD')
-                    cpa_month = get_data_point(cpa_msvidx, sd)      # unitless
-                    fpar_month = get_data_point(fpar_msvidx, sd)    # unitless
-                    tair_month = get_data_point(tair_msvidx, sd)    # deg C
-                    vpd_month = get_data_point(vpd_msvidx, sd)      # kPa
-
-                    # Add LUE parameters to LUE class:
-                    my_lue.add_station_val(station,
-                                           sd,
-                                           gpp_month,               # mol/m2
-                                           gpp_month_err,           # mol/m2
-                                           fpar_month,              # unitless
-                                           ppfd_month,              # mol/m2
-                                           vpd_month,               # kPa
-                                           cpa_month,               # unitless
-                                           tair_month,              # degC
-                                           co2_annual,              # ppm
-                                           patm,                    # Pa
-                                           elv)                     # m
+                    # STAGE 2: Update LUE parameters:
+                    my_data.update_lue(sd, gpp_mo, gpp_mo_err, ppfd_mo)
 
             # Save class summary statistics:
             SFILE = open(my_data.summary_file, 'a')
-            SFILE.write(my_parter.summary_statistics())
+            SFILE.write(my_parter.summary_stats)
             SFILE.close()
 
             # Increment date:
             sd = add_one_month(sd)
 
-        # Write monthly LUE parameters to file:
-        my_lue.write_out_val(station, lue_file)
+        # STAGE 2: Write monthly LUE parameters to file:
+        my_data.write_monthly_results(station)

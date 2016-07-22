@@ -1,3 +1,5 @@
+# Master git ignore list
+
 # Ignore TeX compile files:
 *.aux
 *.bbl
@@ -7,3 +9,10 @@
 *.dvi
 *.toc
 *.idx
+
+# Ignore Python compile files:
+*.pyc
+*__pycache__
+
+# Ignore log files:
+*.log*

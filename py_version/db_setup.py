@@ -2,10 +2,9 @@
 #
 # db_setup.py
 #
-# VERSION 2.1
+# VERSION 3.0.0
 #
-# 2013-05-15 -- created (as postgreSQL.py)
-# 2016-01-15 -- last updated
+# LAST UPDATED: 2016-07-22
 #
 # ---------
 # citation:
@@ -22,9 +21,7 @@
 # 1. Create/drop database tables (met_data, var_list, data_set)
 # 2. Read data from file and populates database tables
 #
-# NOTE 1: getdata() function requires hardcoding data directory
-#
-# NOTE 2: database name is hardcoded in connectSQL() and db_size()
+# NOTE: database name is hardcoded in connectSQL()
 #
 # ----------
 # changelog:
@@ -64,9 +61,9 @@
 # -----
 # todo:
 # -----
-# 01. getdata() function needs better file handling
-#     * how to handle multiple input files?
-# 02. Add database name (e.g. 'gepisat') to the user.txt file
+# - getdata() function needs better file handling
+#   * how to handle multiple input files?
+# - Add database name (e.g. 'gepisat') to the user.txt file
 #
 ###############################################################################
 # IMPORT MODULES:
@@ -76,59 +73,12 @@ import logging
 import os.path
 import sys
 
-import psycopg2
+from gepisat.db_util import connectSQL
 
 
 ###############################################################################
 # DEFINE FUNCTIONS:
 ###############################################################################
-def connectSQL():
-    """
-    Name:     connectSQL
-    Input:    None.
-    Output:   psycopg2 connection (con)
-    Features: Connects to postgreSQL database and returns connection handle
-              or None type if connection fails
-    """
-    # Open credentials file:
-    cred_file = "user.txt"
-    my_user = "postgres"
-    my_pass = "bitnami"
-    if os.path.isfile(cred_file):
-        try:
-            f = open(cred_file, "r")
-        except:
-            logging.exception("Failed to read crendential file")
-        else:
-            logging.debug("Reading credential file")
-            cred_data = f.readline()
-            if cred_data:
-                cred_data = cred_data.rstrip()
-                my_user, my_pass = cred_data.split(',')
-
-    # Initialize connection variable:
-    con = None
-
-    # Test database connection:
-    try:
-        con = psycopg2.connect(
-            database='gepisat',
-            #database='test',
-            user=my_user,
-            host='localhost',
-            password=my_pass
-        )
-    except psycopg2.DatabaseError:
-        logging.exception("Failed to connect to the database")
-    except:
-        logging.exception(
-            "Encountered unknown error while connecting to database")
-    else:
-        logging.debug("Database connection created")
-    finally:
-        return con
-
-
 def getversion():
     """
     Name:     get_version
@@ -686,10 +636,13 @@ def db_size(db_name='gepisat'):
 
 def get_var_files(base_path):
     """
+    Convenience function for getting GePiSaT database files.
+
     Name:     get_var_files
     Input:    str, base path (base_path)
     Output:   list, file names (files_list)
-    Features: Returns a list of var_list file names (with path)
+    Features: Returns a list of var_list file names (with path);
+              NOTE: you need to update these paths!
     """
     path_list = [
         os.path.join(base_path, "cru", "cld", "*Var-List*"),
@@ -715,6 +668,8 @@ def get_var_files(base_path):
 
 def get_data_files(base_path):
     """
+    Convenience function for getting GePiSaT database files.
+
     Name:     get_data_files
     Input:    str, base path (base_path)
     Output:   list, file names (files_list)
@@ -756,7 +711,7 @@ if __name__ == "__main__":
     root_logger.addHandler(root_handler)
 
     # Test database connection:
-    # getversion()
+    getversion()
 
     # Reset or clean database:
     # reset_db()
@@ -795,10 +750,10 @@ if __name__ == "__main__":
                                                       1e-6*db_size()))
         root_logger.info("... 'var_list' complete")
 
-    if True:
+    if False:
         # Create and populate data_set table
         root_logger.info("Processing 'data_set' table...")
-        ds_dir = "/home/user/Projects/gepisat/data/psql_data"
+        ds_dir = "/database/files/psql_data"
         ds_files = get_data_files(ds_dir)
         for z in sorted(ds_files):
             popdataset(z)

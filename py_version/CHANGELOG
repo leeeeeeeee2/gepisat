@@ -9,6 +9,7 @@ VERSION 3.0.0
         * the file handler can be changed for reading from e.g., netCDF files
 * finished separating all classes into their own modules
 * new statistics dictionary for managing all the model fitnesses
+    * fixed errors found in previous summary stats
 * created the gepisat package [16.07.22]
     * moved connectSQL to db_util module
 * created this change log [16.07.22]

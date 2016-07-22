@@ -1525,7 +1525,8 @@ class PARTI_STATS(object):
                 found = True
                 return k
         if not found:
-            raise ValueError("Name not found in summary dictionary!")
+            raise ValueError(
+                "Name '%s' not found in summary dictionary!" % (name))
 
     def print_summary(self):
         """

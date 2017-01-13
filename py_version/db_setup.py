@@ -31,7 +31,7 @@
 # ---------
 # Davis, T.W., B.D. Stocker, X.M.P. Gilbert, T.F. Keenan, H. Wang, B.J. Evans,
 # and I.C. Prentice. The Global ecosystem Production in Space and Time
-# (GePiSaT) Model of the terrestrial biosphere: Part 1 — Flux partitioning
+# (GePiSaT) Model of the terrestrial biosphere: Part 1 - Flux partitioning
 # and gap-filling gross primary production. Geosci. Model Dev.
 #
 # ------------
@@ -666,15 +666,16 @@ def get_var_files(base_path):
               NOTE: you need to update these paths!
     """
     path_list = [
-        os.path.join(base_path, "cru", "cld", "*Var-List*"),
-        os.path.join(base_path, "cru", "elv", "*Var-List*"),
+        os.path.join(base_path, "*Var-List*"),
+        # os.path.join(base_path, "cru", "cld", "*Var-List*"),
+        # os.path.join(base_path, "cru", "elv", "*Var-List*"),
         # os.path.join(base_path, "cru", "pre", "*Var-List*"),
-        os.path.join(base_path, "cru", "tc", "*Var-List*"),
-        os.path.join(base_path, "cru", "vpd", "*Var-List*"),
-        os.path.join(base_path, "fluxtowers", "station_data", "*Var-List*"),
-        os.path.join(base_path, "modis", "evi", "*Var-List*"),
-        os.path.join(base_path, "noaa", "co2", "*Var-List*"),
-        os.path.join(base_path, "watch", "swdown", "*Var-List*"),
+        # os.path.join(base_path, "cru", "tc", "*Var-List*"),
+        # os.path.join(base_path, "cru", "vpd", "*Var-List*"),
+        # os.path.join(base_path, "fluxtowers", "station_data", "*Var-List*"),
+        # os.path.join(base_path, "modis", "evi", "*Var-List*"),
+        # os.path.join(base_path, "noaa", "co2", "*Var-List*"),
+        # os.path.join(base_path, "watch", "swdown", "*Var-List*"),
         # os.path.join(base_path, "splash", "alpha", "*Var-List*"),
     ]
 
@@ -698,15 +699,16 @@ def get_data_files(base_path):
     Note:     Hard-coded base_path
     """
     path_list = [
-        os.path.join(base_path, "cru", "cld", "*Data-Set*"),
-        os.path.join(base_path, "cru", "elv", "*Data-Set*"),
+        os.path.join(base_path, "*Data-Set*"),
+        # os.path.join(base_path, "cru", "cld", "*Data-Set*"),
+        # os.path.join(base_path, "cru", "elv", "*Data-Set*"),
         # os.path.join(base_path, "cru", "pre", "*Data-Set*"),
-        os.path.join(base_path, "cru", "tc", "*Data-Set*"),
-        os.path.join(base_path, "cru", "vpd", "*Data-Set*"),
-        os.path.join(base_path, "fluxtowers", "station_data", "*Data-Set*"),
-        os.path.join(base_path, "noaa", "co2", "*Data-Set*"),
-        os.path.join(base_path, "modis", "evi", "*Data-Set*"),
-        os.path.join(base_path, "watch", "swdown", "*Data-Set*"),
+        # os.path.join(base_path, "cru", "tc", "*Data-Set*"),
+        # os.path.join(base_path, "cru", "vpd", "*Data-Set*"),
+        # os.path.join(base_path, "fluxtowers", "station_data", "*Data-Set*"),
+        # os.path.join(base_path, "noaa", "co2", "*Data-Set*"),
+        # os.path.join(base_path, "modis", "evi", "*Data-Set*"),
+        # os.path.join(base_path, "watch", "swdown", "*Data-Set*"),
         # os.path.join(base_path, "splash", "alpha", "*Data-Set*"),
     ]
 
@@ -726,7 +728,7 @@ if __name__ == "__main__":
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
     root_handler = logging.StreamHandler()
-    rec_format = "%(asctime)s:%(levelname)s:%(name)s:%(funcName)s:%(message)s"
+    rec_format = "%(asctime)s:%(levelname)s:%(message)s"
     formatter = logging.Formatter(rec_format, datefmt='%Y-%m-%d %H:%M:%S')
     root_handler.setFormatter(formatter)
     root_logger.addHandler(root_handler)
@@ -748,22 +750,28 @@ if __name__ == "__main__":
     my_dbsize = db_size()
     root_logger.info("Database starting size: %0.3f MB" % (1e-6*my_dbsize))
 
+    # Define directories:
+    home_dir = os.path.expanduser("~")
+    data_dir = os.path.join(home_dir, "Data", "psql")
+    md_dir = os.path.join(data_dir, "watch")
+    vl_dir = os.path.join(data_dir, "watch")
+    ds_dir = os.path.join(data_dir, "watch")
+
     # Create and populate met_data table:
-    if False:
+    if True:
         root_logger.info("Processing 'met_data' table...")
-        met_dir = "/database/files/met_data/point/"
-        md_files = glob.glob(met_dir + "*Met-Data*")
+        md_str = os.path.join(md_dir, "*Met-Data*")
+        md_files = glob.glob(md_str)
         for x in sorted(md_files):
             popmetdata(x)
-            root_logger.info("added %s (%0.3f MB)" % (os.path.basename(x),
-                                                      1e-6*db_size()))
+            root_logger.info(
+                "added %s (%0.3f MB)" % (os.path.basename(x), 1e-6*db_size()))
         root_logger.info("... 'met_data' complete")
 
     if False:
         # Create and populate var_list table :
         # NOTE: some cols depend on met_data, so create/pop it first
         root_logger.info("Processing 'var_list' table...")
-        vl_dir = "/database/files/psql_data"
         vl_files = get_var_files(vl_dir)
         for y in sorted(vl_files):
             popvarlist(y)
@@ -774,7 +782,6 @@ if __name__ == "__main__":
     if False:
         # Create and populate data_set table
         root_logger.info("Processing 'data_set' table...")
-        ds_dir = "/database/files/psql_data"
         ds_files = get_data_files(ds_dir)
         for z in sorted(ds_files):
             popdataset(z)

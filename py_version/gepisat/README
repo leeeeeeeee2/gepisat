@@ -1,0 +1,51 @@
+GePiSaT v.3.0-dev
+=================
+
+
+License
+=======
+
+Copyright (C) 2017 Prentice Lab
+
+
+Contents
+========
+
+__init__.py
+    Python package initialization module.
+    Contains package version number.
+
+const.py
+    Global constant definitions.
+    Utilizes numpy package.
+
+data.py
+    DATA class definition, utilizes a file handler for all data input/output operations and provides some data processing features.
+
+db_util.py
+    Module providing the connectSQL function required for communicating with the GePiSaT database.
+    Utilizes the psycopg2 package.
+
+file_handler.py
+    GPSQL class definition used by the DATA class for GePiSaT database IO operations.
+    Utilizes numpy package.
+
+flux_parti.py
+    FLUX_PARTI class definition, which performs the partitioning of NEE and PPFD.
+    Utilizes numpy package.
+
+lue.py
+    LUE class definition, which stores the monthly meteorology and GPP estimates for performing light-use efficiency analysis.
+    Utilizes numpy package.
+
+solar.py
+    SOLAR_TOA class definition for calculating daily half-hourly top-of-the-atmosphere solar radiation fluxes.
+    Utilizes numpy package.
+
+stats.py
+    PARTI_STATS class definition, which stores all the statistical parameters for flux partitioning and provides model fitting, outlier removal, and model selection.
+    Utilizes numpy and scipy packages.
+
+utilities.py
+    Provides a variety of utility functions.
+    Utilizes numpy and scipy packages.

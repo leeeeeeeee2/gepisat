@@ -3,12 +3,12 @@
 # db_util.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2016-07-22
+# LAST UPDATED: 2017-01-13
 #
 # ~~~~~~~~
 # license:
 # ~~~~~~~~
-# Copyright (C) 2016 Prentice Lab
+# Copyright (C) 2017 Prentice Lab
 #
 # This file is part of the GePiSaT (Global ecosystem Production in Space and
 # Time) model.
@@ -61,7 +61,7 @@ def connectSQL():
         try:
             f = open(cred_file, "r")
         except:
-            logging.exception("Failed to read crendential file")
+            logging.error("Failed to read crendential file")
         else:
             logging.debug("Reading credential file")
             cred_data = f.readline()
@@ -76,7 +76,7 @@ def connectSQL():
     try:
         con = psycopg2.connect(
             database='gepisat',
-            #database='test',
+            # database='test',
             user=my_user,
             host='localhost',
             password=my_pass

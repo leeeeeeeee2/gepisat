@@ -2,16 +2,37 @@
 #
 # db_setup.py
 #
-# VERSION 3.0.0
+# VERSION 3.0.0-dev
+# LAST UPDATED: 2017-01-13
 #
-# LAST UPDATED: 2016-07-22
+# ~~~~~~~~
+# license:
+# ~~~~~~~~
+# Copyright (C) 2017 Prentice Lab
+#
+# This file is part of the GePiSaT (Global ecosystem Production in Space and
+# Time) model.
+#
+# GePiSaT is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# GePiSaT is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with GePiSaT.  If not, see <http://www.gnu.org/licenses/>.
 #
 # ---------
 # citation:
 # ---------
-# I. C. Prentice, T. W. Davis, X. M. P. Gilbert, B. D. Stocker, B. J. Evans,
-# H. Wang, and T. F. Keenan, "The Global ecosystem in Space and Time (GePiSaT)
-# Model of the Terrestrial Biosphere," (in progress).
+# Davis, T.W., B.D. Stocker, X.M.P. Gilbert, T.F. Keenan, H. Wang, B.J. Evans,
+# and I.C. Prentice. The Global ecosystem Production in Space and Time
+# (GePiSaT) Model of the terrestrial biosphere: Part 1 — Flux partitioning
+# and gap-filling gross primary production. Geosci. Model Dev.
 #
 # ------------
 # description:
@@ -114,7 +135,7 @@ def getdata(myfile):
         try:
             f = open(myfile, 'r')
         except IOError:
-            logging.exception("Failed to read data file %s", myfile)
+            logging.error("Failed to read data file %s", myfile)
             t = None
         except:
             logging.exception("Failed at reading data file %s", myfile)
@@ -711,7 +732,7 @@ if __name__ == "__main__":
     root_logger.addHandler(root_handler)
 
     # Test database connection:
-    getversion()
+    # getversion()
 
     # Reset or clean database:
     # reset_db()

@@ -2,7 +2,7 @@
 #
 # __init__.py
 #
-# LAST UPDATED: 2016-07-22
+# LAST UPDATED: 2017-01-13
 #
 # ~~~~~~~~
 # license:

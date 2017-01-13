@@ -1,0 +1,45 @@
+GePiSaT v.3.0-dev
+=================
+
+
+License
+=======
+
+Copyright (C) 2017 Prentice Lab
+
+
+Contents
+========
+
+__init__.py
+    Python package initialization module.
+    Contains package version number.
+
+crudata.py
+    Defines the functions for processing CRU TS meteorology, VPD, and elevation.
+    Utilizes numpy and scipy.io packages.
+
+fluxdata.py
+    FLUXDATA_2012 and FLUXDATA_2015 class definitions and processing functions for flux tower data.
+
+glasdata.py
+    GLASDATA class definition and processing function for canopy height data.
+    Utilizes numpy and PIL packages.
+
+modisdata.py
+    MODISDATA class definition and processing function for EVI.
+    Utilizes numpy and pyhdf packages.
+
+splashdata.py
+    Defines the function for processing Priestley-Taylor alpha.
+    Utilizes numpy package.
+
+utilities.py
+    Defines the writeout function for creating output files.
+
+var.py
+    VAR class definition for creating input files for the var_list database table.
+
+watchdata.py
+    WATCHDATA class definition and processing function for shortwave radiation flux.
+    Utilizes scipy.io package.

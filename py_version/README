@@ -1,0 +1,52 @@
+GePiSaT v.3.0-dev
+=================
+
+License
+=======
+
+Copyright (C) 2017 Prentice Lab
+
+
+Requirements
+============
+
+This code was successfully compiled and executed using Python 2.7 interpreters (Python Software Foundation, 2017).
+
+This code requires the installation of third-party packages: NumPy (v.1.11.3 by NumPy Developers, 2016) and SciPy (v.0.18.1 by SciPy Developers, 2016).
+
+The GePiSaT database is developed using postgreSQL (v.9.5 by The PostgreSQL Global Development Group, 2017) and utilizes the third-party Python package psycopg2 (v.2.6.2 by Federico Di Gregorio and Daniele Varrazzo, 2014).
+
+
+Contents
+========
+
+db_setup.py
+    Provides tools for managing the GePiSaT database tables (i.e., create and drop table) and populating them (i.e., loading data to the database)
+    Libraries:
+        - gepisat.db_util
+
+table_maker.py
+    Provides tools for converting observations (e.g., FLUXNET, WATCH, CRU TS) to a format that can be read into the GePiSaT database.
+    Libraries:
+        - PIL.Image
+        - numpy
+        - scipy.io
+
+model.py
+    Main module for running the GePiSaT model.
+    * Acquires monthly half-hourly PPFD and NEE observation pairs.
+    * Performs GPP and Re partitioning of NEE and PPFD based on models defined by Ruimy et al. (1995).
+    * Removes outliers in PPFD:NEE observations based on model fitting using Peirce's criterion (Peirce 1852; Gould 1855).
+    * Outputs original and outlier-free monthly datasets with fitting parameters:
+        > [STATION]_[YYYY-MM-DD].txt, original
+        > [STATION]_[YYYY-MM-DD]_ro.txt, outlier-free
+    * Outputs partitioning statistics to file:
+        > summary_statistics.txt
+    * Selects the best model parameters for modeling based on: model fitness and parameter significance.
+    * Acquires WFDEI shortwave radiation grid measurements based on flux tower location and day of the year.
+    * Calculates extraterrestrial solar radiation (in units of PPFD) based on the SPLASH model methods (Davis et al., 2017).
+    * Gap-fills daily PPFD observations with scaled extraterrestrial solar radiation flux.
+    * Outputs observations and gap-filled time series:
+        > [STATION]-GF_[YYYY-MM-DD].txt
+    * Calculates half-hourly GPP based on partitioning results.
+    * Integrates half-hourly to monthly gap-filled PPFD and GPP.

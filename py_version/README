@@ -10,11 +10,15 @@ Copyright (C) 2017 Prentice Lab
 Requirements
 ============
 
-This code was successfully compiled and executed using Python 2.7 interpreters (Python Software Foundation, 2017).
+This code was successfully compiled and executed using Python 2.7 interpreters
+(Python Software Foundation, 2017).
 
-This code requires the installation of third-party packages: NumPy (v.1.11.3 by NumPy Developers, 2016) and SciPy (v.0.18.1 by SciPy Developers, 2016).
+This code requires the installation of third-party packages: NumPy (v.1.11.3 by
+NumPy Developers, 2016) and SciPy (v.0.18.1 by SciPy Developers, 2016).
 
-The GePiSaT database is developed using postgreSQL (v.9.5 by The PostgreSQL Global Development Group, 2017) and utilizes the third-party Python package psycopg2 (v.2.6.2 by Federico Di Gregorio and Daniele Varrazzo, 2014).
+The GePiSaT database is developed using postgreSQL (v.9.5 by The PostgreSQL
+Global Development Group, 2017) and utilizes the third-party Python package
+psycopg2 (v.2.6.2 by Federico Di Gregorio and Daniele Varrazzo, 2014).
 
 
 Contents

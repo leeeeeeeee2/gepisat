@@ -29,9 +29,10 @@
 # ---------
 # citation:
 # ---------
-# I. C. Prentice, T. W. Davis, X. M. P. Gilbert, B. D. Stocker, B. J. Evans,
-# H. Wang, and T. F. Keenan, "The Global ecosystem in Space and Time (GePiSaT)
-# Model of the Terrestrial Biosphere," (in progress).
+# Davis, T.W., B.D. Stocker, X.M.P. Gilbert, T.F. Keenan, H. Wang, B.J. Evans,
+# and I.C. Prentice. The Global ecosystem Production in Space and Time
+# (GePiSaT) Model of the terrestrial biosphere: Part 1 - Flux partitioning
+# and gap-filling gross primary production. Geosci. Model Dev.
 #
 ###############################################################################
 # IMPORT MODULES:

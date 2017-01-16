@@ -3,7 +3,7 @@
 # fluxdata.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-13
+# LAST UPDATED: 2017-01-15
 #
 # ~~~~~~~~
 # license:
@@ -259,8 +259,16 @@ class FLUXDATA_2015:
     Name:     FLUXDATA_2015
     Features: This class creates GePiSaT database data_set table entries based
               on fluxdata.org 2015 flux tower data files
+    Ref:
+    http://fluxnet.fluxdata.org/data/fluxnet2015-dataset/fullset-data-product/
 
     @TODO
+
+    CSV Header Items of Interest:
+        TIMESTAMP_START
+        PPFD_IN (W m-2)
+        NEE_VUT_REF (umolCO2 m-2 s-1)
+        NEE_VUT_REF_QC
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Variable Definitions
@@ -273,7 +281,10 @@ class FLUXDATA_2015:
     data = []          # list of data (for each line of measurements)
     #
     # Variable quality control (qc) flags:
-    varFlags = {}
+    varFlags = {
+        'NEE_VUT_REF': 'NEE_VUT_REF_QC',   # 0 = measured
+        'PPFD_IN': 'PPFD_IN_QC'            # not defined for half-hourly data
+    }
 
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -298,6 +309,9 @@ class FLUXDATA_2015:
         self.msvIDX = []
         self.data = []
         self.vari = []
+
+        # @TODO: convert timekeeping string (YYYYMMDDHHMM) to datetime object
+        # @TODO: find list indexes of variables of interest
 
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
@@ -331,31 +345,23 @@ class FLUXDATA_2015:
 ###############################################################################
 # FUNCTIONS
 ###############################################################################
-def process_flux_2012(d):
+def process_flux_2012(my_dir):
     """
     Name:     process_flux_2012
-    Input:    string, input file directory (d)
+    Input:    string, input file directory (my_dir)
     Output:   None.
     Features: Processes 2012 flux tower data files into variable list and
               data set table output files
     Depends:  writeout
     """
     # Search directory for fluxdata CSV files:
-    my_dir = d
     my_ext = "*allvars.csv"
-    my_files = glob.glob(my_dir + my_ext)
-
-    # Prepare output files:
-    my_var_out = "Fluxdata_Var-List_all.csv"
-    var_outfile = my_dir + my_var_out
-    my_dat_out = "Fluxdata_Data-Set_test.csv"
-    dat_outfile = my_dir + my_dat_out
+    s_str = os.path.join(my_dir, my_ext)
+    my_files = glob.glob(s_str)
 
     # Prepare header lines and write to file:
     var_headerline = "msvidx,stationid,varid,varname,varunit,vartype,varcore\n"
-    writeout(var_outfile, var_headerline)
     dat_headerline = "msvidx,stationid,datetime,data\n"
-    writeout(dat_outfile, dat_headerline)
 
     # Create a list for book keeping which stations have been var-processed:
     var_out_list = []
@@ -370,16 +376,11 @@ def process_flux_2012(d):
         # Read through each file:
         for doc in my_files:
             if os.path.isfile(doc):
+                doc_name = os.path.basename(doc)
                 try:
                     # Try to get filename prefix:
-                    my_station = re.search(
-                        '^\S{6}',
-                        os.path.basename(doc)
-                        ).group(0)
-                    my_dat = re.search(
-                        '^\S{6}\.{1}\d{4}',
-                        os.path.basename(doc)
-                        ).group(0)
+                    my_station = re.search('^\S{6}', doc_name).group(0)
+                    my_dat = re.search('^\S{6}\.{1}\d{4}', doc_name).group(0)
                     my_dat_out = my_dat + "_Data-Set.csv"
                     my_var_out = my_station + "_Var-List.csv"
                 except AttributeError:
@@ -387,7 +388,7 @@ def process_flux_2012(d):
                 else:
                     # Initialize data-set outfile:
                     if dat_flag:
-                        dat_outfile = my_dir + my_dat_out
+                        dat_outfile = os.path.join(my_dir, my_dat_out)
                         writeout(dat_outfile, dat_headerline)
 
                     # Check to see if station has been var'ed:
@@ -395,7 +396,7 @@ def process_flux_2012(d):
                         var_flag = 0
                     else:
                         # Initialize var outfile:
-                        var_outfile = my_dir + my_var_out
+                        var_outfile = os.path.join(my_dir, my_var_out)
                         writeout(var_outfile, var_headerline)
 
                         # Add var to var_list and set flag to true:
@@ -408,16 +409,16 @@ def process_flux_2012(d):
 
                     # Read the headerline and strip whitespace from the end:
                     header = f.readline()
-                    header = header.rstrip()
+                    header = header.rstrip("\n")
 
                     # Read the remaining content:
                     content = f.readlines()
-
-                    # Close the file after done reading:
-                    f.close()
                 except IOError:
                     logging.error("Could not read file: %s", doc)
                 else:
+                    # Close the file after done reading:
+                    f.close()
+
                     # Parse header line:
                     parts = header.split(',')
 
@@ -432,11 +433,110 @@ def process_flux_2012(d):
                     # For each timestamp, produce variable data
                     if dat_flag:
                         for row in content:
-                            row = row.rstrip()
+                            row = row.rstrip("\n")
                             dataset = row.split(',')
 
                             # Create data class and print out lines:
                             my_data = FLUXDATA_2012(doc, parts, dataset)
                             my_data.print_line(dat_outfile)
+    else:
+        logging.warning("No files found in directory: %s", my_dir)
+
+
+def process_flux_2015(my_dir):
+    """
+    Name:     process_flux_2015
+    Input:    string, input file directory (my_dir)
+    Output:   None.
+    Features: Processes 2015 flux tower data files into variable list and
+              data set table output files
+    Depends:  writeout
+    """
+    # Search directory for fluxdata CSV files:
+    my_ext = "*_FLUXNET2015_FULLSET_HH_*"
+    s_str = os.path.join(my_dir, my_ext)
+    my_files = glob.glob(s_str)
+
+    # Prepare header lines for output files:
+    var_headerline = "msvidx,stationid,varid,varname,varunit,vartype,varcore\n"
+    dat_headerline = "msvidx,stationid,datetime,data\n"
+
+    # Create a list for book keeping which stations have been var-processed:
+    var_out_list = []
+    var_flag = 1
+
+    # Statically set data-set processing flag
+    # in case you want to just process var-list
+    dat_flag = 1
+
+    # Check that files were found:
+    n_files = len(my_files)
+    if n_files > 0:
+        # Read through each file:
+        for doc in my_files:
+            if os.path.isfile(doc):
+                doc_name = os.path.basename(doc)
+                try:
+                    # Try to get filename prefix:
+                    my_station = re.search('^FLX_(\S{6})_', doc_name).group(1)
+                    my_dat = re.search('_(\d{4}-\d{4})_', doc_name).group(1)
+                    my_dat_out = "%s_%s_Data-Set.csv" % (my_station, my_dat)
+                    my_var_out = my_station + "_Var-List.csv"
+                except AttributeError:
+                    logging.error("Could not read file prefix from %s", doc)
+                else:
+                    # Initialize data-set outfile:
+                    if dat_flag:
+                        dat_outfile = os.path.join(my_dir, my_dat_out)
+                        writeout(dat_outfile, dat_headerline)
+
+                    # Check to see if station has been var'ed:
+                    if my_station in var_out_list:
+                        var_flag = 0
+                    else:
+                        # Initialize var outfile:
+                        var_outfile = os.path.join(my_dir, my_var_out)
+                        writeout(var_outfile, var_headerline)
+
+                        # Add var to var_list and set flag to true:
+                        var_out_list.append(my_station)
+                        var_flag = 1
+
+                    try:
+                        # Try to open file for reading:
+                        f = open(doc, 'r')
+
+                        # Read headerline and strip whitespace from the end:
+                        header = f.readline()
+                        header = header.rstrip("\n")
+
+                        # Read the remaining content:
+                        content = f.readlines()
+                    except IOError:
+                        logging.error("Could not read file: %s", doc)
+                    else:
+                        # Close the file after done reading:
+                        f.close()
+
+                        # Parse header line:
+                        var_parts = header.split(',')
+
+                        # ~~~~~~~~~~ VAR-LIST ~~~~~~~~~~ #
+                        # For each flux variable, produce the data row:
+                        if var_flag:
+                            for var in var_parts:
+                                my_line = VAR(doc, var, 'flux')
+                                my_line.printLine(var_outfile)
+
+                        # ~~~~~~~~~~ DATA-SET ~~~~~~~~~~ #
+                        # For each timestamp, produce variable data
+                        if dat_flag:
+                            for row in content:
+                                row = row.rstrip("\n")
+                                dset = row.split(',')
+
+                                # Create data class and print out lines:
+                                my_data = FLUXDATA_2015(doc, var_parts, dset)
+                                my_data.print_line(dat_outfile)
     else:
         logging.warning("No files found in directory: %s", my_dir)

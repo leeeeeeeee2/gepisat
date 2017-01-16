@@ -3,7 +3,7 @@
 # var.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-13
+# LAST UPDATED: 2017-01-15
 #
 # ~~~~~~~~
 # license:
@@ -49,9 +49,11 @@ class VAR:
     """
     Name:     VAR
     Features: This class creates output lines for GePiSaT var_list database
+    History:  Version 3.0
+              - added FLUXNET 2015 variables for NEE and PPFD [17.01.15]
 
-    TODO:  add new dictionary for variable names
-           (e.g., map the "_f" to more natural names)
+    @TODO:  add new dictionary for variable names?
+            (e.g., map the "_f" to more natural names)
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Variable Definitions
@@ -69,8 +71,8 @@ class VAR:
     #   (those core vars not used are commented out)
     # * additional core variables added for GePiSaT (18--26)
     coreVars = {
-        'NEE_f': 1,      # Net ecosystem exchange (CO2 flux)
-        # 'GPP_f': 2,
+        'NEE_f': 1,        # Net ecosystem exchange (CO2 flux); FLUXNET 2012
+        'NEE_VUT_REF': 2,  # Net ecosystem exchange (CO2 flux); FLUXNET 2015
         # 'LE_f': 3,
         # 'H_f': 4,
         # 'G_f': 5,
@@ -83,9 +85,9 @@ class VAR:
         # 'SWC2_f': 12,
         # 'WS_f': 13,
         # 'Rg_f': 14,
-        'PPFD_f': 15,    # Photosynthetic photon flux density
-        # 'Rn_f': 16,
-        # 'gsurf_f': 17,
+        'PPFD_f': 15,    # Photosynthetic photon flux density; FLUXNET 2012
+        'PPFD_IN': 16,   # Photosynthetic photon flux density; FLUXNET 2015
+        # 'Rn_f': 17,
         'SWdown': 18,    # WATCH shortwave downwelling solar radiation
         'FAPAR': 19,     # MODIS-based fraction of absorbed PAR
         'VPD': 20,       # CRU-based vapor pressure deficit
@@ -99,6 +101,7 @@ class VAR:
     #
     variableUnits = {'NEE_f': 'umolCO2 m-2 s-1',
                      'GPP_f': 'umolCO2 m-2 s-1',
+                     'NEE_VUT_REF': 'umolCO2 m-2 s-1',
                      'LE_f': 'W m-2',
                      'H_f': 'W m-2',
                      'G_f': 'W m-2',
@@ -112,6 +115,7 @@ class VAR:
                      'WS_f': 'm s-1',
                      'Rg_f': 'W m-2',
                      'PPFD_f': 'umol m-2 s-1',
+                     'PPFD_IN': 'W m-2',
                      'Rn_f': 'W m-2',
                      'gsurf_f': 'mmol m-2 s-1',
                      'SWdown': 'W m-2',

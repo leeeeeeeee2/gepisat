@@ -4,7 +4,7 @@
 % Imperial College London
 %
 % 2014-10-29 -- created
-% 2014-10-29 -- last updated
+% 2017-01-17 -- last updated
 %
 % ------------
 % description:
@@ -17,6 +17,7 @@
 % 01. modularized chapter [14.10.29]
 % 02. newline for each sentence [14.10.29]
 % --> simpler for Git version control
+% 03. fixed typo in hdf.py section [17.01.17]
 %
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% APPENDIX A -- PYTHON CODE SNIPPETS
@@ -223,7 +224,7 @@ It is recommended to use a third-party Python developing and programming environ
 Line 4 defines the HDF file in terms of its path and filename.  
 Line 5 represents the assignment of a timestamp (i.e., a \texttt{datetime} object) based on the HDF filename.  
 Line 6 opens the HDF file for reading.  
-Line 7 defines the variable of interest, in this case it is ``CMG 0.5 Deg Monthly EVI'' corresponding to MODIS 0.5$^{\circ}$ degree resolution EVI monthly product.  
+Line 7 defines the variable of interest, in this case it is ``CMG 0.05 Deg Monthly EVI'' corresponding to MODIS 0.05$^{\circ}$ degree resolution EVI monthly product.  
 Line 8 selects the variable of interest from the HDF file.  
 Line 9 retrieves the associated data (as a numpy array).  
 Line 10 closes the HDF file.  

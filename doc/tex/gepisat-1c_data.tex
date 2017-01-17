@@ -4,7 +4,7 @@
 % Imperial College London
 %
 % 2014-10-29 -- created
-% 2015-03-19 -- last updated
+% 2017-01-17 -- last updated
 %
 % ------------
 % description:
@@ -22,6 +22,7 @@
 % --> added figure
 % 04. updated data to represent the varnames in the GePiSaT database [15.03.18]
 % 05. updated equations and nomenclature [15.03.19]
+% 06. added MODIS product names [17.01.17]
 %
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%
 %% PART 1.4 -- OBSERVATION DATA
@@ -224,9 +225,8 @@ The calculation is as follows \parencite[Eq. 2]{huete02}:
 MODIS is a satellite-borne sensor that captures 36 spectral bands ($\rho$) of reflected/emitted energy from the Earth at various spatial resolutions.  
 The MODIS sensor-array is onboard two National Aeronautics and Space Administration (NASA) Earth observation satellites: Aqua and Terra.  
 These satellites have slightly different paths over the planet; however, the same spectral bands are collected by both satellites.  
-Data is available from the Terra satellite starting in February 2000, while data from the Aqua satellite are available starting in July 2002.  
-The moderate-resolution of this sensor is 0.05$^{\circ}$ (i.e., 1/10$^{\text{th}}$ the 0.5$^{\circ}$ GePiSaT model resolution).
-Because MODIS data is at 1/10$^{\text{th}}$ the model resolution, MODIS EVI products are resampled to 0.5$^{\circ}$ resolution to match the gridded data used in GePiSaT, see Appendix \ref{app:modis} for the resampling methodology.
+Monthly global 0.05$^\circ$ data are available from the Terra satellite (i.e., MOD13C2) starting in February 2000, while monthly global 0.05$^\circ$ data from the Aqua satellite (i.e., MYD13C2) are available starting in July 2002.  
+Because MODIS data are at 1/10$^{\text{th}}$ the GePiSaT model resolution, MODIS EVI products are resampled to 0.5$^{\circ}$ resolution to match the gridded data used in GePiSaT, see Appendix \ref{app:modis} for the resampling methodology.
 Figure \ref{fig:modisevi} shows an example of monthly EVI at 0.5$^{\circ}$ resolution for June 2002. 
 
 %% \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ %%

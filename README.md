@@ -1,7 +1,9 @@
 # GePiSaT: Global ecosystem Production in Space and Time
 ----------------------------------------------------------------------------
 
-This program implements (a) a flux partitioning method to calculate GPP and Re from FLUXNET measurements of net ecosystem CO2 exchange, and (b) a model for predicting GPP and photosynthetic capacity using a Light Use Efficiency model based on a cost optimisation approach (Prentice et al., 2014).
+The motivation for this work is to create a simple diagnostic model of gross primary production (GPP) of the terrestrial biosphere to contrast with the complex process-based models that are currently being developed and used in earth system modeling that are generally not well tested and tend to produce widely divergent results.
+
+This work implements a flux partitioning method to calculate GPP from FLUXNET measurements of net ecosystem CO2 exchange and photosynthetic photon flux density.
 
 # Table of Contents
 -------------------
@@ -9,17 +11,12 @@ This program implements (a) a flux partitioning method to calculate GPP and Re f
 
 # README
 ---------------
-* LAST UPDATED: 2016-07-22
+* LAST UPDATED: 2017-01-17
 * TEAM: labprentice
 * REPO: gepisat (public)
 
 # Repository Structure
 --------------------
-### check/
-This directory holds consistency checks for the various P-model and GePiSaT versions.
-
-* __check_r_version_beni.R__
-
 ### data/
 This directory holds standard input data used for consistency checking.
 The monthly data is for one of the grass FLUXNET sites in Oensingen, Switzerland for the year 2002.
@@ -52,6 +49,25 @@ This directory holds the documentation for the GePiSaT model.
 ### py_version/
 This directory contains the main GePiSaT model Python code.
 
+* __database__
+    * __\_\_init\_\_.py__
+        * database package init script (contains version number)
+    * __crudata.py__
+        * functions for processing CRU TS meteorology, VPD, and elevation
+    * __fluxdata.py__
+        * class definitions and processing functions for flux tower data
+    * __glasdata.py__
+        * class definition and processing function for canopy height data
+    * __modisdata.py__
+        * class definition and processing function for EVI
+    * __splashdata.py__
+        * function for processing Priestley-Taylor moisture index
+    * __utilities.py__
+        * module with function for creating output files
+    * __var.py__
+        * class definition for creating input files for the var_list database table
+    * __watchdata.py__
+        * class definition and processing function for shortwave radiation flux
 * __gepisat__
     * __\_\_init\_\_.py__
         * gepisat package init script (contains version number)
@@ -86,12 +102,6 @@ This directory contains the main GePiSaT model Python code.
     * Calculates GPP based on flux partitioning parameters
     * Integrates PPFD and GPP to monthly totals
     * Reads monthly gridded meteorological data
-
-### main_r/
-This directory contains the R code function definitions for the production model (P-model), which is based on some of the methods in GePiSaT.
-
-* __pmodel.R__
-    * Function definitions
 
 ### results/
 This directory contains the result files from GePiSaT model runs.

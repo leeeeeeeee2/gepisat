@@ -43,8 +43,11 @@ import logging
 import os
 import re
 
-from .utilities import writeout
-from .var import VAR
+try:
+    from .utilities import writeout
+    from .var import VAR
+except (ImportError, ValueError):
+    pass
 
 
 ###############################################################################
@@ -261,14 +264,18 @@ class FLUXDATA_2015:
               on fluxdata.org 2015 flux tower data files
     Ref:
     http://fluxnet.fluxdata.org/data/fluxnet2015-dataset/fullset-data-product/
-
-    @TODO
-
-    CSV Header Items of Interest:
-        TIMESTAMP_START
-        PPFD_IN (W m-2)
-        NEE_VUT_REF (umolCO2 m-2 s-1)
-        NEE_VUT_REF_QC
+    NOTE:
+        FLUXDATA FULLSET data file naming scheme:
+        > HH - half-hourly data
+        > HR - hourly data
+        CSV Header Items of Interest:
+        > TIMESTAMP_START
+        > PPFD_IN (W m-2)
+          * not available at all stations!
+        > SW_IN_F (W m-2)
+        > SW_IN_F_QC (0 == measured)
+        > NEE_VUT_REF (umolCO2 m-2 s-1)
+        > NEE_VUT_REF_QC (0 == measured)
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Variable Definitions
@@ -345,6 +352,39 @@ class FLUXDATA_2015:
 ###############################################################################
 # FUNCTIONS
 ###############################################################################
+def find_files(my_dir, my_pattern):
+    """
+    Name:     find_files
+    Inputs:   - str, directory path (my_dir)
+              - str, file name search pattern (my_pattern)
+    Outputs:  list, file paths
+    Features: Returns a list of files found at a given directory with file
+              names that match a given pattern
+    """
+    my_files = []
+    if os.path.isdir(my_dir):
+        s_str = os.path.join(my_dir, my_pattern)
+        my_files = glob.glob(s_str)
+    return my_files
+
+
+def pearsons_r(x, y):
+    """
+    Name:     pearsons_r
+    Inputs:   - numpy.ndarray, ordinate/observation (x)
+              - numpy.ndarray, abscissa/modeled (y)
+    Outputs:  float, Pearson's r
+    Features: Returns Pearson's r, the correlation coefficient, between two
+              data arrays
+    """
+    n = float(len(x))
+    ssxy = (x*y).sum() - x.sum()*y.sum()/n
+    ssx = numpy.power(y, 2.0).sum() - numpy.power(y.sum(), 2.0)/n
+    sst = numpy.power(x, 2.0).sum() - numpy.power(x.sum(), 2.0)/n
+    pr = ssxy/numpy.power(ssx*sst, 0.5)
+    return pr
+
+
 def process_flux_2012(my_dir):
     """
     Name:     process_flux_2012
@@ -540,3 +580,104 @@ def process_flux_2015(my_dir):
                                 my_data.print_line(dat_outfile)
     else:
         logging.warning("No files found in directory: %s", my_dir)
+
+
+###############################################################################
+# MAIN
+###############################################################################
+if __name__ == '__main__':
+    import numpy
+    import matplotlib.pyplot as plt
+
+    my_dir = "/usr/local/share/data/fluxnet/2015/half_hourly"
+    my_dir = "/home/user/Desktop/temp/flux"
+    my_ext = "*_FLUXNET2015_FULLSET_HH_*"
+    my_file_paths = find_files(my_dir, my_ext)
+    for my_path in sorted(my_file_paths):
+        my_file = os.path.basename(my_path)
+        my_station = re.search('^FLX_(\S{6})_', my_file).group(1)
+        my_years = re.search('_(\d{4}-\d{4})_', my_file).group(1)
+        label_str = "%s (%s)" % (my_station, my_years)
+
+        if os.path.isfile(my_path):
+            # Reader header line:
+            f = open(my_path, 'r')
+            header = f.readline().rstrip("\n")
+            f.close()
+
+            # Find indexes for items interested in
+            h_items = header.split(",")
+            try:
+                i_sw_in_f = h_items.index("SW_IN_F")
+                i_sw_in_f_qc = h_items.index("SW_IN_F_QC")
+                i_ppfd_in = h_items.index("PPFD_IN")
+            except ValueError as err:
+                print("Skipping %s. %s" % (my_file, str(err)))
+            else:
+                # Read data into structured array:
+                my_data = numpy.loadtxt(
+                    fname=my_path,
+                    dtype={'names': ('sw_in_f', 'sw_in_f_qc', 'ppfd_in'),
+                           'formats': ('f4', 'f4', 'f4')},
+                    delimiter=',',
+                    skiprows=1,
+                    usecols=(i_sw_in_f, i_sw_in_f_qc, i_ppfd_in)
+                )
+
+                # Extract measurements:
+                i_measured = numpy.where(
+                    (my_data['sw_in_f_qc'] == 0) &
+                    (my_data['sw_in_f'] != -9999) &
+                    (my_data['ppfd_in'] != -9999))[0]
+                m_sw_in_f = my_data['sw_in_f'][i_measured]
+                m_ppfd_in = my_data['ppfd_in'][i_measured]
+
+                # Get correlation coefficient:
+                my_r = pearsons_r(m_ppfd_in, m_sw_in_f)
+
+                # Let's see what the data look like:
+                if True:
+                    fig = plt.figure()
+                    ax1 = fig.add_subplot(111)
+                    plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=12)
+                    plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=12)
+                    ax1.plot(m_ppfd_in, m_sw_in_f, 'ro', label=label_str)
+                    ax1.set_ylabel('SW_IN_F, W m$^{-2}$', fontsize=14)
+                    ax1.set_xlabel('PPFD_IN, W m$^{-2}$', fontsize=14)
+                    ax1.legend(
+                        bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+                        ncol=2, mode="expand", borderaxespad=0., fontsize=14)
+                    plt.show()
+
+                # Linear regression:
+                xdata = m_ppfd_in.copy()
+                x = xdata[:, numpy.newaxis]
+                y = m_sw_in_f.copy()
+                fit_slope, fit_sse, fit_rank, fit_s = numpy.linalg.lstsq(x, y)
+
+                # Calculate variance/st. dev of slope
+                s2xy = fit_sse/(len(x) - 2.0)
+                x_bar = xdata.mean()
+                ssxx = (numpy.power(xdata - x_bar, 2.0)).sum()
+                s2m = s2xy/ssxx
+                sm = numpy.sqrt(s2m)
+
+                print("%s: %s +/- %0.3f (r = %0.3f)" % (
+                    label_str, fit_slope[0], sm, my_r))
+
+                # Clear variables:
+                h_items = None
+                i_sw_in_f = None
+                i_sw_in_f_qc = None
+                i_ppfd_in = None
+                i_measured = None
+                my_data = None
+                m_sw_in_f = None
+                m_ppfd_in = None
+                x_data = None
+                x = None
+                y = None
+
+                #
+                # RESULTS:
+                # AR-Vir: SW_IN = 0.52 PPFD_IN

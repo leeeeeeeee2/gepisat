@@ -3,7 +3,7 @@
 # flux_parti.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2016-07-22
+# LAST UPDATED: 2017-01-22
 #
 # ~~~~~~~~
 # license:
@@ -70,6 +70,7 @@ class FLUX_PARTI(object):
               - updated calc gpp function [16.07.06]
               - created best model class property [16.07.06]
               - moved to gepisat package [16.07.22]
+              - created a write partition function [17.01.22]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -260,6 +261,15 @@ class FLUX_PARTI(object):
             self.stats.fit_lm_ro()
 
         self.stats.select_best_model()
+
+    def write_partition(self, out_dir):
+        """
+        @TODO
+        """
+        if os.path.isdir(out_dir):
+            self.stats.write_fit_params(out_dir)
+        else:
+            self.logger.error("Output directory does not exist!")
 
 
 ###############################################################################

@@ -3,7 +3,7 @@
 # file_handler.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2016-07-22
+# LAST UPDATED: 2017-01-22
 #
 # ~~~~~~~~
 # license:
@@ -43,6 +43,7 @@ import os
 
 import numpy
 
+from .const import kfFEC
 from .db_util import connectSQL
 from .solar import SOLAR_TOA
 from .utilities import add_one_day
@@ -70,6 +71,7 @@ class GPSQL(object):
               - moved to file handler module [16.07.22]
               - created get monthly meteorology functions [16.07.22]
               - moved to gepisat package [16.07.22]
+              - added flux version variable [17.01.22]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -84,6 +86,8 @@ class GPSQL(object):
         self.logger = logging.getLogger(__name__)
         self.logger.info("GPSQL class initialized")
         self.reset_properties()
+
+        self.flux_version = '2015'
 
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
@@ -329,7 +333,13 @@ class GPSQL(object):
             if cur.rowcount > 0:
                 for record in cur:
                     time_vals = numpy.append(time_vals, record[0])
-                    ppfd_vals = numpy.append(ppfd_vals, record[1])
+                    if self.flux_version == "2012":
+                        ppfd_vals = numpy.append(ppfd_vals, record[1])
+                    elif self.flux_version == "2015":
+                        ppfd_vals = numpy.append(ppfd_vals, kfFEC*record[1])
+                    else:
+                        self.logger.error("Flux version not recognized!")
+                        raise ValueError("Flux version not recognized.")
             else:
                 self.logger.warning("No data found!")
 
@@ -399,9 +409,13 @@ class GPSQL(object):
             ppfdi = self._ppfd_msv
             neei = self._nee_msv
         else:
-            # Get msvidx values for specified station:
-            ppfdi = self.get_msvidx(station, 'PPFD_f')
-            neei = self.get_msvidx(station, 'NEE_f')
+            if self.flux_version == "2012":
+                # Get msvidx values for specified station:
+                ppfdi = self.get_msvidx(station, 'PPFD_f')
+                neei = self.get_msvidx(station, 'NEE_f')
+            elif self.flux_version == "2015":
+                ppfdi = self.get_msvidx(station, 'SW_IN_F')
+                neei = self.get_msvidx(station, 'NEE_VUT_REF')
 
         # SQL query parameters:
         params = (ppfdi, neei)
@@ -589,9 +603,14 @@ class GPSQL(object):
             ppfd_idx = self._ppfd_msv
             nee_idx = self._nee_msv
         else:
-            # Get msvidx values for specified station
-            ppfd_idx = self.get_msvidx(station, 'PPFD_f')
-            nee_idx = self.get_msvidx(station, 'NEE_f')
+            if self.flux_version == "2012":
+                # Get msvidx values for specified station
+                ppfd_idx = self.get_msvidx(station, 'PPFD_f')
+                nee_idx = self.get_msvidx(station, 'NEE_f')
+            elif self.flux_version == "2015":
+                # Get msvidx values for specified station
+                ppfd_idx = self.get_msvidx(station, 'SW_IN_F')
+                nee_idx = self.get_msvidx(station, 'NEE_VUT_REF')
 
         # Increment start date one month:
         end_date = add_one_month(start_date)
@@ -631,8 +650,8 @@ class GPSQL(object):
                 # Execute query and fetch results:
                 cur.execute(q)
             except:
-                self.logger.exception("Search failed.")
-                raise
+                self.logger.exception("Search failed. Returning empty arrays.")
+                return (nee_vals, ppfd_vals)
             else:
                 if cur.rowcount > 0:
                     for record in cur:
@@ -643,8 +662,15 @@ class GPSQL(object):
 
                         # Only save matched pairs:
                         if ppfd is not None and nee is not None:
-                            nee_vals = numpy.append(nee_vals, nee)
-                            ppfd_vals = numpy.append(ppfd_vals, ppfd)
+                            if self.flux_version == "2012":
+                                nee_vals = numpy.append(nee_vals, nee)
+                                ppfd_vals = numpy.append(ppfd_vals, ppfd)
+                            elif self.flux_version == "2015":
+                                # NOTE: need to convert shortwave radiation to
+                                # PPFD using the from-flux-to-energy conversion
+                                # factor:
+                                nee_vals = numpy.append(nee_vals, nee)
+                                ppfd_vals = numpy.append(ppfd_vals, kfFEC*ppfd)
             finally:
                 con.close()
         else:
@@ -818,8 +844,15 @@ class GPSQL(object):
             self.logger.debug("Found grid %s", self._grid)
 
         # Set PPFD and NEE msvidx values:
-        self._ppfd_msv = self.get_msvidx(station, "PPFD_f")
-        self._nee_msv = self.get_msvidx(station, "NEE_f")
+        if self.flux_version == "2012":
+            self._ppfd_msv = self.get_msvidx(station, "PPFD_f")
+            self._nee_msv = self.get_msvidx(station, "NEE_f")
+        elif self.flux_version == "2015":
+            self._ppfd_msv = self.get_msvidx(station, "SW_IN_F")
+            self._nee_msv = self.get_msvidx(station, "NEE_VUT_REF")
+        else:
+            self.logger.error("Flux version unrecognized!")
+            raise ValueError("Flux version unrecognized.")
 
         self.logger.debug("Found PPFD msvidx %s", self._ppfd_msv)
         self.logger.debug("Found NEE msvidx %s", self._nee_msv)

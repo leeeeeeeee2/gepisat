@@ -3,7 +3,7 @@
 # db_setup.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-13
+# LAST UPDATED: 2017-01-22
 #
 # ~~~~~~~~
 # license:
@@ -78,6 +78,14 @@
 # - PEP8 style fixes [15.11.18]
 # - added Python 3 support [16.01.15]
 # - added logging [16.01.15]
+#
+# -------------
+# database size
+# -------------
+# empty tables: 7.28 MB
+# + HDG_Met-Data: 58.86 MB
+# + WFDEI_Var-List: 97.15 MB
+# + WFDEI_Data-List (2002-2006): 17660.64 MB
 #
 # -----
 # todo:
@@ -753,12 +761,12 @@ if __name__ == "__main__":
     # Define directories:
     home_dir = os.path.expanduser("~")
     data_dir = os.path.join(home_dir, "Data", "psql")
-    md_dir = os.path.join(data_dir, "watch")
-    vl_dir = os.path.join(data_dir, "watch")
-    ds_dir = os.path.join(data_dir, "watch")
+    md_dir = os.path.join(data_dir, "flux")
+    vl_dir = os.path.join(data_dir, "flux")
+    ds_dir = os.path.join(data_dir, "flux")
 
     # Create and populate met_data table:
-    if True:
+    if False:
         root_logger.info("Processing 'met_data' table...")
         md_str = os.path.join(md_dir, "*Met-Data*")
         md_files = glob.glob(md_str)
@@ -775,8 +783,8 @@ if __name__ == "__main__":
         vl_files = get_var_files(vl_dir)
         for y in sorted(vl_files):
             popvarlist(y)
-            root_logger.info("added %s (%0.3f MB)" % (os.path.basename(y),
-                                                      1e-6*db_size()))
+            root_logger.info(
+                "added %s (%0.3f MB)" % (os.path.basename(y), 1e-6*db_size()))
         root_logger.info("... 'var_list' complete")
 
     if False:
@@ -785,6 +793,6 @@ if __name__ == "__main__":
         ds_files = get_data_files(ds_dir)
         for z in sorted(ds_files):
             popdataset(z)
-            root_logger.info("added file %s (%0.3f MB)" % (os.path.basename(z),
-                                                           1e-6*db_size()))
+            root_logger.info(
+                "added %s (%0.3f MB)" % (os.path.basename(z), 1e-6*db_size()))
         root_logger.info("... 'data_set' complete")

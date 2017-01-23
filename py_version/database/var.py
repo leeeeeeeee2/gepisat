@@ -3,7 +3,7 @@
 # var.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-15
+# LAST UPDATED: 2017-01-23
 #
 # ~~~~~~~~
 # license:
@@ -51,6 +51,7 @@ class VAR:
     Features: This class creates output lines for GePiSaT var_list database
     History:  Version 3.0
               - added FLUXNET 2015 variables for NEE and PPFD [17.01.15]
+              - added FLUXNET 2015 station name search [17.01.22]
 
     @TODO:  add new dictionary for variable names?
             (e.g., map the "_f" to more natural names)
@@ -85,8 +86,8 @@ class VAR:
         # 'SWC2_f': 12,
         # 'WS_f': 13,
         # 'Rg_f': 14,
-        'PPFD_f': 15,    # Photosynthetic photon flux density; FLUXNET 2012
-        'PPFD_IN': 16,   # Photosynthetic photon flux density; FLUXNET 2015
+        'PPFD_f': 15,    # FLUXNET 2012 photosynthetic photon flux density
+        'SW_IN_F': 16,   # FLUXNET 2015 shortwave incoming radiation
         # 'Rn_f': 17,
         'SWdown': 18,    # WATCH shortwave downwelling solar radiation
         'FAPAR': 19,     # MODIS-based fraction of absorbed PAR
@@ -115,7 +116,7 @@ class VAR:
                      'WS_f': 'm s-1',
                      'Rg_f': 'W m-2',
                      'PPFD_f': 'umol m-2 s-1',
-                     'PPFD_IN': 'W m-2',
+                     'SW_IN_F': 'W m-2',
                      'Rn_f': 'W m-2',
                      'gsurf_f': 'mmol m-2 s-1',
                      'SWdown': 'W m-2',
@@ -140,7 +141,7 @@ class VAR:
         """
         # Create a class logger
         self.logger = logging.getLogger("VAR")
-        self.logger.info("VAR class initialized")
+        self.logger.debug("VAR class initialized")
 
         # Set variable type and name (based on input):
         self.varType = t
@@ -176,14 +177,21 @@ class VAR:
             # Use regular expression search on filename
             # note: group(1) returns what is inside the search ()
             sname = re.search(
-                '(\w{2}-\w{2,3})\.',
-                os.path.basename(fileName)
-                ).group(1)
+                '(\w{2}-\w{2,3})\.', os.path.basename(fileName)).group(1)
         except AttributeError:
-            self.logger.error("Station name not found in file: %s", fileName)
+            self.logger.debug(
+                "FLUXNET 2012 file name failed, trying 2015 ...")
+            try:
+                sname = re.search(
+                    '^FLX_(\S{6})_', os.path.basename(fileName)).group(1)
+            except AttributeError:
+                self.logger.error(
+                    "Station name not found in file: %s", fileName)
+            else:
+                self.logger.debug("Found station %s", sname)
+                return sname
         else:
-            self.logger.info("Found station %s", sname)
-        finally:
+            self.logger.debug("Found station %s", sname)
             return sname
 
     def get_grid_station(self, fileName):

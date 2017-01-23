@@ -3,7 +3,7 @@
 # table_maker.py
 #
 # VERSION 3.0
-# LAST UPDATED 2017-01-13
+# LAST UPDATED 2017-01-22
 #
 # ~~~~~~~~
 # license:
@@ -141,7 +141,7 @@ import os
 # from database.crudata import process_cru
 from database.crudata import process_cru_elv
 # from database.crudata import process_cru_vpd
-from database.fluxdata import process_flux_2012
+from database.fluxdata import process_flux_2015
 # from database.glasdata import process_glas
 # from database.modisdata import process_modis
 # from database.splashdata import process_alpha
@@ -178,7 +178,7 @@ if __name__ == '__main__':
 
     if False:
         # Process flux data:
-        process_flux_2012(flux_dir)
+        process_flux_2015(flux_dir)
 
         # Process WATCH data:
         watch_voi = 'SWdown'

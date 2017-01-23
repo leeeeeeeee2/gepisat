@@ -3,7 +3,7 @@
 # model.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2016-07-22
+# LAST UPDATED: 2017-01-22
 #
 # ~~~~~~~~
 # license:
@@ -152,67 +152,72 @@ if __name__ == "__main__":
     my_data.set_output_directory(output_dir)
 
     # Get list of all flux station names:
-    # my_data.find_stations()         # use this function to search the DB
-    my_data.stations = ['CZ-wet', ]   # or manually define stations here
+    my_data.find_stations()         # use this function to search the DB
+    # my_data.stations = ['CZ-wet', ]   # or manually define stations here
 
     # Initialize summary statistics file:
     my_data.create_summary_file("summary_statistics.txt")
 
     # Iterate through stations:
     for station in my_data.stations:
-        # Initialize station data:
-        my_data.set_working_station(station)
+        try:
+            # Initialize station data:
+            my_data.set_working_station(station)
+        except:
+            root_logger.error("Skipping %s", station)
+        else:
+            root_logger.info("Processing %s", station)
+            # Process each month in time:
+            sd = my_data.start_date
+            ed = my_data.end_date
+            while sd < ed:
+                # Get PPFD and NEE array pairs [umol m-2 s-1]:
+                monthly_nee, monthly_ppfd = my_data.find_monthly_nee_ppfd(sd)
 
-        # Process each month in time:
-        sd = my_data.start_date
-        ed = my_data.end_date
-        while sd < ed:
-            # Get PPFD and NEE array pairs [umol m-2 s-1]:
-            monthly_nee, monthly_ppfd = my_data.find_monthly_nee_ppfd(sd)
+                # Initialize a FLUX_PARTI class:
+                my_parter = FLUX_PARTI(monthly_ppfd, monthly_nee, station, sd)
 
-            # Initialize a FLUX_PARTI class:
-            my_parter = FLUX_PARTI(monthly_ppfd, monthly_nee, station, sd)
+                # Process if enough data was found:
+                if (len(monthly_ppfd) > 3 and len(monthly_nee) > 3):
 
-            # Process if enough data was found:
-            if (len(monthly_ppfd) > 3 and len(monthly_nee) > 3):
+                    # Perform GPP partitioning:
+                    my_parter.partition(outliers=True)
+                    my_parter.write_partition(output_dir)
 
-                # Perform GPP partitioning:
-                my_parter.partition(outliers=True)
+                    # Perform half-hourly PPFD gapfilling (umol m-2 s-1):
+                    gf_time, gf_ppfd = my_data.gapfill_monthly_ppfd(
+                        sd, to_save=False)
 
-                # Perform half-hourly PPFD gapfilling (umol m-2 s-1):
-                gf_time, gf_ppfd = my_data.gapfill_monthly_ppfd(
-                    sd, to_save=False)
+                    # Calculate half-hourly GPP (umol m-2 s-1)
+                    gf_gpp, gf_gpp_err = my_parter.calc_gpp(gf_ppfd)
 
-                # Calculate half-hourly GPP (umol m-2 s-1)
-                gf_gpp, gf_gpp_err = my_parter.calc_gpp(gf_ppfd)
+                    # OPTIONAL: Calculate daily GPP (mol m-2):
+                    if False:
+                        gpp_daily = my_data.sub_to_daily_gpp(
+                            gf_time, gf_gpp, gf_gpp_err, to_save=True)
 
-                # OPTIONAL: Calculate daily GPP (mol m-2):
-                if False:
-                    gpp_daily = my_data.sub_to_daily_gpp(
-                        gf_time, gf_gpp, gf_gpp_err, to_save=True)
+                    # Continue processing if partitioning was successful:
+                    if my_parter.best_model > 0:
+                        # Integrate PPFD & GPP [umol m-2]; dt=30 min (1800 s)
+                        ppfd_mo = simpson(gf_ppfd.clip(min=0), 1800)
+                        gpp_mo = simpson(gf_gpp.clip(min=0), 1800)
+                        gpp_mo_err = simpson(gf_gpp_err, 1800)
 
-                # Continue processing if partitioning was successful:
-                if my_parter.best_model > 0:
-                    # Integrate PPFD & GPP [umol m-2]; dt=30 min (1800 s)
-                    ppfd_mo = simpson(gf_ppfd.clip(min=0), 1800)
-                    gpp_mo = simpson(gf_gpp.clip(min=0), 1800)
-                    gpp_mo_err = simpson(gf_gpp_err, 1800)
+                        # Convert units from [umol m-2] to [mol m-2]:
+                        ppfd_mo *= (1e-6)
+                        gpp_mo *= (1e-6)
+                        gpp_mo_err *= (1e-6)
 
-                    # Convert units from [umol m-2] to [mol m-2]:
-                    ppfd_mo *= (1e-6)
-                    gpp_mo *= (1e-6)
-                    gpp_mo_err *= (1e-6)
+                        # STAGE 2: Update LUE parameters:
+                        my_data.update_lue(sd, gpp_mo, gpp_mo_err, ppfd_mo)
 
-                    # STAGE 2: Update LUE parameters:
-                    my_data.update_lue(sd, gpp_mo, gpp_mo_err, ppfd_mo)
+                # Save class summary statistics:
+                SFILE = open(my_data.summary_file, 'a')
+                SFILE.write(my_parter.summary_stats)
+                SFILE.close()
 
-            # Save class summary statistics:
-            SFILE = open(my_data.summary_file, 'a')
-            SFILE.write(my_parter.summary_stats)
-            SFILE.close()
+                # Increment date:
+                sd = add_one_month(sd)
 
-            # Increment date:
-            sd = add_one_month(sd)
-
-        # STAGE 2: Write monthly LUE parameters to file:
-        my_data.write_monthly_results(station)
+            # STAGE 2: Write monthly LUE parameters to file:
+            my_data.write_monthly_results(station)

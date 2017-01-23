@@ -3,7 +3,7 @@
 # stats.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2016-07-22
+# LAST UPDATED: 2017-01-22
 #
 # ~~~~~~~~
 # license:
@@ -69,6 +69,7 @@ class PARTI_STATS(object):
               - moved to its own module [16.07.22]
               - created summary string property [16.07.22]
               - moved to gepisat package [16.07.22]
+              - updated write fit params function [17.01.22]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -1844,7 +1845,7 @@ class PARTI_STATS(object):
         @TODO
         """
         # ~~~~~~~~~~ OBSERVATIONS ~~~~~~~~~~
-        obs_file = "%s_%s.txt" % (self.name, self.date)
+        obs_file = "%s_%s_obs.txt" % (self.name, self.date)
         obs_path = os.path.join(output_dir, obs_file)
 
         head0 = "MH_guess,%f,%f,%f\n" % (
@@ -1887,7 +1888,7 @@ class PARTI_STATS(object):
             OUTFILE.close()
 
         # ~~~~~~~~~~ OUTLIERS REMOVED ~~~~~~~~~~
-        ro_file = "%s_%s_ro.txt" % (self.name, self.month)
+        ro_file = "%s_%s_ro.txt" % (self.name, self.date)
         ro_path = os.path.join(output_dir, ro_file)
 
         head4 = "MH_guess,%0.5f,%0.3f,%0.3f\n" % (

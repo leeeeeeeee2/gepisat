@@ -46,11 +46,11 @@
 # ************************************************************************
 # * Name: modelH
 # *
-# * Input: 
+# * Input:
 # *
-# * Return: 
+# * Return:
 # *
-# * Features: 
+# * Features:
 # ************************************************************************
 modelH <- function(x, foo, alpha, r) {
   # Define linear arguments:
@@ -67,9 +67,9 @@ modelH <- function(x, foo, alpha, r) {
 # ************************************************************************
 # * Name: modelL
 # *
-# * Input: 
+# * Input:
 # *
-# * Return: 
+# * Return:
 # *
 # * Features: Returns the linearly modeled NEE based on PPFD
 # ************************************************************************
@@ -86,17 +86,17 @@ modelL <- function(x, alpha, r) {
 # ************************************************************************
 # * Name: optim_params
 # *
-# * Input: 
+# * Input:
 # *
-# * Return: 
+# * Return:
 # *
-# * Features: 
+# * Features:
 # ************************************************************************
 optim_params <- function(my.path, my.file){
   # Returns optimization params table
   #
-  headerparts <- read.csv(paste(my.path, my.file, sep=""), 
-                          header=F)[1:4,1:6]
+  headerparts <- read.csv(
+      paste(my.path, my.file, sep = ""), header = F)[1:4,1:6]
   #
   colnames(headerparts) <- c("names", "alpha", "R", "Foo", "RMSE", "R2")
   myvars = setNames(data.frame(t(headerparts[,-1])), headerparts[,1])
@@ -145,7 +145,7 @@ optim_params <- function(my.path, my.file){
                                   mh.foo,         NA,
                                   mh.guess.foo,   NA,
                                   mh.rmse,        ml.rmse,
-                                  mh.r2,          ml.r2),ncol=2,byrow=T)
+                                  mh.r2,          ml.r2),ncol = 2,byrow = T)
   optimization.params <- as.data.frame(optimization.params)
   colnames(optimization.params) <- c("model_h","model_l")
   rownames(optimization.params) <- c(
@@ -161,11 +161,11 @@ optim_params <- function(my.path, my.file){
 # ************************************************************************
 # * Name: plot_obs
 # *
-# * Input: 
+# * Input:
 # *
-# * Return: 
+# * Return:
 # *
-# * Features: 
+# * Features:
 # ************************************************************************
 plot_obs <- function(obs.file.path, cur.file){
   # Produces a plot of NEE:PPFD partitioning (observations)
@@ -188,15 +188,15 @@ plot_obs <- function(obs.file.path, cur.file){
   rpa = vector('expression',2)
   rpa[1] = substitute(
     expression(italic(F)[lin] == LINR-LINA~italic(Q)),
-    list(LINA = format(op_aL,dig=3), 
+    list(LINA = format(op_aL,dig=3),
          LINR = format(op_rL,dig=3))
   )[2]
   rpa[2] = substitute(
     expression(
       italic(F)[hyp] == HYPR-(HYPAF~italic(Q))/(HYPA~italic(Q)+HYPF)
       ),
-    list(HYPR = format(op_rH,dig=3), 
-         HYPA = format(op_aH,dig=3), 
+    list(HYPR = format(op_rH,dig=3),
+         HYPA = format(op_aH,dig=3),
          HYPF = format(op_fH,dig=3),
          HYPAF = format((op_aH*op_fH), dig=3))
   )[2]
@@ -210,7 +210,7 @@ plot_obs <- function(obs.file.path, cur.file){
     list(HR2 = format(op_R2H,dig=3)))[2]
   #
   # Read in data:
-  content <- read.csv(paste(obs.file.path,cur.file,sep=""), 
+  content <- read.csv(paste(obs.file.path,cur.file,sep=""),
                        header=T, skip=4, na.strings="None")
   #
   # Get lines for fits:
@@ -224,8 +224,8 @@ plot_obs <- function(obs.file.path, cur.file){
   #
   # Plot observations and fits:
   par(mar=c(4.5,4.5,1,1));
-  plot(content$ppfd_obs, 
-       content$nee_obs, 
+  plot(content$ppfd_obs,
+       content$nee_obs,
        type = "p",
        pch = 20,
        col = "gray",
@@ -238,34 +238,34 @@ plot_obs <- function(obs.file.path, cur.file){
   axis(side=1, las=1, lwd=0, line=-0.4)
   axis(side=2, las=1, tck=-0.02, labels=NA)
   axis(side=2, las=1, lwd=0, line=-0.4)
-  mtext(side=1, 
-        expression(paste("PPFD (", mu, mol%.%m^{-2}%.%s^{-1},")")), 
+  mtext(side=1,
+        expression(paste("PPFD (", mu, mol%.%m^{-2}%.%s^{-1},")")),
         line=2)
-  mtext(side=2, 
-        expression(paste("NEE (", mu, mol%.%m^{-2}%.%s^{-1},")")), 
+  mtext(side=2,
+        expression(paste("NEE (", mu, mol%.%m^{-2}%.%s^{-1},")")),
         line=2)
   mtext(side=1, station.year, line=3)
   #
-  legend('bottomleft', 
-         legend = rpa, 
+  legend('bottomleft',
+         legend = rpa,
          bty = 'n',
          inset = 0.02,
          y.intersp = 1.5)
-  legend('bottomright', 
-         legend = rpb, 
+  legend('bottomright',
+         legend = rpb,
          bty = 'n',
          inset = 0.02,
          y.intersp = 1.5)
   lines(mh.x,mh.y, lty=1, col="red", lwd=3)
   lines(mh.x,ml.y, lty=2, col="blue", lwd=3)
   #
-  legend("top", 
-         inset=0.02, 
-         #y.intersp = 1.5, 
-         col=c("red","blue"), 
-         lty=c(1,2), 
-         lwd=c(3,3), 
-         legend = c("Model H","Model L"), 
+  legend("top",
+         inset=0.02,
+         #y.intersp = 1.5,
+         col=c("red","blue"),
+         lty=c(1,2),
+         lwd=c(3,3),
+         legend = c("Model H","Model L"),
          bty='n',
          horiz=T)
 }
@@ -273,11 +273,11 @@ plot_obs <- function(obs.file.path, cur.file){
 # ************************************************************************
 # * Name: plot_ro_h
 # *
-# * Input: 
+# * Input:
 # *
-# * Return: 
+# * Return:
 # *
-# * Features: 
+# * Features:
 # ************************************************************************
 plot_ro_h <- function(ro.file.path, cur.file){
   # Creates a plot of NEE:PPFD partitions (observations w/o outliers)
@@ -294,8 +294,8 @@ plot_ro_h <- function(ro.file.path, cur.file){
   #
   # Read in data:
   content <- read.csv(
-    paste(ro.file.path,cur.file,sep=""), 
-    header=T, 
+    paste(ro.file.path,cur.file,sep=""),
+    header=T,
     skip=4,
     na.strings="None"
   )
@@ -313,8 +313,8 @@ plot_ro_h <- function(ro.file.path, cur.file){
   rpa[1] = substitute(
     expression(italic(F) == HYPR-(HYPFA~italic(Q))/(HYPA~italic(Q)+HYPF)),
     list(
-      HYPR = format(op_rH, dig=3), 
-      HYPA = format(op_aH, dig=3), 
+      HYPR = format(op_rH, dig=3),
+      HYPA = format(op_aH, dig=3),
       HYPF = format(op_fH, dig=3),
       HYPFA = format((op_fH*op_aH), dig=3))
     )[2]
@@ -326,8 +326,8 @@ plot_ro_h <- function(ro.file.path, cur.file){
   #
   # Plot observations and fits:
   par(mar=c(4.5,4.5,1,1))
-  plot(content$ppfd_obs_h, 
-       content$nee_obs_h, 
+  plot(content$ppfd_obs_h,
+       content$nee_obs_h,
        type = "p",
        pch = 20,
        col = "gray",
@@ -340,11 +340,11 @@ plot_ro_h <- function(ro.file.path, cur.file){
   axis(side=1, las=1, lwd=0, line=-0.4)
   axis(side=2, las=1, tck=-0.02, labels=NA)
   axis(side=2, las=1, lwd=0, line=-0.4)
-  mtext(side=1, 
-        expression(paste("PPFD (", mu, mol%.%m^{-2}%.%s^{-1},")")), 
+  mtext(side=1,
+        expression(paste("PPFD (", mu, mol%.%m^{-2}%.%s^{-1},")")),
         line=2)
-  mtext(side=2, 
-        expression(paste("NEE (", mu, mol%.%m^{-2}%.%s^{-1},")")), 
+  mtext(side=2,
+        expression(paste("NEE (", mu, mol%.%m^{-2}%.%s^{-1},")")),
         line=2)
   mtext(side=1, station.year, line=3)
   #
@@ -352,24 +352,24 @@ plot_ro_h <- function(ro.file.path, cur.file){
   legend('bottomright', legend = rpb, inset=0.02, bty = 'n')
   lines(mh.x,mh.y, lty=1, col="red", lwd=3)
   #
-  legend("topright", 
-         inset=0.02, 
-         y.intersp = 1.5, 
-         col=c("red"), 
-         lty=c(1), 
-         lwd=c(3), 
-         legend = c("Model H (ro)"), 
+  legend("topright",
+         inset=0.02,
+         y.intersp = 1.5,
+         col=c("red"),
+         lty=c(1),
+         lwd=c(3),
+         legend = c("Model H (ro)"),
          bty='n')
 }
 
 # ************************************************************************
 # * Name: plot_ro_l
 # *
-# * Input: 
+# * Input:
 # *
-# * Return: 
+# * Return:
 # *
-# * Features: 
+# * Features:
 # ************************************************************************
 plot_ro_l <- function(ro.file.path, cur.file){
   # Creates a plot of NEE:PPFD partitions (observations w/o outliers)
@@ -385,8 +385,8 @@ plot_ro_l <- function(ro.file.path, cur.file){
   #
   # Read in data:
   content <- read.csv(
-    paste(ro.file.path,cur.file,sep=""), 
-    header=T, 
+    paste(ro.file.path,cur.file,sep=""),
+    header=T,
     skip=4,
     na.strings="None"
   )
@@ -403,7 +403,7 @@ plot_ro_l <- function(ro.file.path, cur.file){
   rpa = vector('expression', 1)
   rpa[1] = substitute(
     expression(italic(F) == LINR-LINA~italic(Q)),
-    list(LINA = format(op_aL, dig=3), 
+    list(LINA = format(op_aL, dig=3),
          LINR = format(op_rL, dig=3))
   )[2]
   #
@@ -414,8 +414,8 @@ plot_ro_l <- function(ro.file.path, cur.file){
   #
   # Plot observations and fits:
   par(mar=c(4.5,4.5,1,1))
-  plot(content$ppfd_obs_l, 
-       content$nee_obs_l, 
+  plot(content$ppfd_obs_l,
+       content$nee_obs_l,
        type = "p",
        pch = 20,
        col = "gray",
@@ -428,11 +428,11 @@ plot_ro_l <- function(ro.file.path, cur.file){
   axis(side=1, las=1, lwd=0, line=-0.4)
   axis(side=2, las=1, tck=-0.02, labels=NA)
   axis(side=2, las=1, lwd=0, line=-0.4)
-  mtext(side=1, 
-        expression(paste("PPFD (", mu, mol%.%m^{-2}%.%s^{-1},")")), 
+  mtext(side=1,
+        expression(paste("PPFD (", mu, mol%.%m^{-2}%.%s^{-1},")")),
         line=2)
-  mtext(side=2, 
-        expression(paste("NEE (", mu, mol%.%m^{-2}%.%s^{-1},")")), 
+  mtext(side=2,
+        expression(paste("NEE (", mu, mol%.%m^{-2}%.%s^{-1},")")),
         line=2)
   mtext(side=1, station.year, line=3)
   #
@@ -440,35 +440,35 @@ plot_ro_l <- function(ro.file.path, cur.file){
   legend('bottomright', legend = rpb, inset = 0.02, bty = 'n')
   lines(ml.x,ml.y, lty=2, col="blue", lwd=3)
   #
-  legend("topright", 
+  legend("topright",
          inset=0.02,
-         y.intersp = 1.5, 
-         col=c("blue"), 
-         lty=c(2), 
-         lwd=c(3), 
-         legend=c("Model L (ro)"), 
+         y.intersp = 1.5,
+         col=c("blue"),
+         lty=c(2),
+         lwd=c(3),
+         legend=c("Model L (ro)"),
          bty='n')
 }
 
 # ************************************************************************
 # * Name: list.dirs
 # *
-# * Input: 
+# * Input:
 # *
-# * Return: 
+# * Return:
 # *
-# * Features:  
-# *           
-# * Ref:      J. Ulrich (2011), How to obtain a list of directories 
-# *             within a directory, like list.files(), but instead 
-# *             “list.dirs()”, Stack Overflow, 
+# * Features:
+# *
+# * Ref:      J. Ulrich (2011), How to obtain a list of directories
+# *             within a directory, like list.files(), but instead
+# *             “list.dirs()”, Stack Overflow,
 # *             http://stackoverflow.com/questions/4749783/how-to-obtain-
 # *             a-list-of-directories-within-a-directory-like-list-files-
 # *             but-i
 # ************************************************************************
 list.dirs <- function(path=".", pattern=NULL, all.dirs=FALSE,
                       full.names=FALSE, ignore.case=FALSE) {
- 
+
   all <- list.files(path, pattern, all.dirs,
                     full.names, recursive=FALSE, ignore.case)
   return(all)
@@ -498,30 +498,25 @@ out.file.path=paste(
 # ---------------- OBSERVATIONS -------------------- #
 # -------------------------------------------------- #
 # Step through each directory:
-for (st.id in obs.stations){
-	obs.file.path=paste(
-    obs.station.dir,
-		st.id,
-		"/",
-		sep=""
-		)
+for (st.id in obs.stations) {
+	obs.file.path <- paste(obs.station.dir, st.id, "/", sep = "")
+
 	# \\\\\\\\\\\\\\\\\\\\\\\\\\\
 	# Find files in subdirectory:
 	# ///////////////////////////
-	obs.files.all = list.files(path = obs.file.path, pattern = "*[:1:].txt");
+	obs.files.all <- list.files(path = obs.file.path, pattern = "*[:1:]_obs.txt");
 	num.files <- length(obs.files.all)
-  #
-	#
+
 	#\\\\\\\\\\\\\\\\\\\\\\\\\\\
 	# Create postscript outfile:
 	#///////////////////////////
-	ps.file.name <- paste(toupper(st.id), "_partitioning_obs.ps", sep="")
-  #
+	ps.file.name <- paste(st.id, "_partitioning_obs.ps", sep="")
+    #
 	postscript(
-		file = paste(out.file.path, ps.file.name, sep=""), 
-		width = 8, 
-		height = 4, 
-		paper = "special", 
+		file = paste(out.file.path, ps.file.name, sep=""),
+		width = 8,
+		height = 4,
+		paper = "special",
 		horizontal = FALSE,
 		onefile = TRUE
 		)
@@ -555,10 +550,10 @@ for (st.id in ro.stations){
   #ps.file.name <- paste(toupper(st.id), "_partitioning_ro_h.ps", sep="")
   ps.file.name <- paste(toupper(st.id), "_partitioning_ro_l.ps", sep="")
   postscript(
-    file = paste(out.file.path, ps.file.name, sep=""), 
-    width = 8, 
-    height = 4, 
-    paper = "special", 
+    file = paste(out.file.path, ps.file.name, sep=""),
+    width = 8,
+    height = 4,
+    paper = "special",
     horizontal = FALSE,
     onefile = TRUE
   )

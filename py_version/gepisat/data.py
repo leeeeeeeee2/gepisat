@@ -83,7 +83,7 @@ class DATA(object):
         """
         # Create a class logger
         self.logger = logging.getLogger(__name__)
-        self.logger.info("DATA class initialized")
+        self.logger.debug("DATA class initialized")
 
         # Hidden properties:
         self._outputdir = "."
@@ -521,7 +521,7 @@ class DATA(object):
         Features: Prepares station parameters
         """
         if station in self.stations:
-            self.logger.info("Setting up for station %s", station)
+            self.logger.debug("Setting up for station %s", station)
 
             # Define the light-use efficiency data output file:
             self.lue_file = "{}_LUE.txt".format(station)

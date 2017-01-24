@@ -87,7 +87,7 @@ class FLUX_PARTI(object):
         """
         # Create a class logger
         self.logger = logging.getLogger(__name__)
-        self.logger.info(
+        self.logger.debug(
             "Initializing FLUX_PARTI class for %s @ %s" % (tower, mo))
 
         # Initialize stats class:

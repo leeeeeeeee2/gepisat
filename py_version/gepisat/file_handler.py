@@ -84,7 +84,7 @@ class GPSQL(object):
         """
         # Create a class logger
         self.logger = logging.getLogger(__name__)
-        self.logger.info("GPSQL class initialized")
+        self.logger.debug("GPSQL class initialized")
         self.reset_properties()
 
         self.flux_version = '2015'
@@ -341,7 +341,8 @@ class GPSQL(object):
                         self.logger.error("Flux version not recognized!")
                         raise ValueError("Flux version not recognized.")
             else:
-                self.logger.warning("No data found!")
+                self.logger.warning(
+                    "No data found for %s %s!" % (self._station, start_date))
 
             # Close connection and return results:
             con.close()

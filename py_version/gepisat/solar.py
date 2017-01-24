@@ -3,7 +3,7 @@
 # solar.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2016-07-22
+# LAST UPDATED: 2017-01-23
 #
 # ~~~~~~~~
 # license:
@@ -68,6 +68,7 @@ class SOLAR_TOA:
               - fixed xrange for Python2/3 support [16.06.26]
               - fixed bad logging statement [16.06.26]
               - moved to gepisat package [16.07.22]
+              - downgraded logging statements [17.01.23]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -81,7 +82,7 @@ class SOLAR_TOA:
         """
         # Create a class logger
         self.logger = logging.getLogger(__name__)
-        self.logger.info("SOLAR_TOA class called")
+        self.logger.debug("SOLAR_TOA class called")
 
         # Error handle and assign required public variables:
         if lat > 90.0 or lat < -90.0:
@@ -90,7 +91,7 @@ class SOLAR_TOA:
             raise ValueError(
                 "Latitude outside range of validity, (-90 to 90)!")
         else:
-            self.logger.info("latitude set to %0.3f degrees", lat)
+            self.logger.debug("latitude set to %0.3f degrees", lat)
             self.lat = lat
 
         if lon > 180.0 or lon < -180.0:
@@ -261,7 +262,7 @@ class SOLAR_TOA:
         # Eq. 1.10.3, Duffy & Beckman (1993)
         ho = (86400.0/numpy.pi)*kGsc*dr*(ru*pir*hs + rv*dsin(hs))
         self.ho_jm2 = ho
-        self.logger.info("daily ET radiation set to %f MJ/m^2", (1.0e-6)*ho)
+        self.logger.debug("daily ET radiation set to %f MJ/m^2", (1.0e-6)*ho)
 
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions

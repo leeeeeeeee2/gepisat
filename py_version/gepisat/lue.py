@@ -80,7 +80,7 @@ class LUE:
         """
         # Create a class logger
         self.logger = logging.getLogger(__name__)
-        self.logger.info("LUE class initialized")
+        self.logger.debug("LUE class initialized")
 
         # Dictionary of stations' monthly values & their units:
         # * this is for printing to file
@@ -546,7 +546,7 @@ class LUE:
         Features: Writes to file the monthly values associated with the light
                   use efficiency equation for a given station
         """
-        self.logger.info("Writing LUE values for station %s", station)
+        self.logger.debug("Writing LUE values for station %s", station)
 
         # Create file if it doesn't exist:
         if not os.path.isfile(out_file):

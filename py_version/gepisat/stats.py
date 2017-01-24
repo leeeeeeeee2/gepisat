@@ -82,7 +82,7 @@ class PARTI_STATS(object):
         """
         # Create a class logger
         self.logger = logging.getLogger(__name__)
-        self.logger.info("PARTI_STATS class called")
+        self.logger.debug("PARTI_STATS class called")
 
         # Initialize empty stats dictionary:
         self.summary = init_summary_dict()
@@ -1804,7 +1804,7 @@ class PARTI_STATS(object):
             best_model = 0
 
         # Save model selection:
-        self.logger.info("Best model is %s", best_model)
+        self.logger.debug("Best model is %s", best_model)
         self.model_select = best_model
 
     def update_guess(self):

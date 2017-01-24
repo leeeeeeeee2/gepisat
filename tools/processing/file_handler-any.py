@@ -82,17 +82,23 @@ if __name__ == '__main__':
             if result:
                 my_station = result.group(1)
                 out_dir = os.path.join(my_dir, my_station.lower())
+                to_continue = True
+
+                # Create the new subdirectory:
                 if not os.path.isdir(out_dir):
                     try:
-                        # Create the new subdirectory:
                         mkdir_p(out_dir)
                     except:
                         print("Failed to create directory '%s'" % (out_dir))
+                        to_continue = False
                     else:
-                        out_path = os.path.join(out_dir, my_file)
-                        try:
-                            # Move file into subdirectory:
-                            shutil.move(my_path, out_path)
-                        except:
-                            print("Failed to move file '%s' to '%s'" % (
-                                my_path, out_dir))
+                        to_continue = True
+
+                if to_continue:
+                    out_path = os.path.join(out_dir, my_file)
+                    try:
+                        # Move file into subdirectory:
+                        shutil.move(my_path, out_path)
+                    except:
+                        print("Failed to move file '%s' to '%s'" % (
+                            my_path, out_dir))

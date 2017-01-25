@@ -3,7 +3,7 @@
 # stats.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-22
+# LAST UPDATED: 2017-01-24
 #
 # ~~~~~~~~
 # license:
@@ -70,6 +70,7 @@ class PARTI_STATS(object):
               - created summary string property [16.07.22]
               - moved to gepisat package [16.07.22]
               - updated write fit params function [17.01.22]
+              - fixed header items in write fit params function [17.01.24]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -1840,100 +1841,6 @@ class PARTI_STATS(object):
         self.alpha_est_ro_h = hm_alpha
         self.r_est_ro_h = hm_r
 
-    def write_fit_params(self, output_dir):
-        """
-        @TODO
-        """
-        # ~~~~~~~~~~ OBSERVATIONS ~~~~~~~~~~
-        obs_file = "%s_%s_obs.txt" % (self.name, self.date)
-        obs_path = os.path.join(output_dir, obs_file)
-
-        head0 = "MH_guess,%f,%f,%f\n" % (
-            self.foo_est_obs_h, self.alpha_est_obs_h, self.r_est_obs_h)
-
-        head1 = "ML_guess,%f,%f\n" % (
-            self.alpha_est_obs_l, self.r_est_obs_l)
-
-        head2 = "MH_opt,%f,%f,%f,%f,%f\n" % (
-            self.foo_opt_obs_h, self.alpha_opt_obs_h, self.r_opt_obs_h,
-            self.rmse_obs_h, self.r2_obs_h)
-
-        head3 = "ML_opt,%f,%f,,%f,%f\n" % (
-            self.alpha_opt_obs_l, self.r_opt_obs_l, self.rmse_obs_l,
-            self.r2_obs_l)
-
-        try:
-            self.logger.debug("opening %s for writing", obs_path)
-            OUTFILE = open(obs_path, 'w')
-
-            self.logger.debug("calculating model fitted values")
-            fit_h = hyp_model(
-                self.ppfd, self.foo_opt_obs_h, self.alpha_opt_obs_h,
-                self.r_opt_obs_h)
-            fit_l = lin_model(
-                self.ppfd, self.alpha_opt_obs_l, self.r_opt_obs_l)
-        except:
-            self.logger.exception("failed to write %s", obs_path)
-        else:
-            OUTFILE.write(head0)
-            OUTFILE.write(head1)
-            OUTFILE.write(head2)
-            OUTFILE.write(head3)
-            OUTFILE.write("ppfd_obs,nee_obs,nee_mh,nee_ml\n")
-
-            for po, no, nh, nl in map(None, self.ppfd, self.nee, fit_h, fit_l):
-                outline = "%s,%s,%s,%s\n" % (po, no, nh, nl)
-                OUTFILE.write(outline)
-
-            OUTFILE.close()
-
-        # ~~~~~~~~~~ OUTLIERS REMOVED ~~~~~~~~~~
-        ro_file = "%s_%s_ro.txt" % (self.name, self.date)
-        ro_path = os.path.join(output_dir, ro_file)
-
-        head4 = "MH_guess,%0.5f,%0.3f,%0.3f\n" % (
-            self.foo_est_obs_h, self.alpha_est_obs_h, self.r_est_obs_h)
-        head5 = "ML_guess,%0.5f,%0.2f\n" % (
-            self.alpha_est_obs_l, self.r_est_obs_l)
-        head6 = "MH_opt,%0.5f,%0.3f,%0.3f,%0.3f,%0.3f\n" % (
-            self.foo_opt_ro_h, self.alpha_opt_ro_h, self.r_opt_ro_h,
-            self.rmse_ro_h, self.r2_ro_h)
-        head7 = "ML_opt,%0.5f,%0.3f,,%0.3f,%0.3f\n" % (
-            self.alpha_opt_ro_l, self.r_opt_ro_l,
-            self.rmse_ro_l, self.r2_ro_l)
-
-        try:
-            OUTFILE = open(ro_path, 'w')
-
-            # Remove outliers:
-            ppfd_rol = numpy.delete(self.ppfd, self.lin_outliers)
-            nee_rol = numpy.delete(self.nee, self.lin_outliers)
-            ppfd_roh = numpy.delete(self.ppfd, self.hyp_outliers)
-            nee_roh = numpy.delete(self.nee, self.hyp_outliers)
-
-            # Calculate model fitted parameters:
-            fit_h = hyp_model(
-                ppfd_roh, self.foo_opt_ro_h, self.alpha_opt_ro_h,
-                self.r_opt_ro_h)
-            fit_l = lin_model(
-                ppfd_rol, self.alpha_opt_ro_l, self.r_opt_ro_l)
-        except:
-            self.logger.exception("failed to open file %s", ro_path)
-        else:
-            OUTFILE.write(head4)
-            OUTFILE.write(head5)
-            OUTFILE.write(head6)
-            OUTFILE.write(head7)
-            OUTFILE.write("ppfd_obs_h,nee_obs_h,nee_mod_h,"
-                          "ppfd_obs_l,nee_obs_l,nee_mod_l\n")
-            for (poh, noh, nhh, pol, nol, nll) in map(None, ppfd_roh, nee_roh,
-                                                      fit_h, ppfd_rol, nee_rol,
-                                                      fit_l):
-                outline = "%s,%s,%s,%s,%s,%s\n" % (
-                    poh, noh, nhh, pol, nol, nll)
-                OUTFILE.write(outline)
-            OUTFILE.close()
-
     def set_observations(self, nee, ppfd):
         """
         Name:     PARTI_STATS.set_observations
@@ -1972,3 +1879,101 @@ class PARTI_STATS(object):
 
         self.logger.debug("Calculating observation correlation coefficient")
         self.pearson_r_obs = pearsons_r(nee, ppfd)
+
+    def write_fit_params(self, output_dir):
+        """
+        Name:     PARTI_STATS.write_fit_params
+        Inputs:   str, output directory path (output_dir)
+        Outputs:  None.
+        Features: Writes the partitioning parameters and data to file
+        Note:     Output is read by plot_partitioning.R (in tools/plotting/)
+                  Headers are organized as: alpha, R, foo, RMSE, R2 in order
+                  to comply with the optim_params R function
+        """
+        # ~~~~~~~~~~ OBSERVATIONS ~~~~~~~~~~
+        obs_file = "%s_%s_obs.txt" % (self.name, self.date)
+        obs_path = os.path.join(output_dir, obs_file)
+
+        head0 = "MH_guess,%f,%f,%f\n" % (
+            self.alpha_est_obs_h, self.r_est_obs_h, self.foo_est_obs_h)
+
+        head1 = "ML_guess,%f,%f\n" % (
+            self.alpha_est_obs_l, self.r_est_obs_l)
+
+        head2 = "MH_opt,%f,%f,%f,%f,%f\n" % (
+            self.alpha_opt_obs_h, self.r_opt_obs_h, self.foo_opt_obs_h,
+            self.rmse_obs_h, self.r2_obs_h)
+
+        head3 = "ML_opt,%f,%f,,%f,%f\n" % (
+            self.alpha_opt_obs_l, self.r_opt_obs_l, self.rmse_obs_l,
+            self.r2_obs_l)
+
+        try:
+            self.logger.debug("opening %s for writing", obs_path)
+            OUTFILE = open(obs_path, 'w')
+
+            self.logger.debug("calculating model fitted values")
+            fit_h = hyp_model(
+                self.ppfd, self.foo_opt_obs_h, self.alpha_opt_obs_h,
+                self.r_opt_obs_h)
+            fit_l = lin_model(
+                self.ppfd, self.alpha_opt_obs_l, self.r_opt_obs_l)
+        except:
+            self.logger.exception("failed to write %s", obs_path)
+        else:
+            OUTFILE.write(head0)
+            OUTFILE.write(head1)
+            OUTFILE.write(head2)
+            OUTFILE.write(head3)
+            OUTFILE.write("ppfd_obs,nee_obs,nee_mh,nee_ml\n")
+
+            for po, no, nh, nl in map(None, self.ppfd, self.nee, fit_h, fit_l):
+                outline = "%s,%s,%s,%s\n" % (po, no, nh, nl)
+                OUTFILE.write(outline)
+
+            OUTFILE.close()
+
+        # ~~~~~~~~~~ OUTLIERS REMOVED ~~~~~~~~~~
+        ro_file = "%s_%s_ro.txt" % (self.name, self.date)
+        ro_path = os.path.join(output_dir, ro_file)
+
+        head4 = "MH_guess,%f,%f,%f\n" % (
+            self.alpha_est_obs_h, self.r_est_obs_h, self.foo_est_obs_h)
+        head5 = "ML_guess,%f,%f\n" % (
+            self.alpha_est_obs_l, self.r_est_obs_l)
+        head6 = "MH_opt,%f,%f,%f,%f,%f\n" % (
+            self.alpha_opt_ro_h, self.r_opt_ro_h, self.foo_opt_ro_h,
+            self.rmse_ro_h, self.r2_ro_h)
+        head7 = "ML_opt,%f,%f,,%f,%f\n" % (
+            self.alpha_opt_ro_l, self.r_opt_ro_l,
+            self.rmse_ro_l, self.r2_ro_l)
+
+        try:
+            OUTFILE = open(ro_path, 'w')
+
+            # Remove outliers:
+            ppfd_rol = numpy.delete(self.ppfd, self.lin_outliers)
+            nee_rol = numpy.delete(self.nee, self.lin_outliers)
+            ppfd_roh = numpy.delete(self.ppfd, self.hyp_outliers)
+            nee_roh = numpy.delete(self.nee, self.hyp_outliers)
+
+            # Calculate model fitted parameters:
+            fit_h = hyp_model(ppfd_roh, self.foo_opt_ro_h, self.alpha_opt_ro_h,
+                self.r_opt_ro_h)
+            fit_l = lin_model(ppfd_rol, self.alpha_opt_ro_l, self.r_opt_ro_l)
+        except:
+            self.logger.exception("failed to open file %s", ro_path)
+        else:
+            OUTFILE.write(head4)
+            OUTFILE.write(head5)
+            OUTFILE.write(head6)
+            OUTFILE.write(head7)
+            OUTFILE.write("ppfd_obs_h,nee_obs_h,nee_mod_h,"
+                          "ppfd_obs_l,nee_obs_l,nee_mod_l\n")
+            for (poh, noh, nhh, pol, nol, nll) in map(None, ppfd_roh, nee_roh,
+                                                      fit_h, ppfd_rol, nee_rol,
+                                                      fit_l):
+                outline = "%s,%s,%s,%s,%s,%s\n" % (
+                    poh, noh, nhh, pol, nol, nll)
+                OUTFILE.write(outline)
+            OUTFILE.close()

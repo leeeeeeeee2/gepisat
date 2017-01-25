@@ -3,7 +3,7 @@
 # model.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-23
+# LAST UPDATED: 2017-01-24
 #
 # ~~~~~~~~
 # license:
@@ -149,6 +149,7 @@ if __name__ == "__main__":
     # Define output directory:
     output_dir = os.path.join(
         os.path.expanduser("~"), "Desktop", "temp", "out")
+    part_out_dir = os.path.join(output_dir, "partition")
     my_data.set_output_directory(output_dir)
 
     # Get list of all flux station names:
@@ -189,7 +190,10 @@ if __name__ == "__main__":
 
                         # Perform GPP partitioning:
                         my_parter.partition(outliers=True)
-                        my_parter.write_partition(output_dir)
+
+                        # OPTIONAL: write the partition results for plotting
+                        if False:
+                            my_parter.write_partition(part_out_dir)
 
                         # Perform half-hourly PPFD gapfilling (umol m-2 s-1):
                         gf_time, gf_ppfd = my_data.gapfill_monthly_ppfd(
@@ -199,7 +203,7 @@ if __name__ == "__main__":
                         gf_gpp, gf_gpp_err = my_parter.calc_gpp(gf_ppfd)
 
                         # OPTIONAL: Calculate daily GPP (mol m-2):
-                        if False:
+                        if True:
                             gpp_daily = my_data.sub_to_daily_gpp(
                                 gf_time, gf_gpp, gf_gpp_err, to_save=True)
 

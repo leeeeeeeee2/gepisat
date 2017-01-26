@@ -3,7 +3,7 @@
 # data.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2016-07-22
+# LAST UPDATED: 2017-01-25
 #
 # ~~~~~~~~
 # license:
@@ -45,6 +45,7 @@ import numpy
 
 from .file_handler import GPSQL
 from .lue import LUE
+from .resources import mkdir_p
 from .utilities import add_one_day
 from .utilities import add_one_month
 from .utilities import init_summary_dict
@@ -71,6 +72,7 @@ class DATA(object):
               - created find monthly meteorology function [16.07.22]
               - import LUE [16.07.22]
               - moved to gepisat package [16.07.22]
+              - added warning statement for negative daily GPP [17.01.25]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -537,7 +539,7 @@ class DATA(object):
 
     def sub_to_daily_gpp(self, ts, gpp, gpp_err, to_save=False):
         """
-        Name:     calc_daily_gpp
+        Name:     sub_to_daily_gpp
         Inputs:   - numpy.ndarray, half-hourly datetimes for a month (ts)
                   - numpy.ndarray, half-hourly gap-filled GPP, umol/m2/s (gpp)
                   - numpy.ndarray, half-hourly GPP model errors (gpp_err)
@@ -546,26 +548,38 @@ class DATA(object):
                   > 'Timestamp' daily timestamps
                   > 'GPP' daily GPP, mol/m2
                   > 'GPP_err' daily GPP error, mol/m2
-        Features: Returns time stamped daily GPP and its associated errors
+        Features: Returns time stamped daily GPP and its associated errors;
+                  writes daily results to individual monthly files into
+                  site-specific subdirectories (created if not existing)
         Depends:  - add_one_day
+                  - mkdir_p
                   - simpson
-
-        @TODO
         """
-        # Get starting and ending dates:
+        # Get starting and ending dates
+        # (gap filling starts the time series at midnight):
         starting_date = ts[0]
         ending_date = ts[-1]
 
         # Assign output file and write header line if requested:
         out_file = "%s_%s-%s_daily_GPP.txt" % (
-            self.station, starting_date, ending_date)
-        out_path = os.path.join(self.outputdir, out_file)
+            self.station, starting_date.date(), ending_date.date())
+        out_dir = os.path.join(
+            self.output_dir, "daily_gpp", self.station.lower())
+        out_path = os.path.join(out_dir, out_file)
         if to_save:
+            if not os.path.isdir(out_dir):
+                try:
+                    mkdir_p(out_dir)
+                except:
+                    self.logger.critical(
+                        "Could not create output directory for daily GPP!")
+                    to_save = False
+
             header_line = "Timestamp,GPP_mol.m2,GPP_err_mol.m2\n"
             try:
                 f = open(out_path, "w")
             except:
-                self.logger.exception("Cannot write to file '%s'", out_path)
+                self.logger.error("Cannot write to file '%s'", out_path)
             else:
                 f.write(header_line)
                 f.close()
@@ -578,6 +592,10 @@ class DATA(object):
                 (ts >= cur_date) & (ts < add_one_day(cur_date)))
             my_gpp = gpp[my_idx]
             my_gpp_err = gpp_err[my_idx]
+
+            if (my_gpp < 0).any():
+                self.logger.warning("Negative daily GPP for %s at %s" % (
+                    self.station, cur_date))
 
             # Integrate to daily:
             sec_in_hh = 1800   # seconds in a half-hour (i.e., simpson's h)

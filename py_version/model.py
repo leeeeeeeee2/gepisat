@@ -3,7 +3,7 @@
 # model.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-24
+# LAST UPDATED: 2017-01-25
 #
 # ~~~~~~~~
 # license:
@@ -153,8 +153,8 @@ if __name__ == "__main__":
     my_data.set_output_directory(output_dir)
 
     # Get list of all flux station names:
-    my_data.find_stations()         # use this function to search the DB
-    # my_data.stations = ['CZ-wet', ]   # or manually define stations here
+    # my_data.find_stations()         # use this function to search the DB
+    my_data.stations = ['CZ-wet', ]   # or manually define stations here
 
     # Initialize summary statistics file:
     my_data.create_summary_file("summary_statistics.txt")
@@ -185,42 +185,39 @@ if __name__ == "__main__":
                     # Initialize a FLUX_PARTI class:
                     my_parter = FLUX_PARTI(mo_ppfd, mo_nee, station, sd)
 
-                    # Process if enough data was found:
-                    if (len(mo_ppfd) > 3 and len(mo_nee) > 3):
+                    # Perform GPP partitioning:
+                    my_parter.partition(outliers=True)
 
-                        # Perform GPP partitioning:
-                        my_parter.partition(outliers=True)
+                    # OPTIONAL: write the partition results for plotting
+                    if False:
+                        my_parter.write_partition(part_out_dir)
 
-                        # OPTIONAL: write the partition results for plotting
-                        if False:
-                            my_parter.write_partition(part_out_dir)
+                    # Perform half-hourly PPFD gapfilling (umol m-2 s-1):
+                    gf_time, gf_ppfd = my_data.gapfill_monthly_ppfd(
+                        sd, to_save=False)
 
-                        # Perform half-hourly PPFD gapfilling (umol m-2 s-1):
-                        gf_time, gf_ppfd = my_data.gapfill_monthly_ppfd(
-                            sd, to_save=False)
+                    # Calculate half-hourly GPP (umol m-2 s-1)
+                    gf_gpp, gf_gpp_err = my_parter.calc_gpp(gf_ppfd)
 
-                        # Calculate half-hourly GPP (umol m-2 s-1)
-                        gf_gpp, gf_gpp_err = my_parter.calc_gpp(gf_ppfd)
+                    # OPTIONAL: calculate daily GPP (mol m-2):
+                    if True:
+                        gpp_daily = my_data.sub_to_daily_gpp(
+                            gf_time, gf_gpp, gf_gpp_err, to_save=True)
 
-                        # OPTIONAL: Calculate daily GPP (mol m-2):
-                        if True:
-                            gpp_daily = my_data.sub_to_daily_gpp(
-                                gf_time, gf_gpp, gf_gpp_err, to_save=True)
+                    # Continue processing if partitioning was successful:
+                    if my_parter.best_model > 0:
+                        # Integrate PPFD & GPP [umol m-2]; dt = 30 min
+                        ppfd_mo = simpson(gf_ppfd.clip(min=0), 1800)
+                        gpp_mo = simpson(gf_gpp.clip(min=0), 1800)
+                        gpp_mo_err = simpson(gf_gpp_err, 1800)
 
-                        # Continue processing if partitioning was successful:
-                        if my_parter.best_model > 0:
-                            # Integrate PPFD & GPP [umol m-2]; dt = 30 min
-                            ppfd_mo = simpson(gf_ppfd.clip(min=0), 1800)
-                            gpp_mo = simpson(gf_gpp.clip(min=0), 1800)
-                            gpp_mo_err = simpson(gf_gpp_err, 1800)
+                        # Convert units from [umol m-2] to [mol m-2]:
+                        ppfd_mo *= (1e-6)
+                        gpp_mo *= (1e-6)
+                        gpp_mo_err *= (1e-6)
 
-                            # Convert units from [umol m-2] to [mol m-2]:
-                            ppfd_mo *= (1e-6)
-                            gpp_mo *= (1e-6)
-                            gpp_mo_err *= (1e-6)
-
-                            # STAGE 2: Update LUE parameters:
-                            my_data.update_lue(sd, gpp_mo, gpp_mo_err, ppfd_mo)
+                        # STAGE 2: Update LUE parameters:
+                        my_data.update_lue(sd, gpp_mo, gpp_mo_err, ppfd_mo)
 
                     # Save class summary statistics:
                     SFILE = open(my_data.summary_file, 'a')

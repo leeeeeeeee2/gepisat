@@ -3,7 +3,7 @@
 # flux_parti.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-22
+# LAST UPDATED: 2017-01-25
 #
 # ~~~~~~~~
 # license:
@@ -71,6 +71,7 @@ class FLUX_PARTI(object):
               - created best model class property [16.07.06]
               - moved to gepisat package [16.07.22]
               - created a write partition function [17.01.22]
+              - added array length check in partition [17.01.25]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -247,24 +248,29 @@ class FLUX_PARTI(object):
                   processes outliers (optional);
                   saves results to file (optional)
         """
-        self.logger.debug(
-            "fitting hyperbolic and linear models to observations")
-        self.stats.fit_hm_obs()
-        self.stats.fit_lm_obs()
+        if self.stats.num_obs > 3:
+            self.logger.debug("fitting hyperbolic and linear models")
+            self.stats.fit_hm_obs()
+            self.stats.fit_lm_obs()
 
-        if outliers:
-            self.logger.debug("finding outliers ...")
-            self.stats.find_outliers()
-            self.logger.debug(
-                "fitting hyperbolic and linear models without outliers")
-            self.stats.fit_hm_ro()
-            self.stats.fit_lm_ro()
+            if outliers:
+                self.logger.debug("finding outliers ...")
+                self.stats.find_outliers()
+                self.logger.debug(
+                    "fitting hyperbolic and linear models without outliers")
+                self.stats.fit_hm_ro()
+                self.stats.fit_lm_ro()
 
-        self.stats.select_best_model()
+            self.stats.select_best_model()
 
     def write_partition(self, out_dir):
         """
-        @TODO
+        Name:     FLUX_PARTI.write_partition
+        Inputs:   str, output directory (out_dir)
+        Outputs:  None.
+        Features: Writes partitioning parameters to file
+
+        @TODO: to omit write outs if partitioning was not performed?
         """
         if os.path.isdir(out_dir):
             self.stats.write_fit_params(out_dir)

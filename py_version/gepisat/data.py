@@ -3,7 +3,7 @@
 # data.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-25
+# LAST UPDATED: 2017-01-27
 #
 # ~~~~~~~~
 # license:
@@ -73,6 +73,8 @@ class DATA(object):
               - import LUE [16.07.22]
               - moved to gepisat package [16.07.22]
               - added warning statement for negative daily GPP [17.01.25]
+              - changed datetime to date in daily GPP writeouts [17.01.27]
+              - sub to daily function writes to a single file [17.01.27]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -561,10 +563,8 @@ class DATA(object):
         ending_date = ts[-1]
 
         # Assign output file and write header line if requested:
-        out_file = "%s_%s-%s_daily_GPP.txt" % (
-            self.station, starting_date.date(), ending_date.date())
-        out_dir = os.path.join(
-            self.output_dir, "daily_gpp", self.station.lower())
+        out_file = "%s_daily_GPP.txt" % (self.station)
+        out_dir = os.path.join(self.output_dir, "daily_gpp")
         out_path = os.path.join(out_dir, out_file)
         if to_save:
             if not os.path.isdir(out_dir):
@@ -575,14 +575,16 @@ class DATA(object):
                         "Could not create output directory for daily GPP!")
                     to_save = False
 
-            header_line = "Timestamp,GPP_mol.m2,GPP_err_mol.m2\n"
-            try:
-                f = open(out_path, "w")
-            except:
-                self.logger.error("Cannot write to file '%s'", out_path)
-            else:
-                f.write(header_line)
-                f.close()
+            if not os.path.isfile(out_path) and to_save:
+                header_line = "Timestamp,GPP_mol.m2,GPP_err_mol.m2\n"
+                try:
+                    f = open(out_path, "w")
+                except:
+                    self.logger.error("Cannot write to file '%s'", out_path)
+                    to_save = False
+                else:
+                    f.write(header_line)
+                    f.close()
 
         # Iterate through days:
         cur_date = starting_date
@@ -615,7 +617,8 @@ class DATA(object):
                     self.logger.exception(
                         "Failed to appending to '%s'", out_path)
                 else:
-                    f.write("%s,%f,%f\n" % (cur_date, day_gpp, day_gpp_err))
+                    f.write(
+                        "%s,%f,%f\n" % (cur_date.date(), day_gpp, day_gpp_err))
                 finally:
                     f.close()
 

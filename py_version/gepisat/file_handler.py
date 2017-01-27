@@ -3,7 +3,7 @@
 # file_handler.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-22
+# LAST UPDATED: 2017-01-27
 #
 # ~~~~~~~~
 # license:
@@ -152,6 +152,7 @@ class GPSQL(object):
         Features: Returns half-hourly gapfilled photosynthetic photon flux
                   density (PPFD) and associated timestamps; write results to
                   file if requested
+        Depends:  get_daily_ppfd
         """
         self.logger.debug("Gapfilling %s", cur_date)
 

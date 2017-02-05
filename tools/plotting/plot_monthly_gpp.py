@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-# plot_daily_gpp.py
+# plot_monthly_gpp.py
 #
 # LAST UPDATED: 2017-02-05
 #
@@ -8,8 +8,6 @@
 # description:
 # ------------
 # To combine PDF files, try: `pdfjoin --rotateoversize false *.pdf`
-#
-# @TODO plot monthly
 #
 ###############################################################################
 # IMPORT MODULES
@@ -26,6 +24,22 @@ import matplotlib.pyplot as plt
 ###############################################################################
 # FUNCTIONS
 ###############################################################################
+def add_one_month(dt0):
+    """
+    Name:     add_one_month
+    Input:    datetime.date (dt0)
+    Output:   datetime.date (dt3)
+    Features: Adds one month to datetime
+    Ref:      A. Balogh (2010), ActiveState Code
+              http://code.activestate.com/recipes/577274-subtract-or-add-a-
+              month-to-a-datetimedate-or-datet/
+    """
+    dt1 = dt0.replace(day=1)
+    dt2 = dt1 + datetime.timedelta(days=32)
+    dt3 = dt2.replace(day=1)
+    return dt3
+
+
 def get_meta(my_path, st_name):
     """
     Name:     get_meta
@@ -74,16 +88,17 @@ def get_station_name(my_path):
         return my_station
 
 
-def load_daily_gpp(my_path):
+def load_monthly_gpp(my_path):
     """
-    Name:     load_daily_gpp
+    Name:     load_monthly_gpp
     Inputs:   str, file path (my_path)
     Outputs:  numpy.ndarray
               > datetime.date, 'date'
               > float, 'gpp'
               > float, 'gpp_err'
-    Features: Returns daily GPP file (output from GePiSaT model) as a
-              structured array
+    Features: Returns monthly GPP file (output from GePiSaT model) as a
+              structured array; gapfills missing months with NaNs
+    Depends:  add_one_month
     """
     my_data = numpy.array([])
     if os.path.isfile(my_path):
@@ -93,33 +108,66 @@ def load_daily_gpp(my_path):
                    'formats': ('O', 'f4', 'f4')},
             delimiter=',',
             skiprows=1,
+            usecols=(0, 1, 2),
             converters={
                 0: lambda x: datetime.datetime.strptime(x, '%Y-%m-%d').date(),
                 1: numpy.float,
                 2: numpy.float}
         )
-    return my_data
+
+    if my_data.size > 1:
+        # Initialize return data structured array:
+        rdata = numpy.array(
+            my_data[0],
+            dtype={'names': ('date', 'gpp', 'gpp_err'),
+                   'formats': ('O', 'f4', 'f4')},
+            ndmin=1)
+
+        first_mo = my_data['date'][0]
+        last_mo = my_data['date'][-1]
+        cur_date = add_one_month(first_mo)
+        while cur_date <= last_mo:
+            my_idx = numpy.where(my_data['date'] == cur_date)[0]
+            if len(my_idx) == 1:
+                temp_array = numpy.array(
+                    my_data[my_idx],
+                    dtype={'names': ('date', 'gpp', 'gpp_err'),
+                           'formats': ('O', 'f4', 'f4')},
+                    ndmin=1)
+            else:
+                temp_array = numpy.array(
+                    (cur_date, numpy.nan, 0.0),
+                    dtype={'names': ('date', 'gpp', 'gpp_err'),
+                           'formats': ('O', 'f4', 'f4')},
+                    ndmin=1)
+            rdata = numpy.append(rdata, temp_array, axis=0)
+            cur_date = add_one_month(cur_date)
+    else:
+        rdata = my_data
+    return rdata
 
 
-def plot_daily_gpp(daily_data, left_text, right_text, to_save, out_file):
+def plot_monthly_gpp(mo_data, left_text, right_text, to_save, out_file):
     """
-    Name:     plot_daily_gpp
-    Inputs:   - numpy.ndarray, structured array with daily GPP (daily_data)
+    Name:     plot_monthly_gpp
+    Inputs:   - numpy.ndarray, structured array with monthly GPP (mo_data)
               - str, text to show in the top-left margin (left_text)
               - str, text to show in the top-right margin (right_text)
               - bool, whether to save the figure to file (to_save)
               - str, path to output figure (out_file)
     Outputs:  None.
-    Features: Produces a plot of daily GPP with text given in the top-left and
-              top-right margin space
-    @TODO:    _ set the x-axis range from 2002-01-01 to 2007-01-01
+    Features: Produces a plot of monthly GPP with text given in the top-left
+              and top-right margin space
+    Note:     use scatter to make certain there are dots for each errorbar!
     """
     fig = plt.figure(figsize=(8, 6), dpi=180)
     ax1 = fig.add_subplot(111)
     # plt.setp(ax1.get_xticklabels(), rotation=0, fontsize=14)
     # plt.setp(ax1.get_yticklabels(), rotation=0, fontsize=14)
-    ax1.plot(daily_data['date'], daily_data['gpp'], '-')
-    ax1.set_ylabel('GPP, mol CO$_2$ m$^{-2}$ day$^{-1}$', fontsize=12)
+    ax1.scatter(mo_data['date'], mo_data['gpp'], edgecolors='none')
+    ax1.errorbar(mo_data['date'], mo_data['gpp'], yerr=mo_data['gpp_err'],
+                 fmt='--o', ecolor='r')
+    ax1.set_ylabel('GPP, mol CO$_2$ m$^{-2}$ month$^{-1}$', fontsize=12)
     ax1.set_xlabel('Date', fontsize=12)
     ax1.set_xlim([datetime.date(2001, 10, 1), datetime.date(2007, 4, 1)])
     ax1.text(0, 1.1, left_text, transform=ax1.transAxes, fontsize=12,
@@ -133,7 +181,6 @@ def plot_daily_gpp(daily_data, left_text, right_text, to_save, out_file):
     else:
         plt.show()
 
-
 ###############################################################################
 # MAIN PROGRAM
 ###############################################################################
@@ -143,14 +190,14 @@ if __name__ == "__main__":
     flx_met_path = os.path.join(data_dir, "Fluxdata_Met-Data.csv")
 
     #
-    # PLOT DAILY GPP
+    # PLOT MONTHLY GPP
     #
     out_dir = os.path.join(
-        os.path.expanduser("~"), "Desktop", "temp", "out", "daily_gpp")
-    s_pattern = os.path.join(out_dir, "*daily_GPP.txt")
+        os.path.expanduser("~"), "Desktop", "temp", "out", "lue")
+    s_pattern = os.path.join(out_dir, "*_LUE.txt")
     my_files = glob.glob(s_pattern)
     for my_file in sorted(my_files):
-        my_data = load_daily_gpp(my_file)
+        my_data = load_monthly_gpp(my_file)
         my_station = get_station_name(my_file)
         my_meta = get_meta(flx_met_path, my_station)
 
@@ -175,6 +222,6 @@ if __name__ == "__main__":
             my_txt1 = ("$\\mathrm{%s}$\n") % (my_station)
             my_txt2 = ""
 
-        fig_file = "%s_daily_gpp.pdf" % (my_station)
+        fig_file = "%s_monthly_gpp.pdf" % (my_station)
         fig_path = os.path.join(out_dir, "figs", fig_file)
-        plot_daily_gpp(my_data, my_txt1, my_txt2, True, fig_path)
+        plot_monthly_gpp(my_data, my_txt1, my_txt2, True, fig_path)

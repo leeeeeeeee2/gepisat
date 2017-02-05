@@ -3,7 +3,7 @@
 # flux_parti.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-25
+# LAST UPDATED: 2017-02-05
 #
 # ~~~~~~~~
 # license:
@@ -72,6 +72,7 @@ class FLUX_PARTI(object):
               - moved to gepisat package [16.07.22]
               - created a write partition function [17.01.22]
               - added array length check in partition [17.01.25]
+              - return NaNs when no observation pairs present [17.02.05]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -150,7 +151,11 @@ class FLUX_PARTI(object):
         elif (self.best_model == 2 or self.best_model == 4):
             outlier = 1
 
-        if self.best_model == 0:
+        if self.stats.num_obs == 0:
+            # No NEE:PPFD; therefore, no model fits, return NaNs
+            gpp = numpy.ones(len(ppfd)) * numpy.nan
+            gpp_err = numpy.zeros(len(ppfd))
+        elif self.best_model == 0:
             # Default to hyperbolic model with outliers removed estimates
             foo = self.stats.foo_est_obs_h
             foo_err = 0.0

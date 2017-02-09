@@ -11,7 +11,7 @@ This work implements a flux partitioning method to calculate GPP from FLUXNET me
 
 # README
 ---------------
-* LAST UPDATED: 2017-01-17
+* LAST UPDATED: 2017-02-08
 * TEAM: labprentice
 * REPO: gepisat (public)
 
@@ -119,6 +119,8 @@ This directory holds a variety of analyzing, plotting and processing tools.
     * __map_country.py__
         * Utility function to map continents with their associated country names and abbreviations
 * __plotting/__
+    * __plot_daily_gpp.py__
+        * This script produces plots of daily GPP results
     * __plot_gapfill.R__
         * This script plots the monthly PPFD observations and the gap-filling product
     * __plot_gpp.R__
@@ -129,6 +131,8 @@ This directory holds a variety of analyzing, plotting and processing tools.
             * Writes out results
     * __plot_lue.R__
         * This script processes the LUE data from monthly LUE files (output from __model.py__) and produces plots
+    * __plot_monthly_gpp.py__
+        * This script produces plots of monthly GPP (with error bars) or a comparison between 2012 and 2015 results
     * __plot_outliers.R__
         * This script reads the observation and outlier-free datasets output by __model.py__, plots them and highlights the observation pairs identified as outliers
     * __plot_partitioning.R__
@@ -138,6 +142,10 @@ This directory holds a variety of analyzing, plotting and processing tools.
 * __processing/__
     * __catfiles_lue.pl__
         * This script will concatenate all the files listed in the working directory that end with ".txt" into a single file
+    * __file_handler-any.py__
+        * This script is meant to speed up file handling on any OS
+            * Creates subdirectories based on station name
+            * Moves files into their corresponding subdirectories
     * __file_handler-osx.pl__
         * This script is meant to speed up file handling in Mac OSX (or Linux).
             * Creates subdirectories if they do not already exist

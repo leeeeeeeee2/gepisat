@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-VERSION 3.0.0
+VERSION 3.0.0-dev
 * completely removed all database calls from model--moved to DATA class
     * DATA class now handles all data and file IO operations
     * DATA has LUE class for monthly model results
@@ -13,6 +13,9 @@ VERSION 3.0.0
 * created the gepisat package [16.07.22]
     * moved connectSQL to db_util module
 * created this change log [16.07.22]
+* created database package [17.01.13]
+* created function for writing partitioning results [17.01.22]
+* created FLUXNET2015 variables [17.01.23]
 
 VERSION 2.4.0
 * moved partition function to FLUX_PARTI class [16.04.01]

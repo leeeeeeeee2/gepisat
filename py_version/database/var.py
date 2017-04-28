@@ -3,7 +3,7 @@
 # var.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-23
+# LAST UPDATED: 2017-04-28
 #
 # ~~~~~~~~
 # license:
@@ -52,6 +52,7 @@ class VAR:
     History:  Version 3.0
               - added FLUXNET 2015 variables for NEE and PPFD [17.01.15]
               - added FLUXNET 2015 station name search [17.01.22]
+              - updated get flux station function [17.04.28]
 
     @TODO:  add new dictionary for variable names?
             (e.g., map the "_f" to more natural names)
@@ -173,26 +174,27 @@ class VAR:
         """
         # Initialize station name:
         sname = ""
-        try:
-            # Use regular expression search on filename
-            # note: group(1) returns what is inside the search ()
-            sname = re.search(
-                '(\w{2}-\w{2,3})\.', os.path.basename(fileName)).group(1)
-        except AttributeError:
-            self.logger.debug(
-                "FLUXNET 2012 file name failed, trying 2015 ...")
-            try:
-                sname = re.search(
-                    '^FLX_(\S{6})_', os.path.basename(fileName)).group(1)
-            except AttributeError:
-                self.logger.error(
-                    "Station name not found in file: %s", fileName)
-            else:
-                self.logger.debug("Found station %s", sname)
-                return sname
-        else:
+        bname = os.path.basename(fileName)
+
+        # Initialize search patterns:
+        sflux12 = re.compile('^(\S{6})\.\d{4}.*\.csv$')
+        sflux15 = re.compile('^FLX_(\S{6})_.*\.csv')
+        ssplash = re.compile('^(\S{6})_.*\.csv')
+
+        if sflux12.match(bname):
+            sname = sflux12.search(bname).group(1)
             self.logger.debug("Found station %s", sname)
-            return sname
+        elif sflux15.match(bname):
+            sname = sflux15.search(bname).group(1)
+            self.logger.debug("Found station %s", sname)
+        elif ssplash.match(bname):
+            sname = ssplash.search(bname).group(1)
+            self.logger.debug("Found station %s", sname)
+        else:
+            self.logger.error(
+                "Station name not found in file: %s", fileName)
+
+        return sname
 
     def get_grid_station(self, fileName):
         """

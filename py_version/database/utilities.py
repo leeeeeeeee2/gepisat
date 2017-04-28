@@ -3,7 +3,7 @@
 # utilities.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-13
+# LAST UPDATED: 2017-04-21
 #
 # ~~~~~~~~
 # license:
@@ -37,12 +37,32 @@
 ###############################################################################
 # IMPORT MODULES
 ###############################################################################
+import glob
+import os
 import logging
 
 
 ###############################################################################
 # FUNCTIONS
 ###############################################################################
+def find_files(my_dir, my_pattern):
+    """
+    Name:     find_files
+    Inputs:   - str, directory path (my_dir)
+              - str, file name search pattern (my_pattern)
+    Outputs:  list, file paths
+    Features: Returns a sorted list of files found at a given directory with
+              file names that match a given pattern
+    """
+    my_files = []
+    if os.path.isdir(my_dir):
+        s_str = os.path.join(my_dir, my_pattern)
+        my_files = glob.glob(s_str)
+    if len(my_files) > 0:
+        my_files = sorted(my_files)
+    return my_files
+
+
 def writeout(f, d):
     """
     Name:     writeout

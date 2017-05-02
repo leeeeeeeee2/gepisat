@@ -3,7 +3,7 @@
 # crudata.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-13
+# LAST UPDATED: 2017-05-01
 #
 # ~~~~~~~~
 # license:
@@ -38,13 +38,14 @@
 # IMPORT MODULES
 ###############################################################################
 import datetime
-import glob
 import logging
 import os
 
 import numpy
 from scipy.io import netcdf
 
+from .utilities import find_files
+from .utilities import get_station_latlon
 from .utilities import writeout
 from .var import VAR
 
@@ -113,35 +114,72 @@ def calculate_vpd(vap, tm, tx=None):
     return vpd
 
 
-def get_monthly_cru(d, ct, v):
+def get_cru_file(my_dir, my_date, my_voi):
+    """
+    Name:     get_cru_file
+    Inputs:   - str, directory to CRU netcdf file (my_dir)
+              - datetime.date, current month datetime object (my_date)
+              - str, variable of interest (my_voi)
+    Outputs:  str,
+    Features: Searches for decadal, then non-specific, CRU-TS file for a given
+              time stamp and variable of interest
+    """
+    # Year for processing:
+    my_year = my_date.year
+
+    # Try decadal files first, then generic file search:
+    if my_year > 1990 and my_year < 2001:
+        s_val = "*1991.2000.%s.dat.nc" % (my_voi)
+    elif my_year > 2000 and my_year < 2011:
+        s_val = "*2001.2010.%s.dat.nc" % (my_voi)
+    elif my_year > 2010 and my_year < 2016:
+        s_val = "*2011.2015.%s.dat.nc" % (my_voi)
+    else:
+        s_val = "*%s.dat.nc" % (my_voi)
+
+    # Search directory for netCDF file:
+    my_files = find_files(my_dir, s_val)
+    num_files = len(my_files)
+
+    if num_files == 0:
+        raise IndexError(
+            "Failed to find CRU files for year %s and variable %s" % (
+                my_year, my_voi))
+    elif num_files == 1:
+        my_file = my_files[0]
+    else:
+        raise IndexError(
+            "Found multiple CRU files for year %s and variable %s" % (
+                my_year, my_voi))
+
+    return my_file
+
+
+def get_monthly_cru(my_dir, ct, v):
     """
     Name:     get_monthly_cru
-    Input:    - string, directory to CRU netcdf file (d)
+    Input:    - string, directory to CRU netcdf file (my_dir)
               - datetime.date, current month datetime object (ct)
               - string, variable of interest (v)
     Output:   numpy nd.array
-    Depends:  get_time_index
+    Depends:  - find_files
+              - get_cru_file
+              - get_time_index
     Features: Returns 360x720 monthly CRU TS dataset for a given month and
               variable of interest (e.g., cld, pre, tmp)
     """
-    # Search directory for netCDF file:
-    s_val = "*%s.dat.nc" % (v)
-    s_str = os.path.join(d, s_val)
-    my_files = glob.glob(s_str)
-
-    if len(my_files) == 1:
-        my_file = my_files[0]
+    try:
+        my_file = get_cru_file(my_dir, ct, v)
+    except:
+        raise
     else:
-        my_file = None
-
-    if my_file:
         # Open netCDF file for reading:
         f = netcdf.NetCDFFile(my_file, "r")
 
         # Save data for variables of interest:
         # NOTE: for CRU TS 3.21:
-        #       variables: 'lat', 'lon', 'time', v
-        #       where v is 'tmp', 'pre', 'cld'
+        #       variables: 'lat', 'lon', 'time', voi
+        #       where voi is 'tmp', 'pre', 'cld', etc.
         # LAT:  -89.75 -- 89.75
         # LON:  -179.75 -- 179.75
         # TIME:
@@ -198,111 +236,157 @@ def get_time_index(bt, ct, aot):
     return idx
 
 
-def process_cru(v, cru_dir, my_dir):
+def process_cru(my_voi, my_dir):
     """
     Name:     process_cru
-    Input:    - string, variable name, e.g., tmp, pre, cld (v)
-              - string, directory name for CRU TS data file (cru_dir)
-              - string, directory for output files (my_dir)
+    Input:    - str, variable name, e.g., tmp, pre, cld (my_voi)
+              - str, directory name for CRU TS data file (my_dir)
     Output:   None.
     Features: Processes CRU TS netCDF file by month into variable list and data
               set table output files
     Depends:  - add_one_month
-              - get_monthly_cru
+              - get_station_latlon
               - writeout
     """
-    # Define the start and end dates you want to process (2002-2006):
-    start_date = datetime.date(2002, 1, 1)
-    end_date = datetime.date(2007, 1, 1)
+    # Define the start and end dates you want to process:
+    # NOTE: this is a hard-coded date range
+    start_date = datetime.date(1991, 1, 1)
+    end_date = datetime.date(2015, 1, 1)
 
     # Set flag for varlist:
-    varlist_flag = 1
+    varlist_flag = True
 
-    # Prepare var output file:
-    my_var_out = "CRU_Var-List_" + v + ".csv"
-    var_outfile = my_dir + my_var_out
-    var_headerline = (
-        "msvidx,stationid,varid,varname,varunit,vartype,varcore\n"
-        )
-    writeout(var_outfile, var_headerline)
+    # Get list of flux station 0.5-degree grid points:
+    station_list = get_station_latlon()
+
+    # Prepare var output file and output file header lines:
+    var_file = "CRU_Var-List_" + my_voi + ".csv"
+    var_headerline = "msvidx,stationid,varid,varname,varunit,vartype,varcore\n"
+    dat_headerline = "msvidx,stationid,datetime,data\n"
+
+    # Define and/or create the output directory (subdir of my_dir)
+    out_dir = os.path.join(my_dir, "out")
+    if not os.path.exists(out_dir):
+        try:
+            os.makedirs(out_dir)
+        except:
+            logging.warning(
+                "failed to create output directory; using input directory")
+            out_dir = my_dir
+        else:
+            logging.info("created output directory %s", out_dir)
+
+    var_path = os.path.join(out_dir, var_file)
+    writeout(var_path, var_headerline)
 
     # Process each month between start and end dates:
     cur_date = start_date
     while cur_date < end_date:
-        # # Open and read netcdf files in the file directory:
-        my_data = get_monthly_cru(cru_dir, cur_date, v)
-        (sh_lat, sh_lon) = my_data.shape
+        # Open and read netcdf files in the file directory:
+        try:
+            # Open netCDF file for reading:
+            cru_file = get_cru_file(my_dir, cur_date, my_voi)
+            f = netcdf.NetCDFFile(cru_file, "r")
+        except IndexError as e:
+            logging.error("Failed to find CRU TS file. %s", str(e))
+        except:
+            logging.error("Failed to read CRU TS file.")
+        else:
+            # Save the data shape:
+            sh_time, sh_lat, sh_lon = f.variables[my_voi].shape
 
-        # Prepare data set output file:
-        my_dat_out = "CRU_Data-Set_%s_%s.csv" % (v, cur_date)
-        dat_outfile = my_dir + my_dat_out
-        dat_headerline = "msvidx,stationid,datetime,data\n"
-        writeout(dat_outfile, dat_headerline)
+            # Find the time index for the current date:
+            b_time = datetime.date(1900, 1, 1)
+            f_time = f.variables['time'].data
+            ti = get_time_index(b_time, cur_date, f_time)
 
-        # Iterate through each lat:lon pair
-        # * row-major ordering from bottom left
-        #  x (longitude): 0...719
-        #  y (latitude): 0...359
-        for y in range(sh_lat):
-            for x in range(sh_lon):
-                # Calc station ID:
-                st_id = 720*y + x
-                station_parts = ('HDG', st_id)
+            # Prepare data set output file:
+            dat_file = "CRU_Data-Set_%s_%s.csv" % (my_voi, cur_date)
+            dat_path = os.path.join(out_dir, dat_file)
+            writeout(dat_path, dat_headerline)
 
-                if v == 'tmp':
-                    my_var = "Tc"
-                elif v == 'pre':
-                    my_var = "Pre"
-                elif v == 'cld':
-                    my_var = "Cld"
-                my_line = VAR(station_parts, my_var, 'grid')
+            # Iterate through each lat:lon pair
+            # * row-major ordering from bottom left
+            #  x (longitude): 0...719
+            #  y (latitude): 0...359
+            for y in range(sh_lat):
+                pxl_lat = f.variables['lat'].data[y]
+                for x in range(sh_lon):
+                    pxl_lon = f.variables['lon'].data[x]
 
-                if varlist_flag:
-                    # ~~~~~~~~~~~~~~ VAR-LIST ~~~~~~~~~~~~~~ #
-                    my_line.printLine(var_outfile)
-                    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+                    # Filter grids based on flux stations:
+                    if (pxl_lat, pxl_lon) in station_list:
+                        # Calc station ID:
+                        st_id = 720*y + x
+                        station_parts = ('HDG', st_id)
 
-                # ~~~~~~~~~~~~~~~~ DATA-SET ~~~~~~~~~~~~~~~~ #
-                # Read each each pixel
-                # * NOTE: missing values are ~ 1e7
-                pxl = my_data[y, x]
-                if pxl < 1.e6:
-                    # Append to existing file:
-                    OUT = open(dat_outfile, 'a')
+                        if my_voi == 'tmp':
+                            my_var = "Tc"
+                        elif my_voi == 'pre':
+                            my_var = "Pre"
+                        elif my_voi == 'cld':
+                            my_var = "Cld"
+                        my_line = VAR(station_parts, my_var, 'grid')
 
-                    # Create/write output line:
-                    outline = "%s,%s,%s,%0.3f\n" % (
-                        my_line.msvIDX,
-                        my_line.stationID,
-                        cur_date,
-                        pxl
-                        )
-                    OUT.write(outline)
-                    OUT.close()
-                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
-        # Turn off varlist flag after processing first month:
-        varlist_flag = 0
+                        if varlist_flag:
+                            # ~~~~~~~~~~~~~~ VAR-LIST ~~~~~~~~~~~~~~ #
+                            my_line.printLine(var_path)
+                            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
-        # Increment cur_date:
-        cur_date = add_one_month(cur_date)
+                        # ~~~~~~~~~~~~~~~~ DATA-SET ~~~~~~~~~~~~~~~~ #
+                        # Read each each pixel
+                        # NOTE: missing values are ~ 1e7
+                        pxl_voi = f.variables[my_voi].data[ti, y, x]
+                        if pxl_voi < 1.e6:
+                            # Append to existing file:
+                            OUT = open(dat_path, 'a')
+                            outline = "%s,%s,%s,%0.3f\n" % (
+                                my_line.msvIDX,
+                                my_line.stationID,
+                                cur_date,
+                                pxl_voi)
+                            OUT.write(outline)
+                            OUT.close()
+                        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+            # Turn off varlist flag after processing first month:
+            varlist_flag = False
+
+            # Increment cur_date:
+            cur_date = add_one_month(cur_date)
+
+            f_time = None
+            pxl_lat = None
+            pxl_lon = None
+            pxl_voi = None
+            f.close()
 
 
-def process_cru_elv(d):
+def process_cru_elv(my_dir):
     """
     Name:     process_cru_elv
-    Input:    string, input/output file directory (d)
+    Input:    string, input/output file directory (my_dir)
     Output:   None.
     Features: Processes CRU TS 3.22 data file associated with elevation into
               variable list and data set table output files
     Depends:  - VAR class
+              - find_files
+              - get_station_latlon
               - writeout
     """
-    my_dir = d
+    var_file = "CRU_Var-List_elv.csv"
+    var_path = os.path.join(my_dir, var_file)
+    var_headerline = "msvidx,stationid,varid,varname,varunit,vartype,varcore\n"
+    dat_file = "CRU_Data-Set_elv.csv"
+    dat_path = os.path.join(my_dir, dat_file)
+    dat_headerline = "msvidx,stationid,datetime,data\n"
+
+    # Get list of flux station 0.5-degree grid points:
+    station_list = get_station_latlon()
 
     try:
         # Search directory for CRU dat file:
-        s_str = os.path.join(my_dir, "*.dat")
-        my_file = glob.glob(s_str)[0]
+        my_files = find_files(my_dir, "*.dat")
+        my_file = my_files[0]
     except IndexError:
         logging.error("No CRU TS elevation data file found!")
     else:
@@ -312,100 +396,112 @@ def process_cru_elv(d):
         #      'lon' goes from -179.75 -- 179.75 (east to west)
         f = numpy.loadtxt(my_file)
         (sh_lat, sh_lon) = f.shape
+        latitude = [-89.75 + i*0.5 for i in range(sh_lat)]
+        longitude = [-179.75 + i*0.5 for i in range(sh_lon)]
 
         # Assign time stamp as CRU TS 3.00 date:
         time_stamp = datetime.date(2006, 6, 1)
 
-        # Prepare var output file:
-        my_var_out = "CRU_Var-List_elv.csv"
-        var_outfile = os.path.join(my_dir, my_var_out)
-        var_headerline = (
-            "msvidx,stationid,varid,varname,varunit,vartype,varcore\n"
-            )
-        writeout(var_outfile, var_headerline)
-
-        # Prepare data set output file:
-        my_dat_out = "CRU_Data-Set_elv.csv"
-        dat_outfile = os.path.join(my_dir, my_dat_out)
-        dat_headerline = "msvidx,stationid,datetime,data\n"
-        writeout(dat_outfile, dat_headerline)
+        # Prepare var and data output files:
+        writeout(var_path, var_headerline)
+        writeout(dat_path, dat_headerline)
 
         # Iterate through data:
         for y in range(sh_lat):
+            pxl_lat = latitude[y]
             for x in range(sh_lon):
-                # ~~~~~~~~~~~~~~ VAR-LIST ~~~~~~~~~~~~~~ #
-                st_id = 720*y + x
-                station_parts = ('HDG', st_id)
-                my_line = VAR(station_parts, 'Elv', 'grid')
-                my_line.printLine(var_outfile)
-                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+                pxl_lon = longitude[x]
 
-                elv = f[y, x]
-                # Set no-data value:
-                if elv > -500:
-                    # Append to existing file:
-                    OUT = open(dat_outfile, 'a')
-                    # Create/write output line:
-                    outline = "%s,%s,%s,%0.5f\n" % (
-                        my_line.msvIDX,
-                        my_line.stationID,
-                        time_stamp,
-                        elv
-                        )
-                    OUT.write(outline)
-                    OUT.close()
+                # Filter grids based on flux stations:
+                if (pxl_lat, pxl_lon) in station_list:
+                    # ~~~~~~~~~~~~~~ VAR-LIST ~~~~~~~~~~~~~~ #
+                    st_id = 720*y + x
+                    station_parts = ('HDG', st_id)
+                    my_line = VAR(station_parts, 'Elv', 'grid')
+                    my_line.printLine(var_path)
+                    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+
+                    elv = f[y, x]
+                    # Set no-data value:
+                    if elv > -500:
+                        # Append to existing file:
+                        OUT = open(dat_path, 'a')
+                        # Create/write output line:
+                        outline = "%s,%s,%s,%0.5f\n" % (
+                            my_line.msvIDX,
+                            my_line.stationID,
+                            time_stamp,
+                            elv)
+                        OUT.write(outline)
+                        OUT.close()
 
 
-def process_cru_vpd(cru_dir, my_dir):
+def process_cru_vpd(my_dir):
     """
     Name:     process_cru_vpd
-    Input:    - string, directory for CRU input files (cru_dir)
-              - string, output file directory (my_dir)
+    Input:    str, directory for CRU input files (my_dir)
     Output:   None.
-    Features: Processes CRU TS netCDF files (tmn, tmx, vap) to calculate
+    Features: Processes CRU TS netCDF files (tmp and vap) to calculate
               monthly VPD and save variable list and data set table output
               files
     Depends:  - add_one_month
               - calculate_vpd
               - writeout
     """
-    # Define the start and end dates you want to process (2002-2006):
-    start_date = datetime.date(2002, 1, 1)
-    end_date = datetime.date(2007, 1, 1)
+    # Define the start and end dates you want to process:
+    start_date = datetime.date(1991, 1, 1)
+    end_date = datetime.date(2015, 1, 1)
 
     # Set flag for varlist:
-    varlist_flag = 1
+    varlist_flag = True
+
+    # Get list of flux station 0.5-degree grid points:
+    station_list = get_station_latlon()
+
+    # Define var output file and headerlines:
+    var_file = "CRU_Var-List_vpd.csv"
+    var_headerline = "msvidx,stationid,varid,varname,varunit,vartype,varcore\n"
+    dat_headerline = "msvidx,stationid,datetime,data\n"
+
+    # Define and/or create the output directory (subdir of my_dir)
+    out_dir = os.path.join(my_dir, "out")
+    if not os.path.exists(out_dir):
+        try:
+            os.makedirs(out_dir)
+        except:
+            logging.warning(
+                "failed to create output directory; using input directory")
+            out_dir = my_dir
+        else:
+            logging.info("created output directory %s", out_dir)
 
     # Prepare var output file:
-    my_var_out = "CRU_Var-List_vpd.csv"
-    var_outfile = my_dir + my_var_out
-    var_headerline = (
-        "msvidx,stationid,varid,varname,varunit,vartype,varcore\n"
-        )
-    writeout(var_outfile, var_headerline)
+    var_path = os.path.join(out_dir, var_file)
+    writeout(var_path, var_headerline)
 
     # Process each month between start and end dates:
     cur_date = start_date
     while cur_date < end_date:
         # Open and read netcdf files in the file directory:
-        tmn = get_monthly_cru(cru_dir, cur_date, "tmn")
-        tmx = get_monthly_cru(cru_dir, cur_date, "tmx")
-        vap = get_monthly_cru(cru_dir, cur_date, "vap")
+        tmp = get_monthly_cru(my_dir, cur_date, "tmp")
+        vap = get_monthly_cru(my_dir, cur_date, "vap")
 
         # Calculate VPD & save shape:
-        vpd = calculate_vpd(tmn, tmx, vap)
+        vpd = calculate_vpd(vap, tmp)
         (sh_lat, sh_lon) = vpd.shape
 
         # Prepare data set output file:
-        my_dat_out = "CRU_Data-Set_vpd_%s.csv" % cur_date
-        dat_outfile = my_dir + my_dat_out
-        dat_headerline = "msvidx,stationid,datetime,data\n"
-        writeout(dat_outfile, dat_headerline)
+        dat_file = "CRU_Data-Set_vpd_%s.csv" % cur_date
+        dat_path = os.path.join(out_dir, dat_file)
+        writeout(dat_path, dat_headerline)
 
         # Iterate through each lat:lon pair
         # * row-major ordering from bottom left
         #  x (longitude): 0...719
         #  y (latitude): 0...359
+
+        # TODO: get lon and lat arrays for cru data
+        # TODO: filter based on station lon-lats
         for y in range(sh_lat):
             for x in range(sh_lon):
                 # Calc station ID:
@@ -416,7 +512,7 @@ def process_cru_vpd(cru_dir, my_dir):
 
                 if varlist_flag:
                     # ~~~~~~~~~~~~~~ VAR-LIST ~~~~~~~~~~~~~~ #
-                    my_line.printLine(var_outfile)
+                    my_line.printLine(var_path)
                     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
                 # ~~~~~~~~~~~~~~~~ DATA-SET ~~~~~~~~~~~~~~~~ #
@@ -425,7 +521,7 @@ def process_cru_vpd(cru_dir, my_dir):
                 pxl_vpd = vpd[y, x]
                 if pxl_vpd > -9999.0:
                     # Append to existing file:
-                    OUT = open(dat_outfile, 'a')
+                    OUT = open(dat_path, 'a')
 
                     # Create/write output line:
                     outline = "%s,%s,%s,%0.5f\n" % (
@@ -438,7 +534,7 @@ def process_cru_vpd(cru_dir, my_dir):
                     OUT.close()
                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
         # Turn off varlist flag after processing first month:
-        varlist_flag = 0
+        varlist_flag = False
 
         # Increment cur_date:
         cur_date = add_one_month(cur_date)

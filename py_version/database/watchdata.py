@@ -38,13 +38,14 @@
 # IMPORT MODULES
 ###############################################################################
 import datetime
-import glob
 import logging
 import os
 import re
 
 from scipy.io import netcdf
 
+from .utilities import find_files
+from .utilities import get_station_latlon
 from .utilities import writeout
 from .var import VAR
 
@@ -76,7 +77,7 @@ class WATCHDATA:
         """
         # Create a class logger
         self.logger = logging.getLogger("WATCHDATA")
-        self.logger.info("WATCHDATA class initialized")
+        self.logger.debug("WATCHDATA class initialized")
 
         # Create a variable class & save stationid and msvidx values:
         my_var = VAR(st_parts, val_parts[0], 'grid')
@@ -129,21 +130,40 @@ def process_watch(my_dir, voi):
     Depends:  writeout
     """
     # Search directory for WATCH netCDF files:
-    s_str = os.path.join(my_dir, "*.nc")
-    my_files = glob.glob(s_str)
+    my_files = find_files(my_dir, "*.nc")
+    num_files = len(my_files)
 
-    # Prepare var output file:
+    # Prepare var output file and output file header lines:
     var_file = "WFDEI_Var-List_test.csv"
-    var_path = os.path.join(my_dir, var_file)
     var_headerline = "msvidx,stationid,varid,varname,varunit,vartype,varcore\n"
-    writeout(var_path, var_headerline)
+    dat_headerline = "msvidx,stationid,datetime,data\n"
 
     # Flag for varlist:
     varlist_flag = True
 
-    if my_files:
+    # Get list of flux station 0.5-degree grid points:
+    station_list = get_station_latlon()
+
+    if num_files > 0:
+        # Define and/or create the output directory (subdir of my_dir)
+        out_dir = os.path.join(my_dir, "out")
+        if not os.path.exists(out_dir):
+            try:
+                os.makedirs(out_dir)
+            except:
+                logging.warning(
+                    "failed to create output directory; using input directory")
+                out_dir = my_dir
+            else:
+                logging.info("created output directory %s", out_dir)
+
+        var_path = os.path.join(out_dir, var_file)
+        writeout(var_path, var_headerline)
+
         # Read through each file:
-        for doc in my_files:
+        for i in range(num_files):
+            doc = my_files[i]
+            logging.info("Processing file (%d/%d)", i+1, num_files)
             if os.path.isfile(doc):
                 try:
                     # Try to open file for reading:
@@ -163,8 +183,7 @@ def process_watch(my_dir, voi):
                 else:
                     # Prepare data set output file:
                     dat_file = "WFDEI_Data-Set_%s.csv" % yr_mo
-                    dat_path = os.path.join(my_dir, dat_file)
-                    dat_headerline = "msvidx,stationid,datetime,data\n"
+                    dat_path = os.path.join(out_dir, dat_file)
                     writeout(dat_path, dat_headerline)
 
                     # Save the shape values of each variable:
@@ -179,37 +198,44 @@ def process_watch(my_dir, voi):
                         pxl_lat = f.variables['lat'].data[y]
 
                         for x in range(sh_lon):
-                            # Calc station ID:
-                            st_id = 720*y + x
-                            st_parts = ('HDG', st_id)
+                            # Save longitude:
+                            pxl_lon = f.variables['lon'].data[x]
 
-                            if varlist_flag:
-                                # ~~~~~~~~~~~~~~ VAR-LIST ~~~~~~~~~~~~~~ #
-                                my_line = VAR(st_parts, voi, 'grid')
-                                my_line.printLine(var_path)
-                                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+                            # Filter grids based on flux stations:
+                            if (pxl_lat, pxl_lon) in station_list:
+                                # Calc station ID:
+                                st_id = 720*y + x
+                                st_parts = ('HDG', st_id)
 
-                            # Iterate through each day
-                            for t in range(sh_day):
-                                # Get timestamp for this day:
-                                this_day = t+1
-                                time_stamp = datetime.date(
-                                    this_year, this_month, this_day)
+                                if varlist_flag:
+                                    # ~~~~~~~~~~~~~~ VAR-LIST ~~~~~~~~~~~~~~ #
+                                    my_line = VAR(st_parts, voi, 'grid')
+                                    my_line.printLine(var_path)
+                                    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
-                                # ~~~~~~~~~~~~~~~~ DATA-SET ~~~~~~~~~~~~~~~~ #
-                                # Read SWdown for each pixel
-                                # * NOTE 1: variable has five decimal places
-                                # * NOTE 2: missing values are equal to ~1e20
-                                # * NOTE 3: Antarctica is < -60 latitude
-                                pxl_swr = f.variables[voi].data[t, y, x]
-                                if pxl_swr < 1.0e6 and pxl_lat > -60:
-                                    # Process pixel
-                                    obs_parts = (voi, pxl_swr, time_stamp)
-                                    my_data = WATCHDATA(st_parts, obs_parts)
-                                    my_data.print_line(dat_path)
-                                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+                                # Iterate through each day
+                                for t in range(sh_day):
+                                    # Get timestamp for this day:
+                                    this_day = t+1
+                                    time_stamp = datetime.date(
+                                        this_year, this_month, this_day)
+
+                                    # ~~~~~~~~~~~~~~ DATA-SET ~~~~~~~~~~~~~~ #
+                                    # Read SWdown for each pixel
+                                    # * NOTE 1: variable has five decimals
+                                    # * NOTE 2: missing values ~1e20
+                                    # * NOTE 3: Antarctica is < -60 latitude
+                                    pxl_swr = f.variables[voi].data[t, y, x]
+                                    if pxl_swr < 1.0e6 and pxl_lat > -60:
+                                        # Process pixel
+                                        obs_parts = (voi, pxl_swr, time_stamp)
+                                        my_data = WATCHDATA(st_parts,
+                                                            obs_parts)
+                                        my_data.print_line(dat_path)
+                                    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
                     # Close the var list flag after processing first doc:
                     varlist_flag = False
                     pxl_lat = None
+                    pxl_lon = None
                     pxl_swr = None
                     f.close()

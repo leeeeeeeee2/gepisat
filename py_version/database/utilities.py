@@ -3,7 +3,7 @@
 # utilities.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-04-21
+# LAST UPDATED: 2017-05-05
 #
 # ~~~~~~~~
 # license:
@@ -72,6 +72,9 @@ def get_station_latlon():
     name of gridded stations required in the GePiSaT database. Currently,
     the flux station metadata file is hard-coded: SUBJECT TO CHANGE BASED ON
     THE USER!
+
+    TODO: make the FLUXNET metadata file a global variable that is easy for
+          users to set before processing
     """
     grid_points = []
 

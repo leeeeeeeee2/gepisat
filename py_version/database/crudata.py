@@ -3,7 +3,7 @@
 # crudata.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-05-01
+# LAST UPDATED: 2017-05-05
 #
 # ~~~~~~~~
 # license:
@@ -79,7 +79,11 @@ def calculate_vpd(vap, tm, tx=None):
                 deg C (tx)
                 * USE ONLY IF USING MIN DAILY AIR TEMP
     Output:   numpy nd.array, mean monthly vapor pressure deficit, kPa (vpd)
-    Features: Returns an array of mean monthly vapor pressure deficit
+    Features: Returns an array of mean monthly vapor pressure deficit based
+              on CRU TS mean monthly vapor pressure and air temperatures;
+              allows for either the max/min daily air temperatures or mean
+              daily air temperature. For mean daily air temperature,
+              leave 'tx' as NoneType.
     Ref:      Eq. 5.1, Abtew and Meleese (2013), Ch. 5 Vapor Pressure
               Calculation Methods, in Evaporation and Evapotranspiration:
               Measurements and Estimations, Springer, London.
@@ -93,7 +97,7 @@ def calculate_vpd(vap, tm, tx=None):
     """
     # Initialize array:
     # NOTE: maintains missing value
-    vpd = -9999.0*(numpy.zeros(shape=(360, 720)) + 1)
+    vpd = -9999.0*numpy.ones(shape=(360, 720))
 
     # Iterate through each data point:
     lat, lon = tm.shape
@@ -101,12 +105,12 @@ def calculate_vpd(vap, tm, tx=None):
     for y in range(lat):
         for x in range(lon):
             ea = vap[y, x]
-            if tm is not None:
+            if tx is not None:
                 tmin = tm[y, x]
                 tmax = tx[y, x]
                 tc = 0.5*(tmin + tmax)
             else:
-                tc = tm
+                tc = tm[y, x]
 
             if tc < 1.e6 and ea < 1.e6:
                 vpd[y, x] = (
@@ -155,12 +159,78 @@ def get_cru_file(my_dir, my_date, my_voi):
     return my_file
 
 
-def get_monthly_cru(my_dir, ct, v):
+def get_cru_lat(my_dir, my_date, my_voi):
+    """
+    Name:     get_cru_lat
+    Inputs:   - str, directory to CRU TS netcdf file (my_dir)
+              - datetime.date, current month datetime object (my_date)
+              - str, variable of interest, for CRU file only (my_voi)
+    Outputs:  numpy.ndarray, latitudes (degrees)
+    Features: Returns an array of latitudes from a CRU TS netCDF file
+    """
+    try:
+        my_file = get_cru_file(my_dir, my_date, my_voi)
+    except:
+        raise
+    else:
+        # Open netCDF file for reading:
+        f = netcdf.NetCDFFile(my_file, "r")
+
+        # Save data for variables of interest:
+        # NOTE: for CRU TS 4.00:
+        #       variables: 'lat', 'lon', 'time', voi, 'stn'
+        #       where
+        #           lat (latitude): -89.75 -- 89.75
+        #           > units: degrees_north
+        #           lon (longitude): -179.75 -- 179.75
+        #           > units: degrees_east
+
+        # Create a copy of the latitude data:
+        f_data = f.variables['lat'].data.copy()
+        f.close()
+
+        return f_data
+
+
+def get_cru_lon(my_dir, my_date, my_voi):
+    """
+    Name:     get_cru_lon
+    Inputs:   - str, directory to CRU TS netcdf file (my_dir)
+              - datetime.date, current month datetime object (my_date)
+              - str, variable of interest, for CRU file only (my_voi)
+    Outputs:  numpy.ndarray, longitudes (degrees)
+    Features: Returns an array of longitudes from a CRU TS netCDF file
+    """
+    try:
+        my_file = get_cru_file(my_dir, my_date, my_voi)
+    except:
+        raise
+    else:
+        # Open netCDF file for reading:
+        f = netcdf.NetCDFFile(my_file, "r")
+
+        # Save data for variables of interest:
+        # NOTE: for CRU TS 4.00:
+        #       variables: 'lat', 'lon', 'time', voi, 'stn'
+        #       where
+        #           lat (latitude): -89.75 -- 89.75
+        #           > units: degrees_north
+        #           lon (longitude): -179.75 -- 179.75
+        #           > units: degrees_east
+
+        # Create a copy of the latitude data:
+        f_data = f.variables['lon'].data.copy()
+        f.close()
+
+        return f_data
+
+
+def get_monthly_cru(my_dir, my_date, my_voi):
     """
     Name:     get_monthly_cru
     Input:    - string, directory to CRU netcdf file (my_dir)
-              - datetime.date, current month datetime object (ct)
-              - string, variable of interest (v)
+              - datetime.date, current month datetime object (my_date)
+              - string, variable of interest (my_voi)
     Output:   numpy nd.array
     Depends:  - find_files
               - get_cru_file
@@ -169,7 +239,7 @@ def get_monthly_cru(my_dir, ct, v):
               variable of interest (e.g., cld, pre, tmp)
     """
     try:
-        my_file = get_cru_file(my_dir, ct, v)
+        my_file = get_cru_file(my_dir, my_date, my_voi)
     except:
         raise
     else:
@@ -177,20 +247,21 @@ def get_monthly_cru(my_dir, ct, v):
         f = netcdf.NetCDFFile(my_file, "r")
 
         # Save data for variables of interest:
-        # NOTE: for CRU TS 3.21:
-        #       variables: 'lat', 'lon', 'time', voi
-        #       where voi is 'tmp', 'pre', 'cld', etc.
-        # LAT:  -89.75 -- 89.75
-        # LON:  -179.75 -- 179.75
-        # TIME:
-        #       units: days since 1900-1-1
-        #       shape: (1344,)
-        #       values: mid-day of each month (e.g., 15th or 16th)
-        # DATA:
-        #       'cld' units = %
-        #       'pre' units = mm
-        #       'tmp' units = deg. C
-        #       Missing value = 9.96e+36
+        # NOTE: for CRU TS 4.00:
+        #       variables: 'lat', 'lon', 'time', voi, 'stn'
+        #       where
+        #           lat (latitude): -89.75 -- 89.75
+        #           lon (longitude): -179.75 -- 179.75
+        #           time:
+        #           > units: days since 1900-1-1
+        #           > shape: (1344,)
+        #           > values: mid-day of each month (e.g., 15th or 16th)
+        #           voi: 'tmp', 'pre', 'cld', etc.
+        #           > 'cld' units = %
+        #           > 'pre' units = mm
+        #           > 'tmp' units = deg. C
+        #           > Missing value = 9.96e+36
+
         # Save the base time stamp:
         bt = datetime.date(1900, 1, 1)
 
@@ -198,10 +269,10 @@ def get_monthly_cru(my_dir, ct, v):
         f_time = f.variables['time'].data
 
         # Find the time index for the current date:
-        ti = get_time_index(bt, ct, f_time)
+        ti = get_time_index(bt, my_date, f_time)
 
         # Get the spatial data for current time:
-        f_data = f.variables[v].data[ti].copy()
+        f_data = f.variables[my_voi].data[ti].copy()
 
         f_time = None
         f.close()
@@ -374,11 +445,24 @@ def process_cru_elv(my_dir):
               - writeout
     """
     var_file = "CRU_Var-List_elv.csv"
-    var_path = os.path.join(my_dir, var_file)
-    var_headerline = "msvidx,stationid,varid,varname,varunit,vartype,varcore\n"
     dat_file = "CRU_Data-Set_elv.csv"
-    dat_path = os.path.join(my_dir, dat_file)
+    var_headerline = "msvidx,stationid,varid,varname,varunit,vartype,varcore\n"
     dat_headerline = "msvidx,stationid,datetime,data\n"
+
+    # Define and/or create the output directory (subdir of my_dir)
+    out_dir = os.path.join(my_dir, "out")
+    if not os.path.exists(out_dir):
+        try:
+            os.makedirs(out_dir)
+        except:
+            logging.warning(
+                "failed to create output directory; using input directory")
+            out_dir = my_dir
+        else:
+            logging.info("created output directory %s", out_dir)
+
+    var_path = os.path.join(out_dir, var_file)
+    dat_path = os.path.join(out_dir, dat_file)
 
     # Get list of flux station 0.5-degree grid points:
     station_list = get_station_latlon()
@@ -455,6 +539,10 @@ def process_cru_vpd(my_dir):
     # Set flag for varlist:
     varlist_flag = True
 
+    # Get lon/lat arrays (throws exception if file not found):
+    latitude = get_cru_lat(my_dir, start_date, 'tmp')
+    longitude = get_cru_lon(my_dir, start_date, 'tmp')
+
     # Get list of flux station 0.5-degree grid points:
     station_list = get_station_latlon()
 
@@ -499,40 +587,42 @@ def process_cru_vpd(my_dir):
         # * row-major ordering from bottom left
         #  x (longitude): 0...719
         #  y (latitude): 0...359
-
-        # TODO: get lon and lat arrays for cru data
-        # TODO: filter based on station lon-lats
         for y in range(sh_lat):
+            pxl_lat = latitude[y]
             for x in range(sh_lon):
-                # Calc station ID:
-                st_id = 720*y + x
-                station_parts = ('HDG', st_id)
+                pxl_lon = longitude[x]
 
-                my_line = VAR(station_parts, 'VPD', 'grid')
+                # Filter grids based on flux stations:
+                if (pxl_lat, pxl_lon) in station_list:
+                    # Calc station ID:
+                    st_id = 720*y + x
+                    station_parts = ('HDG', st_id)
 
-                if varlist_flag:
-                    # ~~~~~~~~~~~~~~ VAR-LIST ~~~~~~~~~~~~~~ #
-                    my_line.printLine(var_path)
-                    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+                    my_line = VAR(station_parts, 'VPD', 'grid')
 
-                # ~~~~~~~~~~~~~~~~ DATA-SET ~~~~~~~~~~~~~~~~ #
-                # Read VPD for each pixel
-                # * NOTE: missing VPD are equal to -9999
-                pxl_vpd = vpd[y, x]
-                if pxl_vpd > -9999.0:
-                    # Append to existing file:
-                    OUT = open(dat_path, 'a')
+                    if varlist_flag:
+                        # ~~~~~~~~~~~~~~ VAR-LIST ~~~~~~~~~~~~~~ #
+                        my_line.printLine(var_path)
+                        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
-                    # Create/write output line:
-                    outline = "%s,%s,%s,%0.5f\n" % (
-                        my_line.msvIDX,
-                        my_line.stationID,
-                        cur_date,
-                        pxl_vpd
-                        )
-                    OUT.write(outline)
-                    OUT.close()
-                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+                    # ~~~~~~~~~~~~~~~~ DATA-SET ~~~~~~~~~~~~~~~~ #
+                    # Read VPD for each pixel
+                    # NOTE: missing VPD are equal to -9999
+                    pxl_vpd = vpd[y, x]
+                    if pxl_vpd > -9999.0:
+                        # Append to existing file:
+                        OUT = open(dat_path, 'a')
+
+                        # Create/write output line:
+                        outline = "%s,%s,%s,%0.5f\n" % (
+                            my_line.msvIDX,
+                            my_line.stationID,
+                            cur_date,
+                            pxl_vpd
+                            )
+                        OUT.write(outline)
+                        OUT.close()
+                    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
         # Turn off varlist flag after processing first month:
         varlist_flag = False
 

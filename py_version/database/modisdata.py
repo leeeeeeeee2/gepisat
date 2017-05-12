@@ -3,7 +3,7 @@
 # modisdata.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-13
+# LAST UPDATED: 2017-05-12
 #
 # ~~~~~~~~
 # license:
@@ -38,14 +38,15 @@
 # IMPORT MODULES
 ###############################################################################
 import datetime
-import glob
 import logging
 import os
 import re
 
 import numpy
-from pyhdf import SD
+from pyhdf import SD   # also provided by python-hdf4 (e.g., Linux Mint)
 
+from .utilities import find_files
+from .utilities import get_station_latlon
 from .utilities import writeout
 from .var import VAR
 
@@ -86,7 +87,7 @@ class MODISDATA:
         """
         # Create a class logger
         self.logger = logging.getLogger("MODISDATA")
-        self.logger.info("MODISDATA class initialized")
+        self.logger.debug("MODISDATA class initialized")
 
         # Set datetime:
         self.data_time = t
@@ -277,22 +278,22 @@ def get_modis_ts(f):
     Features: Returns a timestamp based on the MODIS filenaming scheme
               'MYD13C2.AYEARDOY...'
     """
-    f_name = os.path.basename(f)
     try:
-        f_date = re.search('A(\d{7})\.', f_name).group(1)
+        f_name = os.path.basename(f)
+        f_date = re.search('\.A(\d{7})\.', f_name).group(1)
     except AttributeError:
         logging.error("Search failed for date in file %s", f_name)
+        f_timestamp = None
     else:
         f_year = int(f_date[0:4])
         f_doy = int(f_date[4:7]) - 1
         f_timestamp = (
-            datetime.date(f_year, 1, 1) +
-            datetime.timedelta(days=f_doy)
-            )
+            datetime.date(f_year, 1, 1) + datetime.timedelta(days=f_doy))
+    finally:
         return f_timestamp
 
 
-def process_modis(d, voi):
+def process_modis(my_dir, voi):
     """
     Name:     process_modis
     Input:    - string, input/output file directory (d)
@@ -300,25 +301,52 @@ def process_modis(d, voi):
     Output:   None.
     Features: Processes 0.05 degree MODIS EVI from HDF files into 0.5 degree
               FAPAR and saves to variable list and data set table output files
-    Depends:  writeout
+    Depends:  - find_files
+              - get_modis_ts
+              - writeout
+    Ref:      pyhdf: http://pysclint.sourceforge.net/pyhdf/
+              python-hdf4: http://fhs.github.io/python-hdf4/
+              * provides pyhdf package
+              * requires libhdf4 and libhdf4-dev (not to be mistaken with
+                libhdf4-alt used by QGIS)
+
+    TODO: follow watchdata.py example to update this method
     """
     # Search directory for MODIS HDF files:
-    my_dir = d
-    my_ext = "*.hdf"
-    my_files = glob.glob(my_dir + my_ext)
+    my_files = find_files(my_dir, "*.hdf")
+    num_files = len(my_files)
 
     # Prepare var output file:
-    my_var_out = "MODIS_Var-List_fapar.csv"
-    var_outfile = my_dir + my_var_out
+    var_file = "MODIS_Var-List_fapar.csv"
     var_headerline = "msvidx,stationid,varid,varname,varunit,vartype,varcore\n"
-    writeout(var_outfile, var_headerline)
+    dat_headerline = "msvidx,stationid,datetime,data\n"
 
     # Flag for varlist:
-    varlist_flag = 1
+    varlist_flag = True
 
-    if my_files:
+    # Get list of flux station 0.5-degree grid points:
+    station_list = get_station_latlon()
+
+    if num_files > 0:
+        # Define and/or create the output directory (subdir of my_dir)
+        out_dir = os.path.join(my_dir, "out")
+        if not os.path.exists(out_dir):
+            try:
+                os.makedirs(out_dir)
+            except:
+                logging.warning(
+                    "failed to create output directory; using input directory")
+                out_dir = my_dir
+            else:
+                logging.info("created output directory %s", out_dir)
+
+        var_path = os.path.join(out_dir, var_file)
+        writeout(var_path, var_headerline)
+
         # Read through each file:
-        for doc in my_files:
+        for i in range(num_files):
+            doc = my_files[i]
+            logging.info("Processing file (%d/%d)", i+1, num_files)
             try:
                 # Try to open file for reading:
                 my_hdf = SD.SD(doc)
@@ -343,28 +371,33 @@ def process_modis(d, voi):
                 # Get timestamp from filename:
                 my_ts = get_modis_ts(doc)
 
-                # Prepare data set output file:
-                my_dat_out = "MODIS_Data-Set_%s.csv" % my_ts
-                dat_outfile = my_dir + my_dat_out
-                dat_headerline = "msvidx,stationid,datetime,data\n"
-                writeout(dat_outfile, dat_headerline)
+                if my_ts is not None:
+                    # Prepare data set output file:
+                    dat_file = "MODIS_Data-Set_%s.csv" % my_ts
+                    dat_path = os.path.join(out_dir, dat_file)
+                    writeout(dat_path, dat_headerline)
 
-                # Iterate through each 0.5 deg lat:lon pair
-                # x (longitude): 0...719
-                # y (latitude): 0...359
-                for y in range(360):
-                    for x in range(720):
-                        my_modis = MODISDATA(x, y, my_ts, data)
-                        station_parts = ('HDG', my_modis.hdg_id)
+                    # Iterate through each 0.5 deg lat:lon pair
+                    # x (longitude): 0...719
+                    # y (latitude): 0...359
+                    for y in range(360):
+                        for x in range(720):
+                            my_modis = MODISDATA(x, y, my_ts, data)
+                            pxl_lat = my_modis.hdg_lat
+                            pxl_lon = my_modis.hdg_lon
 
-                        if varlist_flag:
-                            # ~~~~~~~~~~~~~~~~ VAR-LIST ~~~~~~~~~~~~~~~~ #
-                            my_line = VAR(station_parts, 'FAPAR', 'grid')
-                            my_line.printLine(var_outfile)
-                            # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+                            # Filter grids based on flux stations:
+                            if (pxl_lat, pxl_lon) in station_list:
+                                st_parts = ('HDG', my_modis.hdg_id)
 
-                        # ~~~~~~~~~~~~~~~~ DATA-SET ~~~~~~~~~~~~~~~~ #
-                        my_modis.print_line(dat_outfile)
-                        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+                                if varlist_flag:
+                                    # ~~~~~~~~~~~~~~~~ VAR-LIST ~~~~~~~~~~~~ #
+                                    my_line = VAR(st_parts, 'FAPAR', 'grid')
+                                    my_line.printLine(var_path)
+                                    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
+
+                                # ~~~~~~~~~~~~~~~~ DATA-SET ~~~~~~~~~~~~~~~~ #
+                                my_modis.print_line(dat_path)
+                                # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
             # Close varflag after processing first doc:
             varlist_flag = 0

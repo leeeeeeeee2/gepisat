@@ -47,6 +47,46 @@ import numpy
 ###############################################################################
 # FUNCTIONS
 ###############################################################################
+def filter_grid_metadata(meta_path):
+    """
+    Filters the half-degree grid (HDG) meta data file for flux stations only
+    """
+    try:
+        f = open(meta_path, 'r')
+        header_line = f.readline()
+        data = f.readlines()
+    except:
+        logging.error("Failed to read meta data from file %s", meta_path)
+    else:
+        f.close()
+
+        # Prepare the output file:
+        mf_base, mf_ext = os.path.splitext(meta_path)
+        out_path = "%s_flx%s" % (mf_base, mf_ext)
+
+        OUT = open(out_path, 'w')
+        OUT.write(header_line)
+        OUT.close()
+
+        # Get list of flux station 0.5-degree grid points:
+        station_list = get_station_latlon()
+
+        # Find the indexes for lon/lat
+        header_parts = header_line.rstrip("\n").split(",")
+        lat_idx = header_parts.index("lat")
+        lon_idx = header_parts.index("lon")
+
+        # Read through all data and filter based on lon/lat
+        for my_line in data:
+            my_parts = my_line.rstrip("\n").split(",")
+            pxl_lat = float(my_parts[lat_idx])
+            pxl_lon = float(my_parts[lon_idx])
+            if (pxl_lat, pxl_lon) in station_list:
+                OUT = open(out_path, 'a')
+                OUT.write(my_line)
+                OUT.close()
+
+
 def find_files(my_dir, my_pattern):
     """
     Name:     find_files

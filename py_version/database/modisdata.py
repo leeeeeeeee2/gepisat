@@ -59,6 +59,7 @@ class MODISDATA:
     Name:     MODISDATA
     Features: This class processes MODIS EVI to FAPAR for the data_set database
               table
+    History:  - moved grid processing to separate function, run [17.05.12]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Variable Definitions
@@ -77,13 +78,18 @@ class MODISDATA:
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
     # ////////////////////////////////////////////////////////////////////////
-    def __init__(self, x, y, t, d):
+    def __init__(self, x, y, t):
         """
         Name:     MODISDATA.__init__
         Input:    - int, latitude index, e.g., 0--359 (x)
                   - int, longitude index, e.g., 0--719 (y)
                   - datetime.date, timestamp of observation (t)
-                  - numpy nd.array, MODIS data, e.g., 3600x7200 (d)
+        Features: Calculates the 0.5 degree coordinate for a given lon/lat;
+                  saves the 0.5-degree lon/lat, time stamp, station ID,
+                  and msvIDX
+        Depends:  - get_lon_lat
+                  - get_stationid
+                  - VAR
         """
         # Create a class logger
         self.logger = logging.getLogger("MODISDATA")
@@ -103,19 +109,6 @@ class MODISDATA:
         my_var = VAR(station_parts, 'FAPAR', 'grid')
         self.station_id = my_var.stationID
         self.msv_idx = my_var.msvIDX
-
-        # Get 0.05 res data for this 0.5 pixel:
-        my_points = self.get_foh_points(self.hdg_lon, self.hdg_lat, d)
-
-        # Check that there's data in the array:
-        if len(my_points[~numpy.isnan(my_points)]) > 0:
-            # Calculate the average EVI for 0.5 pixel:
-            self.hdg_ave = my_points[~numpy.isnan(my_points)].mean()
-            self.data_val = self.hdg_ave / 10000.0
-        else:
-            # Use the pre-defined error value (i.e., -3000)
-            self.hdg_ave = -3000
-            self.data_val = -9999.0
 
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Function Definitions
@@ -266,6 +259,27 @@ class MODISDATA:
         else:
             OUT.close()
 
+    def run(self, mdata):
+        """
+        Name:     MODISDATA.run
+        Inputs:   numpy nd.array, MODIS data, e.g., 3600x7200 (mdata)
+        Outputs:  None.
+        Features: Performs the averaging of 0.05 pixels to a single 0.5 pixel
+        Depends:  get_foh_points
+        """
+        # Get 0.05 res data for this 0.5 pixel:
+        my_points = self.get_foh_points(self.hdg_lon, self.hdg_lat, mdata)
+
+        # Check that there's data in the array:
+        if len(my_points[~numpy.isnan(my_points)]) > 0:
+            # Calculate the average EVI for 0.5 pixel:
+            self.hdg_ave = my_points[~numpy.isnan(my_points)].mean()
+            self.data_val = self.hdg_ave / 10000.0
+        else:
+            # Use the pre-defined error value (i.e., -3000)
+            self.hdg_ave = -3000
+            self.data_val = -9999.0
+
 
 ###############################################################################
 # FUNCTIONS
@@ -309,8 +323,6 @@ def process_modis(my_dir, voi):
               * provides pyhdf package
               * requires libhdf4 and libhdf4-dev (not to be mistaken with
                 libhdf4-alt used by QGIS)
-
-    TODO: follow watchdata.py example to update this method
     """
     # Search directory for MODIS HDF files:
     my_files = find_files(my_dir, "*.hdf")
@@ -382,7 +394,7 @@ def process_modis(my_dir, voi):
                     # y (latitude): 0...359
                     for y in range(360):
                         for x in range(720):
-                            my_modis = MODISDATA(x, y, my_ts, data)
+                            my_modis = MODISDATA(x, y, my_ts)
                             pxl_lat = my_modis.hdg_lat
                             pxl_lon = my_modis.hdg_lon
 
@@ -397,6 +409,7 @@ def process_modis(my_dir, voi):
                                     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
                                 # ~~~~~~~~~~~~~~~~ DATA-SET ~~~~~~~~~~~~~~~~ #
+                                my_modis.run(data)
                                 my_modis.print_line(dat_path)
                                 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
             # Close varflag after processing first doc:

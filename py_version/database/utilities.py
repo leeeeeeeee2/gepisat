@@ -3,7 +3,7 @@
 # utilities.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-05-05
+# LAST UPDATED: 2017-05-12
 #
 # ~~~~~~~~
 # license:

@@ -131,6 +131,7 @@
 # 64. Updated process cru elevation w/ os.path.joins [17.01.09]
 # 65. Added logging statements [17.01.13]
 # 66. Separated classes and functions into their own modules [17.01.13]
+# 67. Separated fluxdata into fluxdata12 and fluxdata15 [17.04.21]
 #
 ###############################################################################
 # IMPORT MODULES
@@ -138,14 +139,16 @@
 import logging
 import os
 
-# from database.crudata import process_cru
+from database.crudata import process_cru
 from database.crudata import process_cru_elv
-# from database.crudata import process_cru_vpd
-from database.fluxdata import process_flux_2015
-# from database.glasdata import process_glas
-# from database.modisdata import process_modis
-# from database.splashdata import process_alpha
+from database.crudata import process_cru_vpd
+from database.fluxdata15 import process_flux_2015
+from database.modisdata import process_modis
+from database.noaadata import process_co2
+from database.splashdata import process_alpha
 from database.watchdata import process_watch
+# from database.fluxdata12 import process_flux_2012
+# from database.glasdata import process_glas
 
 
 ###############################################################################
@@ -158,37 +161,64 @@ if __name__ == '__main__':
 
     # Instantiating logging handler and record format:
     root_handler = logging.StreamHandler()
-    rec_format = "%(asctime)s:%(levelname)s:%(name)s:%(funcName)s:%(message)s"
-    formatter = logging.Formatter(rec_format, datefmt="%Y-%m-%d %H:%M:%S")
+    rec_format = "%(asctime)s:%(levelname)s:%(funcName)s:%(message)s"
+    formatter = logging.Formatter(rec_format, datefmt="%H%M%S")
     root_handler.setFormatter(formatter)
 
     # Send logging handler to root logger:
     root_logger.addHandler(root_handler)
 
     # Define data directories:
-    home_dir = os.path.expanduser("~")
-    data_dir = os.path.join(home_dir, "Data")
-    flux_dir = os.path.join(data_dir, "flux_data")
-    watch_dir = os.path.join(data_dir, "watch")
+    data_dir = "/usr/local/share/data"
+    flux_dir = os.path.join(data_dir, "fluxnet", "2015", "half_hourly")
+    watch_dir = os.path.join(data_dir, "watch", "swdown_daily")  # 1979--2014
     modis_dir = os.path.join(data_dir, "modis")
     cru_dir = os.path.join(data_dir, "cru")
-    glas_dir = os.path.join(data_dir, "glas")
     alpha_dir = os.path.join(data_dir, 'splash')
-    out_dir = os.path.join(data_dir, "out")
+    noaa_dir = os.path.join(data_dir, 'noaa')
+
+    # Parameters to include in the GePiSaT database:
+    # ----
+    # flux
+    # ----
+    # PPFD (or SW_IN)
+    # NEE
+    # alpha
+    #
+    # -----
+    # grid
+    # -----
+    # fAPAR - MODIS (EVI)
+    # Tair - CRU TS (tmp)
+    # VPD - CRU TS-based (tmp, vap)
+    # CO2 - NOAA
+
+    if True:
+        # Process MODIS data (used for EVI):
+        modis_aqua_dir = os.path.join(modis_dir, "aqua_evi")
+        modis_voi = "CMG 0.05 Deg Monthly EVI"
+        process_modis(modis_aqua_dir, modis_voi)
 
     if False:
         # Process flux data:
         process_flux_2015(flux_dir)
 
-        # Process WATCH data:
+        # Process monthly Priestley-Taylor coefficient from the output files
+        # of the new bioindex module in SPLASH
+        process_alpha(alpha_dir)
+
+        # Process WATCH data (used for gap-filling PPFD time series):
         watch_voi = 'SWdown'
         process_watch(watch_dir, watch_voi)
 
-        # Process MODIS data:
-        # modis_voi = "CMG 0.05 Deg Monthly EVI"
-        # process_modis(modis_dir, modis_voi)
+        # Process CRU TS datasets:
+        cru_elv_dir = os.path.join(cru_dir, "ts_322")
+        process_cru_elv(cru_elv_dir)
 
-        # Process CRU TS data:
-        process_cru_elv(cru_dir)
-        # process_cru_vpd(cru_dir, out_dir)
-        # process_cru("cld", cru_dir, out_dir)
+        # Process CRU TS data (used for Tair and VPD):
+        cru_ts_dir = os.path.join(cru_dir, "ts_400")
+        process_cru_vpd(cru_ts_dir)
+        process_cru("tmp", cru_ts_dir)
+
+        # Process mean annual CO2
+        process_co2(noaa_dir)

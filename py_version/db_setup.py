@@ -3,7 +3,7 @@
 # db_setup.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-22
+# LAST UPDATED: 2017-05-13
 #
 # ~~~~~~~~
 # license:
@@ -97,11 +97,11 @@
 ###############################################################################
 # IMPORT MODULES:
 ###############################################################################
-import glob
 import logging
 import os.path
 import sys
 
+from database.utilities import find_files
 from gepisat.db_util import connectSQL
 
 
@@ -672,25 +672,21 @@ def get_var_files(base_path):
     Output:   list, file names (files_list)
     Features: Returns a list of var_list file names (with path);
               NOTE: you need to update these paths!
+    Depends:  find_files
     """
     path_list = [
-        os.path.join(base_path, "*Var-List*"),
-        # os.path.join(base_path, "cru", "cld", "*Var-List*"),
-        # os.path.join(base_path, "cru", "elv", "*Var-List*"),
-        # os.path.join(base_path, "cru", "pre", "*Var-List*"),
-        # os.path.join(base_path, "cru", "tc", "*Var-List*"),
-        # os.path.join(base_path, "cru", "vpd", "*Var-List*"),
-        # os.path.join(base_path, "fluxtowers", "station_data", "*Var-List*"),
-        # os.path.join(base_path, "modis", "evi", "*Var-List*"),
-        # os.path.join(base_path, "noaa", "co2", "*Var-List*"),
-        # os.path.join(base_path, "watch", "swdown", "*Var-List*"),
-        # os.path.join(base_path, "splash", "alpha", "*Var-List*"),
+        base_path,
+        os.path.join(base_path, "cru", "flux_stations"),
+        os.path.join(base_path, "flux"),
+        os.path.join(base_path, "modis", "flux_stations"),
+        os.path.join(base_path, "noaa", "flux_stations"),
+        os.path.join(base_path, "watch", "flux_stations"),
     ]
 
     files_list = []
     for path in path_list:
         logging.debug("Checking for files in %s", os.path.dirname(path))
-        tmp_list = glob.glob(path)
+        tmp_list = find_files(path, "*Var-List*csv")
         files_list += tmp_list
 
     return files_list
@@ -704,26 +700,22 @@ def get_data_files(base_path):
     Input:    str, base path (base_path)
     Output:   list, file names (files_list)
     Features: Returns a list of data_set file names (with paths)
+    Depends:  find_files
     Note:     Hard-coded base_path
     """
     path_list = [
-        os.path.join(base_path, "*Data-Set*"),
-        # os.path.join(base_path, "cru", "cld", "*Data-Set*"),
-        # os.path.join(base_path, "cru", "elv", "*Data-Set*"),
-        # os.path.join(base_path, "cru", "pre", "*Data-Set*"),
-        # os.path.join(base_path, "cru", "tc", "*Data-Set*"),
-        # os.path.join(base_path, "cru", "vpd", "*Data-Set*"),
-        # os.path.join(base_path, "fluxtowers", "station_data", "*Data-Set*"),
-        # os.path.join(base_path, "noaa", "co2", "*Data-Set*"),
-        # os.path.join(base_path, "modis", "evi", "*Data-Set*"),
-        # os.path.join(base_path, "watch", "swdown", "*Data-Set*"),
-        # os.path.join(base_path, "splash", "alpha", "*Data-Set*"),
+        base_path,
+        os.path.join(base_path, "cru", "flux_stations"),
+        os.path.join(base_path, "flux"),
+        os.path.join(base_path, "modis", "flux_stations"),
+        os.path.join(base_path, "noaa", "flux_stations"),
+        os.path.join(base_path, "watch", "flux_stations"),
     ]
 
     files_list = []
     for path in path_list:
         logging.debug("Checking for files in %s", os.path.dirname(path))
-        tmp_list = glob.glob(path)
+        tmp_list = find_files(path, "*Data-Set*csv")
         files_list += tmp_list
 
     return files_list
@@ -737,7 +729,7 @@ if __name__ == "__main__":
     root_logger.setLevel(logging.INFO)
     root_handler = logging.StreamHandler()
     rec_format = "%(asctime)s:%(levelname)s:%(message)s"
-    formatter = logging.Formatter(rec_format, datefmt='%Y-%m-%d %H:%M:%S')
+    formatter = logging.Formatter(rec_format, datefmt='%H%M%S')
     root_handler.setFormatter(formatter)
     root_logger.addHandler(root_handler)
 
@@ -745,7 +737,7 @@ if __name__ == "__main__":
     # getversion()
 
     # Reset or clean database:
-    # reset_db()
+    reset_db()
     # clean_db()
     # clean_table("data_set")
 
@@ -761,38 +753,49 @@ if __name__ == "__main__":
     # Define directories:
     home_dir = os.path.expanduser("~")
     data_dir = os.path.join(home_dir, "Data", "psql")
-    md_dir = os.path.join(data_dir, "flux")
-    vl_dir = os.path.join(data_dir, "flux")
-    ds_dir = os.path.join(data_dir, "flux")
+
+    # for testing file searches
+    run_md = True
+    run_var = True
+    run_ds = True
+    to_test = False
 
     # Create and populate met_data table:
-    if False:
+    if run_md:
         root_logger.info("Processing 'met_data' table...")
-        md_str = os.path.join(md_dir, "*Met-Data*")
-        md_files = glob.glob(md_str)
-        for x in sorted(md_files):
-            popmetdata(x)
-            root_logger.info(
-                "added %s (%0.3f MB)" % (os.path.basename(x), 1e-6*db_size()))
+        md_files = find_files(data_dir, "*Met-Data*csv")
+        for x in md_files:
+            if to_test:
+                root_logger.info("found %s", os.path.basename(x))
+            else:
+                popmetdata(x)
+                root_logger.info("added %s (%0.3f MB)",
+                                 os.path.basename(x), 1e-6*db_size())
         root_logger.info("... 'met_data' complete")
 
-    if False:
+    if run_var:
         # Create and populate var_list table :
         # NOTE: some cols depend on met_data, so create/pop it first
         root_logger.info("Processing 'var_list' table...")
-        vl_files = get_var_files(vl_dir)
-        for y in sorted(vl_files):
-            popvarlist(y)
-            root_logger.info(
-                "added %s (%0.3f MB)" % (os.path.basename(y), 1e-6*db_size()))
+        vl_files = get_var_files(data_dir)
+        for y in vl_files:
+            if to_test:
+                root_logger.info("found %s", os.path.basename(y))
+            else:
+                popvarlist(y)
+                root_logger.info("added %s (%0.3f MB)",
+                                 os.path.basename(y), 1e-6*db_size())
         root_logger.info("... 'var_list' complete")
 
-    if False:
+    if run_ds:
         # Create and populate data_set table
         root_logger.info("Processing 'data_set' table...")
-        ds_files = get_data_files(ds_dir)
+        ds_files = get_data_files(data_dir)
         for z in sorted(ds_files):
-            popdataset(z)
-            root_logger.info(
-                "added %s (%0.3f MB)" % (os.path.basename(z), 1e-6*db_size()))
+            if to_test:
+                root_logger.info("found %s", os.path.basename(z))
+            else:
+                popdataset(z)
+                root_logger.info("added %s (%0.3f MB)",
+                                 os.path.basename(z), 1e-6*db_size())
         root_logger.info("... 'data_set' complete")

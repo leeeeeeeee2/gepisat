@@ -3,7 +3,7 @@
 # file_handler.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-27
+# LAST UPDATED: 2017-05-13
 #
 # ~~~~~~~~
 # license:
@@ -45,6 +45,7 @@ import numpy
 
 from .const import kfFEC
 from .db_util import connectSQL
+from .resources import mkdir_p
 from .solar import SOLAR_TOA
 from .utilities import add_one_day
 from .utilities import add_one_month
@@ -72,6 +73,7 @@ class GPSQL(object):
               - created get monthly meteorology functions [16.07.22]
               - moved to gepisat package [16.07.22]
               - added flux version variable [17.01.22]
+              - added directory creation in gapfilling [17.05.13]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -156,10 +158,20 @@ class GPSQL(object):
         """
         self.logger.debug("Gapfilling %s", cur_date)
 
-        # Assign output file and write header line if requested:
+        # Assign output file and write header line if requested
+        # NOTE: create station-specific subdirectories
         out_file = "%s_%s_gapfill.txt" % (self._station, cur_date)
-        out_path = os.path.join(self._outputdir, out_file)
+        out_dir = os.path.join(
+            self._outputdir, "gapfill", self._station.lower())
+        out_path = os.path.join(out_dir, out_file)
         if to_save:
+            if not os.path.isdir(out_dir):
+                try:
+                    mkdir_p(out_dir)
+                except:
+                    self.logger.critical(
+                        "Could not create output directory for daily GPP!")
+
             header_line = "Timestamp,ObsPPFD_umol.m2,GFPPFD_umol.m2\n"
             try:
                 f = open(out_path, "w")
@@ -440,6 +452,8 @@ class GPSQL(object):
         con = connectSQL()
         if con is not None:
             cur = con.cursor()
+            sd = None
+            ed = None
 
             try:
                 # Get start date from datetime object:

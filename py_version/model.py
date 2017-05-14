@@ -3,7 +3,7 @@
 # model.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-25
+# LAST UPDATED: 2017-05-13
 #
 # ~~~~~~~~
 # license:
@@ -113,9 +113,12 @@
 # - Consider checking for system closure (each station, each month?)
 #   + short equation: Rn + G + LE + H = 0
 #
+# NOTE: IT-SR2 and ZM-Mon not processed.
+#
 ###############################################################################
 # IMPORT MODULES
 ###############################################################################
+import datetime
 import logging
 import os
 
@@ -148,13 +151,13 @@ if __name__ == "__main__":
 
     # Define output directory:
     output_dir = os.path.join(
-        os.path.expanduser("~"), "Desktop", "temp", "out")
+        os.path.expanduser("~"), "Desktop", "temp", "out_flux")
     part_out_dir = os.path.join(output_dir, "partition")
     my_data.set_output_directory(output_dir)
 
     # Get list of all flux station names:
-    # my_data.find_stations()         # use this function to search the DB
-    my_data.stations = ['CZ-wet', ]   # or manually define stations here
+    my_data.find_stations()         # use this function to search the DB
+    # my_data.stations = ['CZ-wet', ]   # or manually define stations here
 
     # Initialize summary statistics file:
     my_data.create_summary_file("summary_statistics.txt")
@@ -171,8 +174,16 @@ if __name__ == "__main__":
             print("Processing %s" % (station))
             root_logger.info("Processing %s", station)
             # Process each month in time:
-            sd = my_data.start_date
-            ed = my_data.end_date
+            sd_of_interest = datetime.date(2003, 1, 1)
+            ed_of_interest = datetime.date(2015, 1, 1)
+            if my_data.start_date > sd_of_interest:
+                sd = my_data.start_date
+            else:
+                sd = sd_of_interest
+            if my_data.end_date < ed_of_interest:
+                ed = my_data.end_date
+            else:
+                ed = ed_of_interest
             while sd < ed:
                 try:
                     # Get PPFD and NEE array pairs [umol m-2 s-1]:
@@ -189,7 +200,7 @@ if __name__ == "__main__":
                     my_parter.partition(outliers=True)
 
                     # OPTIONAL: write the partition results for plotting
-                    if False:
+                    if True:
                         my_parter.write_partition(part_out_dir)
 
                     # Perform half-hourly PPFD gapfilling (umol m-2 s-1):

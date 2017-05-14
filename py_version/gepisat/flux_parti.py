@@ -3,7 +3,7 @@
 # flux_parti.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-02-05
+# LAST UPDATED: 2017-05-13
 #
 # ~~~~~~~~
 # license:
@@ -43,6 +43,7 @@ import os
 import numpy
 
 from .data import DATA
+from .resources import mkdir_p
 from .stats import PARTI_STATS
 
 
@@ -73,6 +74,7 @@ class FLUX_PARTI(object):
               - created a write partition function [17.01.22]
               - added array length check in partition [17.01.25]
               - return NaNs when no observation pairs present [17.02.05]
+              - added directory creation in print function [17.05.13]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -277,7 +279,18 @@ class FLUX_PARTI(object):
 
         @TODO: to omit write outs if partitioning was not performed?
         """
-        if os.path.isdir(out_dir):
+        to_save = True
+        if not os.path.isdir(out_dir):
+            to_save = False
+            try:
+                mkdir_p(out_dir)
+            except:
+                self.logger.critical(
+                    "Could not create output directory for daily GPP!")
+            else:
+                to_save = True
+
+        if to_save:
             self.stats.write_fit_params(out_dir)
         else:
             self.logger.error("Output directory does not exist!")

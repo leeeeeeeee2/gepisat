@@ -3,7 +3,7 @@
 # data.py
 #
 # VERSION 3.0.0-dev
-# LAST UPDATED: 2017-01-27
+# LAST UPDATED: 2017-05-13
 #
 # ~~~~~~~~
 # license:
@@ -75,6 +75,7 @@ class DATA(object):
               - added warning statement for negative daily GPP [17.01.25]
               - changed datetime to date in daily GPP writeouts [17.01.27]
               - sub to daily function writes to a single file [17.01.27]
+              - changed alpha to station variable [17.05.13]
     """
     # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
     # Class Initialization
@@ -336,10 +337,11 @@ class DATA(object):
         Inputs:   datetime.date, date (start_date)
         Outputs:  dict
         Features: Returns monthly gridded meteorology values
+        Note:     Priestly-Taylor alpha is currently a flux-station variable
         """
         # Retrieve monthly gridded meteorology
         if self.fh._grid is not None:
-            cpa = self.fh.get_monthly_alpha(self.fh._grid, start_date)
+            cpa = self.fh.get_monthly_alpha(self.fh._station, start_date)
             co2 = self.fh.get_annual_co2(self.fh._grid, start_date)
             fpar = self.fh.get_monthly_fapar(self.fh._grid, start_date)
             tc = self.fh.get_monthly_tair(self.fh._grid, start_date)
@@ -590,6 +592,7 @@ class DATA(object):
         cur_date = starting_date
         while (cur_date < ending_date):
             # Find GPP values associated with current day:
+            # @TODO: handle if numpy where returns empty array
             my_idx = numpy.where(
                 (ts >= cur_date) & (ts < add_one_day(cur_date)))
             my_gpp = gpp[my_idx]

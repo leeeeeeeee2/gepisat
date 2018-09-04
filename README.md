@@ -11,7 +11,7 @@ This work implements a flux partitioning method to calculate GPP from FLUXNET me
 
 # README
 ---------------
-* LAST UPDATED: 2017-02-08
+* LAST UPDATED: 2018-09-04
 * TEAM: labprentice
 * REPO: gepisat (public)
 

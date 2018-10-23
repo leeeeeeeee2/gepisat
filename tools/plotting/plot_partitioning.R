@@ -23,6 +23,9 @@
 # file_handler-win.pl, or file_handler-any.py) located in the GePiSaT
 # Bitbucket repository (/toos/processing).
 #
+# Produces multi-page postscript image files (PS)
+# Use ps2pdfcrop to convert to PDF files (see tools/misc in repository)
+#
 # ~~~~~~~~~~
 # changelog:
 # ~~~~~~~~~~

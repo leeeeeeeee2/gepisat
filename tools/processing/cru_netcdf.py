@@ -13,11 +13,11 @@
 # ------------
 # This script reads NetCDF files (e.g., CRU TS 3.21) and extracts variables of
 # interest (e.g., monthly average max and min air temperature, monthly average
-# vapor pressure). Writes variable of interest to ASCII raster format. 
+# vapor pressure). Writes variable of interest to ASCII raster format.
 #
 # NOTE: CRU TS 3.21 is made of 0.5 deg. resolution pixels
 #       Indexes begin at -179.75, -89.75
-#       Indexes end at 179.75, 89.75 
+#       Indexes end at 179.75, 89.75
 #
 #       Example files:
 #       1. cru_ts3.21.1901.2012.cld.dat.nc, cloudiness, %
@@ -52,7 +52,7 @@
 # todo:
 # -----
 # 1. Check stationid properness by implementing process_poly
-# 2. Make distinction between get_lon_lat function for top-left and bottom-left 
+# 2. Make distinction between get_lon_lat function for top-left and bottom-left
 #    numbering (e.g., MODIS HDF versus WATCH netCDF)
 #
 ###############################################################################
@@ -60,6 +60,8 @@
 ###############################################################################
 import datetime
 import glob
+import os
+
 import numpy
 from scipy.io import netcdf
 
@@ -77,7 +79,7 @@ def add_one_month(dt0):
               month-to-a-datetimedate-or-datet/
     """
     dt1 = dt0.replace(day=1)
-    dt2 = dt1 + datetime.timedelta(days=32) 
+    dt2 = dt1 + datetime.timedelta(days=32)
     dt3 = dt2.replace(day=1)
     return dt3
 
@@ -87,8 +89,8 @@ def add_years(d, years):
     Input:    - datetime date (d)
               - int (years)
     Output:   datetime date
-    Features: Adds years to the datetime preserving calendar date, if it 
-              exists, otherwise uses the following day (i.e., February 29 
+    Features: Adds years to the datetime preserving calendar date, if it
+              exists, otherwise uses the following day (i.e., February 29
               becomes March 1)
     Ref:      G. Rees (2013) Stack Overflow
               http://stackoverflow.com/questions/15741618/add-one-year-in-
@@ -127,7 +129,7 @@ def get_time_index(bt, ct, aot):
               - datetime date, current timestamp to be found (ct)
               - numpy nd.array, days since base timestamp (aot)
     Output:   int
-    Features: Finds the index in an array of CRU TS days for a given timestamp 
+    Features: Finds the index in an array of CRU TS days for a given timestamp
     """
     # For CRU TS 3.21, the aot is indexed for mid-month days, e.g. 15--16th
     # therefore, to make certain that ct index preceeds the index for the
@@ -153,7 +155,7 @@ def get_monthly_cru(d, ct, v):
               - str, variable of interest (v)
     Output:   numpy nd.array
     Depends:  get_time_index
-    Features: Returns 360x720 monthly CRU TS dataset for a given month and 
+    Features: Returns 360x720 monthly CRU TS dataset for a given month and
               variable of interest (e.g., cld, pre, tmp)
     """
     # Search directory for netCDF file:
@@ -164,7 +166,7 @@ def get_monthly_cru(d, ct, v):
         f = netcdf.NetCDFFile(my_file, "r")
         #
         # Save data for variables of interest:
-        # NOTE: for CRU TS 3.21: 
+        # NOTE: for CRU TS 3.21:
         #       variables: 'lat', 'lon', 'time', v
         #       where v is 'tmp', 'pre', 'cld', 'vap'
         # LAT:  -89.75 -- 89.75
@@ -201,8 +203,8 @@ def calculate_vpd(tmin, tmax, vap):
               - numpy nd.array, mean monthly vapor pressure, hPa (vap)
     Output:   numpy nd.array, mean monthly vapor pressure deficit, kPa (vpd)
     Features: Returns an array of mean monthly vapor pressure deficit
-    Ref:      Eq. 5.1, Abtew and Meleese (2013), Ch. 5 Vapor Pressure 
-              Calculation Methods, in Evaporation and Evapotranspiration: 
+    Ref:      Eq. 5.1, Abtew and Meleese (2013), Ch. 5 Vapor Pressure
+              Calculation Methods, in Evaporation and Evapotranspiration:
               Measurements and Estimations, Springer, London.
                 vpd = 0.611*exp[ (17.27 tc)/(tc + 237.3) ] - ea
                 where:
@@ -252,10 +254,10 @@ def process_raster(data, var_name, out_dir, time_stamp):
     #
     # Create output file name:
     rast_out = "%s%s_%s_%s_%s.txt" % (
-        out_dir, 
+        out_dir,
         "CRU-TS",
         var_name,
-        "0.5-Raster", 
+        "0.5-Raster",
         time_stamp
         )
     #
@@ -300,10 +302,10 @@ def process_poly(d, var_name, data, time_stamp):
     #
     # Create output file name:
     poly_out = "%s%s_%s_%s_%s.csv" % (
-        d, 
+        d,
         "CRU-TS",
         var_name,
-        "0.5-Poly", 
+        "0.5-Poly",
         time_stamp
         )
     #
@@ -337,7 +339,7 @@ def get_lon_lat(x,y,r):
               - int/nd.array, latitude index (y)
               - float, pixel resolution (r)
     Output:   float/nd.array tuple, longitude(s) and latitude(s), degrees
-    Features: Returns lon-lat pair for an x-y index pair (numbered from the 
+    Features: Returns lon-lat pair for an x-y index pair (numbered from the
               bottom-left corner) and pixel resolution
     """
     # Offset lat, lon to pixel centroid
@@ -357,8 +359,8 @@ def get_stationid(lon, lat):
               - float, latitude, degrees (lat)
     Output:   int, station id (st_id)
     Features: Returns the half-degree (HDG) station ID for a pixel
-              numbered from 0 (bottom-left / south-west corner) to 259199 
-              (top-right / north-east corner) as defined in the GePiSaT 
+              numbered from 0 (bottom-left / south-west corner) to 259199
+              (top-right / north-east corner) as defined in the GePiSaT
               database numbering scheme
     """
     st_id = (
@@ -371,7 +373,7 @@ def get_clip(d):
     Name:     get_clip
     Input:    numpy nd.array (d)
     Output:   numpy nd.array (temp_array)
-    Features: Returns an array defining land (1) and ocean (0) pixels based on 
+    Features: Returns an array defining land (1) and ocean (0) pixels based on
               CRU TS data (ocean pixels have error value ~1.e+36)
     """
     temp_array = d - d.max()
@@ -384,7 +386,7 @@ def get_missing(d):
     Name:     get_missing
     Input:    numpy nd.array, an output from the get_clip function (d)
     Output:   numpy nd.array (temp_array)
-    Features: Returns an array where ocean pixels (based on the output of the 
+    Features: Returns an array where ocean pixels (based on the output of the
               get_clip function) are set equal to error value -9999.0"""
     temp_array = 9999.0*(d - 1.0)
     return temp_array

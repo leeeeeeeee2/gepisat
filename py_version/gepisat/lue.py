@@ -357,9 +357,8 @@ class LUE:
         Features: Returns the temperature-dependent photorespiratory
                   compensation point, Gamma star (Pascals), based on constants
                   derived from Bernacchi et al. (2001) study.
-        Ref:      Bernacchi et al. (2001), Improved temperature response
-                  functions for models of Rubisco-limited photosynthesis,
-                  Plant, Cell and Environment, 24, 253--259.
+        Ref:      Farquhar et al. (1980), A biochemical model of photosynthetic
+                  CO2 assimilation in leaves of C3 species, Planta 149, 78--90.
         """
         gs = gs25*numpy.exp(dha*(tc - 25.0)/(298.15*kR*(tc + 273.15)))
         return gs
